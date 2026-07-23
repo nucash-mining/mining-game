@@ -5,8 +5,9 @@ function clearRigVis(i){ if(rigVis[i]){ scene.remove(rigVis[i].group); rigVis[i]
 function buildRigVis(i){
   clearRigVis(i);
   const r=S.rigs[i]; if(!r) return;
-  const [sx,sz]=SLOTS[r.slot];
-  if(!deskAt[r.slot]) deskAt[r.slot]=makeDesk(sx,sz);
+  const [sx,sz,sy]=SLOTS[r.slot];
+  if(r.slot>=9){ buildRackRig(i,r,sx,sz,sy); return; }
+  if(!deskAt[r.slot]) deskAt[r.slot]=makeDesk(sx,sz,r.slot);
   const g=new THREE.Group();
   // PC on desk — real-life scale: ATX mid-tower ≈46cm on a 75cm-high, 1.9m desk (2.25 u/m)
   const pc=normalize(instOf('pc'),1.03);
@@ -31,14 +32,13 @@ function buildRigVis(i){
   // second monitor (LC23 peripheral) — left of the main screen
   if(S.periph[23]&&PROTO.lc23){ const m2=normalize(instOf('lc23'),0.68);
     m2.position.x+=-0.55; m2.position.z+=-0.55; m2.position.y+=DESK.SURF; m2.rotation.y=0.35; g.add(m2); }
-  // keyboard: RGB model if owned, else plain box
-  if(S.periph[18]&&PROTO.kb){ const kbm=normalizeW(instOf('kb'),0.82);
+  // real Mining Game keyboard + mouse GLBs on every desk
+  if(PROTO.kb){ const kbm=normalizeW(instOf('kb'),0.82);
     kbm.position.x+=0.55; kbm.position.z+=0.55; kbm.position.y+=DESK.SURF+0.02; kbm.rotation.y=-0.1; g.add(kbm); }
   else{ const kb=new THREE.Mesh(new THREE.BoxGeometry(0.78,0.035,0.26),
     new THREE.MeshStandardMaterial({color:0x241d47,roughness:.6,metalness:.4}));
     kb.position.set(0.55,DESK.SURF+0.02,0.55); kb.rotation.y=-0.1; g.add(kb); }
-  // red mouse peripheral
-  if(S.periph[17]&&PROTO.mouse){ const mm=normalizeW(instOf('mouse'),0.16);
+  if(PROTO.mouse){ const mm=normalizeW(instOf('mouse'),0.16);
     mm.position.x+=1.35; mm.position.z+=0.58; mm.position.y+=DESK.SURF+0.02; mm.rotation.y=-0.3; g.add(mm); }
   // CPU + GPUs live INSIDE the case (see 🔧 WORKBENCH) unless an open-air frame is racked
   let cpuM=null;
@@ -71,11 +71,31 @@ function buildRigVis(i){
   scene.add(g);
   rigVis[i]={group:g,led,gpuMeshes:gpuMs,cpuMesh:cpuM,pcMesh:pc,slot:r.slot};
 }
-function rebuildAllRigs(){ for(let i=0;i<9;i++) clearRigVis(i); S.rigs.forEach((r,i)=>buildRigVis(i)); refreshRings(); }
+/* rack-mounted rig inside a container / warehouse shelf */
+function buildRackRig(i,r,sx,sz,sy){
+  const g=new THREE.Group();
+  const pc=normalize(instOf('pc'),1.03);
+  pc.position.y+=sy; pc.rotation.y=sx>0?-Math.PI/2:Math.PI/2;
+  g.add(pc);
+  if(r.asic&&PROTO.asic){ const am=normalizeFit(instOf('asic'),0.6);
+    am.position.set(0, sy+0.02, 0.75); am.rotation.y=0.3; g.add(am); }
+  if(r.gpus.length||r.cpu){
+    const glow=new THREE.PointLight(0x2ee6d6, 0.3+0.18*r.gpus.length, 1.8);
+    glow.position.set(0, sy+0.5, 0.3); g.add(glow);
+  }
+  const led=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.06,0.06),
+    new THREE.MeshBasicMaterial({color:0x3dff8a}));
+  led.position.set(0, sy+1.12, 0.6); g.add(led);
+  g.position.set(sx,0,sz);
+  scene.add(g);
+  rigVis[i]={group:g,led,gpuMeshes:[],cpuMesh:null,pcMesh:pc,slot:r.slot};
+}
+function rebuildAllRigs(){ for(let i=0;i<SLOTS.length;i++) clearRigVis(i); S.rigs.forEach((r,i)=>buildRigVis(i)); refreshRings(); }
 /* rings show free/occupied slots when shopping for PC */
 function refreshRings(){
+  const gar=3+S.upg.rack*3;
   for(let i=0;i<9;i++){ if(!rings[i]) rings[i]=makeRing(i);
-    rings[i].visible = i<slotCount();
+    rings[i].visible = i<gar;
   }
 }
 /* ---------- particles ---------- */

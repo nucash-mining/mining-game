@@ -9,6 +9,7 @@
     <div class="stat" id="s-blk"><span class="ic">🧱</span><span class="col"><b id="v-blk">0</b><small>BLOCKS</small></span></div>
   </div>
   <div id="hudbtns">
+    <div id="farmpill" style="display:none" title="Mining farm status"><b id="farmtier">PRO</b> FARM</div>
     <div id="net" title="Switch network"><span class="dot"></span><span id="netname">Polygon</span><small id="netdiff"></small></div>
     <button class="hbtn" id="b-wallet">🦊 WALLET</button>
     <button class="hbtn gold" id="b-shop">🛒 SHOP</button>
@@ -22,9 +23,12 @@
   <div class="coin" id="coin-pol">🟣 <b id="v-pol">0</b> POL <span class="pr" id="p-pol">@10.0</span><button id="sell-pol">SELL</button></div>
   <div class="coin" id="coin-alt">🟠 <b id="v-alt">0</b> ALT <span class="pr" id="p-alt">@25.0</span><button id="sell-alt">SELL</button></div>
   <div class="coin" id="coin-wtx">🟡 <b id="v-wtx">0</b> WTX <span class="pr" id="p-wtx">@2.0</span><button id="sell-wtx">SELL</button></div>
+  <div class="coin" id="coin-usdt" style="display:none">💵 <b id="v-usdt">0</b> USDT</div>
+  <div class="coin" id="coin-dai" style="display:none">◈ <b id="v-dai">0</b> DAI</div>
   <div class="coin" id="coin-pool" title="Mining pool — click to open Pool Hub" style="cursor:pointer">🏊 <b id="v-pool">nucash-mining</b><span class="pr" id="p-pend"></span></div>
 </div>
 <div id="feed"></div>
+<button id="standbtn" style="display:none">🧍 STAND UP <small>(esc)</small></button>
 <div id="tut"></div>
 
 <!-- ============ SHOP ============ -->
@@ -34,7 +38,10 @@
     <button class="paybtn" data-cur="watt">⚡ WATT</button>
     <button class="paybtn" data-cur="pol">🟣 POL</button>
     <button class="paybtn" data-cur="alt">🟠 ALT</button>
-    <small>each purchase runs a contract call on the selected currency</small></div>
+    <button class="paybtn" data-cur="wtx">🟡 WTX</button>
+    <button class="paybtn" data-cur="usdt">💵 USDT</button>
+    <button class="paybtn" data-cur="dai">◈ DAI</button>
+    <small>wrapped versions accepted · get stables on SwapinDEX (rig OS) · ⚡WATT purchases feed the stakers rewards pool</small></div>
   <div class="cards" id="shopcards"></div>
 </div></div>
 

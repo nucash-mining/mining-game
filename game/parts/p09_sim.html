@@ -77,13 +77,15 @@ function simTick(dt){ // dt seconds (fixed 0.1)
   if(AU.humG) AU.humG.gain.value=(S.muted?0:Math.min(0.5,0.05+draw*0.004))*(noWatt?0.3:1);
 }
 /* market */
-function sellCoin(cn, amt){
+function sellCoin(cn, amt, recv){
   amt = amt===undefined ? S[cn] : Math.min(amt, S[cn]);
   if(amt<=0.001){ SFX.err(); return false; }
   const val=amt*S.price[cn];
-  S[cn]-=amt; S.watt+=val; S.lifeWatt+=val; S.sold[cn]+=val;
-  SFX.sell(); toast(`Sold ${fmt(amt)} ${cn.toUpperCase()} → +${fmt(val)} ⚡WATT`,'grn');
-  renderHud(); save(); return true;
+  S[cn]-=amt; S.sold[cn]+=val;
+  if(recv==='usdt'){ S.usdt+=val; toast(`Swapped ${fmt(amt)} ${cn.toUpperCase()} → +${fmt(val)} USDT`,'grn'); }
+  else if(recv==='dai'){ S.dai+=val; toast(`Swapped ${fmt(amt)} ${cn.toUpperCase()} → +${fmt(val)} DAI`,'grn'); }
+  else { S.watt+=val; S.lifeWatt+=val; toast(`Sold ${fmt(amt)} ${cn.toUpperCase()} → +${fmt(val)} ⚡WATT`,'grn'); }
+  SFX.sell(); renderHud(); save(); return true;
 }
 /* overclock + reboot (Mining Game OS) */
 function setOC(ri,c,m){
@@ -120,19 +122,27 @@ function mintPC(free){
   if(S.pcCount>0 && S.rigs.length>=slotCount()){ SFX.err(); toast('No free rack space — buy a Rack Expansion in 🔧 GARAGE','red'); return false; }
   const price=free?0:pcPrice();
   if(S.watt<price){ SFX.err(); toast('Not enough WATT','red'); return false; }
-  S.watt-=price;
+  S.watt-=price; S.shopPool+=price;
   const used=new Set(S.rigs.map(r=>r.slot));
-  let slot=-1; for(let i=0;i<slotCount();i++) if(!used.has(i)){slot=i;break;}
+  let slot=-1; for(const i of eligibleSlots()) if(!used.has(i)){slot=i;break;}
   S.rigs.push({slot,cpu:0,gpus:[],asic:0,frame:0,oc:{c:0,m:0},crashT:0,on:1,wear:0}); S.pcCount++;
   buildRigVis(S.rigs.length-1);
   burst(new THREE.Vector3(SLOTS[slot][0],1.8,SLOTS[slot][1]),30,partMatCyan,3);
   SFX.mint(); toast(free?'🖥 Gaming PC minted — FREE':'🖥 Gaming PC minted for '+fmt(price)+' ⚡','grn');
   renderHud(); save(); return true;
 }
-function costIn(cur,wattPrice){ return cur==='pol'?wattPrice/S.price.pol : cur==='alt'?wattPrice/S.price.alt : wattPrice; }
-function curBal(cur){ return cur==='pol'?S.pol : cur==='alt'?S.alt : S.watt; }
-function curSym(cur){ return cur==='pol'?'POL' : cur==='alt'?'ALT' : '⚡WATT'; }
-function curPay(cur,amt){ if(cur==='pol') S.pol-=amt; else if(cur==='alt') S.alt-=amt; else S.watt-=amt; }
+function costIn(cur,wattPrice){
+  if(cur==='pol') return wattPrice/S.price.pol;
+  if(cur==='alt') return wattPrice/S.price.alt;
+  if(cur==='wtx') return wattPrice/S.price.wtx;
+  return wattPrice; } // watt / usdt / dai are 1:1 in-sim
+function curBal(cur){ return {pol:S.pol,alt:S.alt,wtx:S.wtx,usdt:S.usdt,dai:S.dai}[cur]??S.watt; }
+function curSym(cur){ return {pol:'POL',alt:'ALT',wtx:'WTX',usdt:'USDT',dai:'DAI'}[cur]||'⚡WATT'; }
+function curPay(cur,amt){
+  if(cur==='pol') S.pol-=amt; else if(cur==='alt') S.alt-=amt; else if(cur==='wtx') S.wtx-=amt;
+  else if(cur==='usdt') S.usdt-=amt; else if(cur==='dai') S.dai-=amt;
+  else { S.watt-=amt; S.shopPool+=amt; } // WATT spent in the shop feeds the stakers rewards pool
+}
 function buyItem(id){
   const it=ITEMS[id];
   if(id===1){ if(mintPC(S.pcCount===0)) renderShop(); return; }
@@ -193,7 +203,7 @@ function buyUpgrade(k){
   if(lv>=arr.length){ SFX.err(); return; }
   const p=arr[lv];
   if(S.watt<p){ SFX.err(); toast('Not enough WATT','red'); return; }
-  S.watt-=p; S.upg[k]++;
+  S.watt-=p; S.shopPool+=p; S.upg[k]++;
   SFX.buy();
   const names={power:'⚡ Power grid upgraded',cooling:'❄ Cooling upgraded',rack:'🗄 Rack expansion built — 3 new slots'};
   toast(names[k]+` (Lv ${S.upg[k]})`,'grn');

@@ -4,7 +4,7 @@ const deskMat = new THREE.MeshStandardMaterial({color:0x241d47, roughness:.7, me
 const deskTopMat = new THREE.MeshStandardMaterial({color:0x2d2557, roughness:.55, metalness:.45});
 /* real ratios @2.25u/m: desk 1.9m wide × 0.98m deep, surface 75cm (1.68u) — ATX tower 46cm no longer dwarfs it */
 const DESK={W:4.3, D:2.2, TOP:1.60, SURF:1.68, SHELF:3.05};
-function makeDesk(x,z){
+function makeDesk(x,z,slot){
   const g=new THREE.Group();
   const top=new THREE.Mesh(new THREE.BoxGeometry(DESK.W,0.16,DESK.D), deskTopMat); top.position.y=DESK.TOP; g.add(top);
   const legG=new THREE.BoxGeometry(0.14,DESK.TOP,0.14);
@@ -15,7 +15,9 @@ function makeDesk(x,z){
   const pole=new THREE.BoxGeometry(0.09,DESK.SHELF-DESK.TOP,0.09);
   [[-DESK.W/2+0.1,-0.62],[DESK.W/2-0.1,-0.62]].forEach(([px,pz])=>{
     const p=new THREE.Mesh(pole,deskMat); p.position.set(px,(DESK.SHELF+DESK.TOP)/2,pz); g.add(p); });
-  g.add(makeChair(!!S.chair));
+  const ch=makeChair(!!S.chair); g.add(ch);
+  const chit=new THREE.Mesh(new THREE.BoxGeometry(1.0,2.6,1.0), new THREE.MeshBasicMaterial({visible:false}));
+  chit.position.set(0.55,1.3,1.55); chit.userData.chairSlot=slot; g.add(chit);
   g.position.set(x,0,z); scene.add(g); return g;
 }
 /* procedural office / gaming chair (no chair NFT model exists yet — see repo TODO) */
@@ -62,6 +64,93 @@ function rebuildChairs(){ for(const k in deskAt){ const d=deskAt[k];
   const old=d.children.find(c=>c.name==='chairG'); if(old) d.remove(old);
   d.add(makeChair(!!S.chair)); } }
 const deskAt={}; // slotIndex -> desk
+/* ---------- PRO/ELITE mining farm structures ---------- */
+const farmG={containers:[], warehouse:null, pads:[]};
+const steelMat=new THREE.MeshStandardMaterial({color:0x2a2440, roughness:.55, metalness:.75});
+const rackMat=new THREE.MeshStandardMaterial({color:0x191430, roughness:.5, metalness:.8});
+function corrTex(base,stripe){
+  const c=cnv(256,256), x=c.getContext('2d');
+  x.fillStyle=base; x.fillRect(0,0,256,256);
+  for(let i=0;i<16;i++){ x.fillStyle=i%2?stripe:base; x.fillRect(i*16,0,8,256); }
+  const t=ctex(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; return t;
+}
+function makeRack(x,z,shelves){
+  const g=new THREE.Group();
+  const h=shelves[shelves.length-1]+1.1;
+  [[-0.8,-0.55],[0.8,-0.55],[-0.8,0.55],[0.8,0.55]].forEach(([px,pz])=>{
+    const p=new THREE.Mesh(new THREE.BoxGeometry(0.09,h,0.09),rackMat); p.position.set(px,h/2,pz); g.add(p); });
+  shelves.forEach(sy=>{ const sh=new THREE.Mesh(new THREE.BoxGeometry(1.7,0.07,1.2),steelMat);
+    sh.position.y=sy-0.04; g.add(sh); });
+  g.position.set(x,0,z); return g;
+}
+function makeContainer(cx){
+  const g=new THREE.Group();
+  const tex=corrTex('#1c2f45','#16263a');
+  const L=11.5, W=5.0, H=5.5;                       // ~20ft at 2.25u/m (long axis z)
+  const mat=new THREE.MeshStandardMaterial({map:tex, roughness:.7, metalness:.5});
+  const wall=(w,h,px,py,pz,ry)=>{ const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat.clone());
+    m.position.set(px,py,pz); m.rotation.y=ry||0; m.material.side=THREE.DoubleSide; g.add(m); };
+  wall(L,H, cx>0? W/2:-W/2, H/2, 15, Math.PI/2);    // outer long wall
+  wall(L,H, cx>0?-W/2: W/2, H/2, 15, Math.PI/2);    // inner long wall (door cut below? keep open front instead)
+  wall(W,H, 0, H/2, 15+L/2, 0);                      // far end
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(W,0.12,L),mat.clone()); roof.position.set(0,H,15); g.add(roof);
+  const fl=new THREE.Mesh(new THREE.BoxGeometry(W,0.1,L),steelMat.clone()); fl.position.set(0,0.05,15); g.add(fl);
+  // open front end (z=15-L/2) with door frame + hazard stripes
+  const hz=cnv(128,32), hx=hz.getContext('2d');
+  for(let i=0;i<8;i++){ hx.fillStyle=i%2?'#ffd23f':'#141021'; hx.beginPath();
+    hx.moveTo(i*16,32); hx.lineTo(i*16+16,0); hx.lineTo(i*16+32,0); hx.lineTo(i*16+16,32); hx.fill(); }
+  const hzm=new THREE.Mesh(new THREE.PlaneGeometry(W,0.5), new THREE.MeshBasicMaterial({map:ctex(hz)}));
+  hzm.position.set(0,H-0.3,15-L/2-0.01); hzm.rotation.y=Math.PI; g.add(hzm);
+  // interior cool light
+  const il=new THREE.PointLight(0x35e0ff, 65, 13); il.position.set(0,H-1,12); g.add(il);
+  const il2=new THREE.PointLight(0x8247e5, 45, 13); il2.position.set(0,H-1,18); g.add(il2);
+  // racks at the 3 slot columns (z=12,15,18), inner side
+  [12,15,18].forEach(z=>g.add(makeRack(cx>0?1.1:-1.1, z, [0.55,2.05])));
+  g.position.x=cx;
+  scene.add(g); return g;
+}
+function makeWarehouse(){
+  const g=new THREE.Group();
+  const tex=corrTex('#3a2f18','#2c2412');
+  const Wd=26, Dp=10, H=7.5, Z=27;
+  const mat=new THREE.MeshStandardMaterial({map:tex, roughness:.75, metalness:.45, side:THREE.DoubleSide});
+  const back=new THREE.Mesh(new THREE.PlaneGeometry(Wd,H),mat); back.position.set(0,H/2,Z+Dp/2); g.add(back);
+  const l=new THREE.Mesh(new THREE.PlaneGeometry(Dp,H),mat.clone()); l.rotation.y=Math.PI/2; l.position.set(-Wd/2,H/2,Z); g.add(l);
+  const r=l.clone(); r.position.x=Wd/2; g.add(r);
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(Wd,0.15,Dp),mat.clone()); roof.position.set(0,H,Z); g.add(roof);
+  // front header + sign
+  const hdr=new THREE.Mesh(new THREE.PlaneGeometry(Wd,1.6),mat.clone()); hdr.position.set(0,H-0.8,Z-Dp/2); g.add(hdr);
+  const sc=cnv(512,64), sx=sc.getContext('2d');
+  sx.fillStyle='#0d0a1c'; sx.fillRect(0,0,512,64); sx.font='900 38px monospace';
+  sx.fillStyle='#ffd23f'; sx.textAlign='center'; sx.fillText('⛏ ELITE MINING FARM',256,45);
+  const sign=new THREE.Mesh(new THREE.PlaneGeometry(10,1.25), new THREE.MeshBasicMaterial({map:ctex(sc),transparent:true}));
+  sign.position.set(0,H-0.8,Z-Dp/2-0.05); sign.rotation.y=Math.PI; g.add(sign);
+  const il=new THREE.PointLight(0xffb020, 110, 24); il.position.set(0,H-1.5,Z); g.add(il);
+  const il2=new THREE.PointLight(0x35e0ff, 70, 20); il2.position.set(-8,H-2,Z-2); g.add(il2);
+  const il3=il2.clone(); il3.position.x=8; g.add(il3);
+  [-9,-3,3,9].forEach(x=>g.add(makeRack(x,Z,[0.55,1.9,3.25])));
+  scene.add(g); return g;
+}
+function buildFarm(){
+  // concrete pads + structures, idempotent
+  while(farmG.containers.length<Math.min(S.containers,2)){
+    const i=farmG.containers.length;
+    if(!farmG.pads[0]){ const pad=new THREE.Mesh(new THREE.PlaneGeometry(26,14),
+      new THREE.MeshStandardMaterial({color:0x141126, roughness:.95}));
+      pad.rotation.x=-Math.PI/2; pad.position.set(0,0.01,15); scene.add(pad); farmG.pads[0]=pad;
+      const fl=new THREE.PointLight(0xbcd6ff, 55, 26); fl.position.set(0,8,15); scene.add(fl); }
+    farmG.containers.push(makeContainer(i===0?-8:8));
+  }
+  if(S.warehouse&&!farmG.warehouse){
+    if(!farmG.pads[1]){ const pad=new THREE.Mesh(new THREE.PlaneGeometry(30,14),
+      new THREE.MeshStandardMaterial({color:0x141126, roughness:.95}));
+      pad.rotation.x=-Math.PI/2; pad.position.set(0,0.01,27); scene.add(pad); farmG.pads[1]=pad; }
+    farmG.warehouse=makeWarehouse();
+  }
+  // widen the world as the farm grows
+  const far=S.warehouse?46:S.containers?38:24;
+  controls.maxDistance=far; scene.fog.far=S.warehouse?95:S.containers?75:40;
+}
 /* shared animated terminal texture */
 const termC=cnv(256,160), termX=termC.getContext('2d');
 const termTex=ctex(termC);

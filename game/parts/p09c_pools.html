@@ -22,12 +22,13 @@ const POOLS={
 function netKey(coin){ return coin==='pol'?'polygon':coin==='alt'?'alt':'wattx'; }
 function poolFor(coin,id){
   if(id==='mine') return S.myPools[coin]?{id:'mine',name:S.myPools[coin].name,fee:0,speed:1.35,mine:true}:null;
+  if(id==='solo') return S.myPools[coin]?{id:'solo',name:'own node',fee:0,speed:1,mine:true,direct:true}:null;
   const p=(POOLS[coin]||[]).find(p=>p.id===id);
-  return (p&&!p.solo)?p:null; // solo → null (raw protocol mining)
+  return (p&&!p.solo)?p:null;
 }
 function curPool(){ const c=CFG.nets[S.net].coin; return poolFor(c,S.pool[c]); }
 function poolCredit(coin,amt,P){
-  if(!P){ S[coin]+=amt; return; } // solo & hostless: direct credit
+  if(!P||P.direct){ S[coin]+=amt; return; } // solo node: full reward, direct credit
   S.pend[coin]+=amt;
   const th=S.payThresh*CFG.nets[netKey(coin)].reward;
   if(S.pend[coin]>=th){
@@ -48,8 +49,17 @@ function poolTick(dt){
     const earn=CFG.altBlockRate*(CFG.nets.alt.reward/2)*share*dt;
     S.alt+=earn; S.valEarn+=earn;
   }
+  // WATT rewards pool: every ⚡ spent on NFTs drips back to stakers pro-rata until depleted
+  if(S.shopPool>0.01){
+    const tot=S.stakedWatt+CFG.shopStakeNPC;
+    const out=Math.min(S.shopPool, S.shopPool*CFG.shopStakeRate/60*dt);
+    S.shopPool-=out;
+    if(S.stakedWatt>0){ const mine=out*S.stakedWatt/tot;
+      S.watt+=mine; S.lifeWatt+=mine; S.shopEarned+=mine; }
+  }
   for(const c in S.myPools){
     const m=S.myPools[c];
+    if(m.solo) continue; // private node: no NPC miners, no fee income
     const cap=Math.max(300, 3000*(1-m.fee*6));       // low fee attracts NPC hashrate
     m.npc=(m.npc||0)+(cap-(m.npc||0))*Math.min(1,dt*0.0025);
     const n=CFG.nets[netKey(c)];
@@ -62,21 +72,25 @@ function poolTick(dt){
 }
 /* ---------- actions ---------- */
 function joinPool(coin,id){
+  if(id==='solo'&&!S.myPools[coin]){ SFX.err();
+    toast(`⛏ SOLO mining = running your own node — lock ${fmtInt(CFG.poolHostWatt)} ⚡ + ${fmtInt(CFG.poolHostCoin)} ${coin.toUpperCase()} below (same as hosting a pool)`,'red',7000);
+    return; }
   S.pool[coin]=id; SFX.swap();
   const P=poolFor(coin,id);
   toast(P?`🏊 Connected to ${P.name} — fee ${(P.fee*100).toFixed(1)}%, smooth payouts x${P.speed}`:'⛏ SOLO mining — full block reward, pure Poisson luck', P&&P.official?'gold':'cyan');
   renderPoolHub(); renderHud(); save();
 }
-function hostPool(c,feePct){
-  if(S.myPools[c]){ toast('Already hosting a pool on this chain','red'); return; }
-  const fee=clamp(feePct,0,12)/100;
+function hostPool(c,feePct,solo){
+  if(S.myPools[c]){ toast('Already running a node on this chain','red'); return; }
+  const fee=solo?0:clamp(feePct,0,12)/100;
   if(S.watt<CFG.poolHostWatt || S[c]<CFG.poolHostCoin){
-    SFX.err(); toast(`Hosting locks ${fmtInt(CFG.poolHostWatt)} ⚡WATT + ${fmtInt(CFG.poolHostCoin)} ${c.toUpperCase()}`,'red'); return;
+    SFX.err(); toast(`A node locks ${fmtInt(CFG.poolHostWatt)} ⚡WATT + ${fmtInt(CFG.poolHostCoin)} ${c.toUpperCase()}`,'red'); return;
   }
   S.watt-=CFG.poolHostWatt; S[c]-=CFG.poolHostCoin;
-  S.myPools[c]={name:'my-'+c+'.pool.watt', fee, npc:0, earnW:0, earnC:0, lockW:CFG.poolHostWatt, lockC:CFG.poolHostCoin, t:now()};
-  S.pool[c]='mine'; SFX.mint();
-  toast(`🏊 POOL LAUNCHED on ${CFG.nets[netKey(c)].name} — fee ${(fee*100).toFixed(1)}% · you now mine POWER-FREE + earn 1% of all WATT burned here`,'gold',10000);
+  S.myPools[c]={name:solo?('node-'+c+'.solo.watt'):('my-'+c+'.pool.watt'), fee, solo:solo?1:0, npc:0, earnW:0, earnC:0, lockW:CFG.poolHostWatt, lockC:CFG.poolHostCoin, t:now()};
+  S.pool[c]=solo?'solo':'mine'; SFX.mint();
+  toast(solo?`⛏ PRIVATE NODE ONLINE on ${CFG.nets[netKey(c)].name} — SOLO mining unlocked: full block rewards, POWER-FREE`
+            :`🏊 POOL LAUNCHED on ${CFG.nets[netKey(c)].name} — fee ${(fee*100).toFixed(1)}% · you now mine POWER-FREE + earn 1% of all WATT burned here`,'gold',10000);
   renderPoolHub(); renderHud(); save();
 }
 function closePool(c){
@@ -99,6 +113,18 @@ function exitValidators(){
   toast(`🛰 ${S.altNodes} validator${S.altNodes>1?'s':''} exited — ${fmt(S.altLocked)} ALT unlocked`,'cyan');
   S.altLocked=0; S.altNodes=0; SFX.click(); renderPoolHub(); renderHud(); save();
 }
+function stakeShop(amt){
+  amt=Math.min(amt===undefined?S.watt:amt, S.watt);
+  if(amt<=0){ SFX.err(); return; }
+  S.watt-=amt; S.stakedWatt+=amt; SFX.buy();
+  toast(`🥩 Staked ${fmt(amt)} ⚡ in the WATT Rewards Pool — earning ${(100*S.stakedWatt/(S.stakedWatt+CFG.shopStakeNPC)).toFixed(2)}% of the drip`,'grn');
+  renderPoolHub(); renderHud(); save();
+}
+function unstakeShop(){
+  if(S.stakedWatt<=0){ SFX.err(); return; }
+  S.watt+=S.stakedWatt; toast(`Unstaked ${fmt(S.stakedWatt)} ⚡`,'cyan'); S.stakedWatt=0;
+  SFX.click(); renderPoolHub(); renderHud(); save();
+}
 function repairRig(ri){
   const r=S.rigs[ri]; if(!r||r.wear<1){ SFX.err(); return; }
   const c=repairCost(r);
@@ -119,22 +145,24 @@ function renderPoolHub(){
   const coin=CFG.nets[S.net].coin, sym=CFG.nets[S.net].sym, mine=S.myPools[coin];
   const rows=POOLS[coin].map(p=>{
     const sel=S.pool[coin]===p.id;
+    const soloLocked=p.solo&&!mine;
     return `<div class="prow ${sel?'sel':''}${p.official?' off':''}">
-      <div class="pi"><b>${p.official?'⭐ ':''}${p.name}</b><small>${p.blurb}</small></div>
+      <div class="pi"><b>${p.official?'⭐ ':''}${p.name}</b><small>${p.solo?(mine?'your node is online — full reward, power-free':'requires your own node — same lock as hosting (below)'):p.blurb}</small></div>
       <div class="pf">${p.solo?'—':(p.fee*100).toFixed(1)+'%'}<small>fee</small></div>
       <div class="pf">x${p.speed}<small>payout freq</small></div>
-      <button class="hbtn ${sel?'':'accent'}" data-join="${p.id}" ${sel?'disabled':''}>${sel?'CONNECTED':'JOIN'}</button></div>`;
+      <button class="hbtn ${sel?'':'accent'}" data-join="${p.id}" ${sel?'disabled':''}>${sel?'CONNECTED':soloLocked?'🔒 JOIN':'JOIN'}</button></div>`;
   }).join('');
   const mineRow = mine?`<div class="prow sel host">
-      <div class="pi"><b>🏊 ${mine.name}</b><small>YOUR pool · fee ${(mine.fee*100).toFixed(1)}% · NPC hashrate ${fmtInt(mine.npc||0)} H</small></div>
-      <div class="pf">+${fmt(mine.earnC||0)}<small>${sym} earned</small></div>
-      <div class="pf">+${fmt(mine.earnW||0)}<small>⚡ from burn</small></div>
-      ${S.pool[coin]==='mine'?'<button class="hbtn" disabled>CONNECTED</button>':`<button class="hbtn accent" data-join="mine">JOIN</button>`}
+      <div class="pi"><b>${mine.solo?'⛏':'🏊'} ${mine.name}</b><small>${mine.solo?'YOUR private node · solo mining · power-free':'YOUR pool · fee '+(mine.fee*100).toFixed(1)+'% · NPC hashrate '+fmtInt(mine.npc||0)+' H'}</small></div>
+      ${mine.solo?'':`<div class="pf">+${fmt(mine.earnC||0)}<small>${sym} earned</small></div>
+      <div class="pf">+${fmt(mine.earnW||0)}<small>⚡ from burn</small></div>`}
+      ${(S.pool[coin]==='mine'||S.pool[coin]==='solo')?'<button class="hbtn" disabled>CONNECTED</button>':`<button class="hbtn accent" data-join="${mine.solo?'solo':'mine'}">JOIN</button>`}
       <button class="hbtn" data-closepool="1" style="color:var(--red)">CLOSE</button></div>`
-    :`<div class="hostbox"><b>🏗 HOST YOUR OWN POOL on ${CFG.nets[S.net].name}</b>
-      <small>Lock ${fmtInt(CFG.poolHostWatt)} ⚡WATT + ${fmtInt(CFG.poolHostCoin)} ${sym}. You mine <b>power-free</b>, keep 1% of all WATT burned in the pool, and take your fee % of every NPC block. Lower fee → more NPC miners join.</small>
+    :`<div class="hostbox"><b>🏗 RUN A NODE on ${CFG.nets[S.net].name}</b>
+      <small>Lock ${fmtInt(CFG.poolHostWatt)} ⚡WATT + ${fmtInt(CFG.poolHostCoin)} ${sym}. Either way you mine <b>power-free</b>. A <b>public pool</b> earns your fee % of NPC blocks + 1% of all WATT burned (lower fee → more NPC miners). A <b>private node</b> is pure solo: full block rewards, no crowd.</small>
       <div class="rowbtns" style="margin-top:8px">FEE <input id="hostfee" type="range" min="0" max="12" value="3" step="0.5" style="flex:1"> <b id="hostfeev">3.0%</b>
-      <button class="hbtn gold" id="hostgo">LAUNCH POOL</button></div></div>`;
+      <button class="hbtn gold" id="hostgo">🏊 PUBLIC POOL</button>
+      <button class="hbtn accent" id="hostsolo">⛏ PRIVATE NODE</button></div></div>`;
   const alt=`<div class="valbox"><b>⛓ ALTCOINCHAIN HYBRID PoS ${S.altHybrid?'<span style="color:var(--grn)">— LIVE</span>':''}</b>
       <small>height <b>${fmtInt(S.altH)}</b> / 7.00M ${S.altHybrid?'· reward split 1/1 miners : stakers':'· hybrid fork at block 7,000,000'}</small>
       ${S.altHybrid?`<div class="rowbtns" style="margin-top:8px">
@@ -142,7 +170,15 @@ function renderPoolHub(){
         <button class="hbtn gold" id="valbuy">+ NODE (32 ALT)</button>
         ${S.altNodes?'<button class="hbtn" id="valexit">EXIT ALL</button>':''}</div>`
       :`<div class="prog"><i style="width:${Math.min(100,(S.altH/CFG.altHybridBlock)*100).toFixed(2)}%"></i></div>`}</div>`;
-  $('poolbody').innerHTML=`
+  const shopShare=S.stakedWatt/(S.stakedWatt+CFG.shopStakeNPC);
+  const stakeBox=`<div class="valbox" style="border-color:#3dff8a44"><b>🥩 WATT REWARDS POOL <span style="color:var(--grn)">${fmt(S.shopPool)} ⚡</span></b>
+    <small>Every ⚡WATT spent on NFTs &amp; hardware in the game flows here (nothing is burned in the shop — only mining burns). Stakers split ${(CFG.shopStakeRate*100).toFixed(1)}%/min of the pool pro-rata until it runs dry; it refills whenever anyone buys hardware.</small>
+    <div class="rowbtns" style="margin-top:8px">
+      <span>your stake: <b>${fmt(S.stakedWatt)} ⚡</b> (${(shopShare*100).toFixed(2)}%) · earned <b>${fmt(S.shopEarned)} ⚡</b></span>
+      <button class="hbtn gold" id="stk25">STAKE 25%</button>
+      <button class="hbtn gold" id="stkall">ALL-IN</button>
+      ${S.stakedWatt>0?'<button class="hbtn" id="stkout">UNSTAKE</button>':''}</div></div>`;
+  $('poolbody').innerHTML=`${stakeBox}
     <p style="color:var(--dim);font-size:11px;margin:2px 0 10px">Network: <b style="color:var(--txt)">${CFG.nets[S.net].name}</b> (switch on the HUD pill) · pending payout <b>${fmt(S.pend[coin])} ${sym}</b> · threshold ${S.payThresh}× reward
     <button class="hbtn" id="thresh" style="padding:2px 8px;font-size:10px">TH ${S.payThresh}×</button></p>
     ${rows}${mineRow}${alt}
@@ -150,10 +186,14 @@ function renderPoolHub(){
   $('poolbody').querySelectorAll('[data-join]').forEach(b=>b.onclick=()=>joinPool(coin,b.dataset.join));
   const cp=$('poolbody').querySelector('[data-closepool]'); if(cp) cp.onclick=()=>closePool(coin);
   const hf=$('hostfee'); if(hf){ hf.oninput=()=>$('hostfeev').textContent=(+hf.value).toFixed(1)+'%';
-    $('hostgo').onclick=()=>hostPool(coin,+hf.value); }
+    $('hostgo').onclick=()=>hostPool(coin,+hf.value);
+    $('hostsolo').onclick=()=>hostPool(coin,0,true); }
   const vb=$('valbuy'); if(vb) vb.onclick=buyValidator;
   const ve=$('valexit'); if(ve) ve.onclick=exitValidators;
   const th=$('thresh'); if(th) th.onclick=()=>{ S.payThresh=S.payThresh===3?10:S.payThresh===10?1:3; SFX.click(); renderPoolHub(); save(); };
+  const s25=$('stk25'); if(s25) s25.onclick=()=>stakeShop(S.watt*0.25);
+  const sa=$('stkall'); if(sa) sa.onclick=()=>stakeShop();
+  const so=$('stkout'); if(so) so.onclick=unstakeShop;
 }
 function openPoolHub(){ openModal('m-pool'); renderPoolHub(); }
 $('b-pool').onclick=openPoolHub;

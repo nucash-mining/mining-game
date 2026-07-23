@@ -58,6 +58,10 @@ const CFG = {
   upPrice:{power:[400,1100,2600,6000,14000,32000,70000,160000], cooling:[350,900,2200,5200,12000,28000,60000,130000], rack:[1500,9000]},
   towerStakeMult: 1.2,
   chairPrice: 2500,
+  containerPrice: 250000, containerMax: 2,        // 20ft container · 6 rack slots · PRO farm
+  warehousePrice: 2000000,                        // warehouse · 12 rack slots · ELITE farm
+  shopStakeNPC: 150000,                           // sim stakers sharing the rewards pool
+  shopStakeRate: 0.012,                           // pool % paid out per minute (pro-rata)
   nets:{
     polygon:{name:'Polygon', coin:'pol', sym:'POL', color:0x8247e5, lam:0.007, reward:3.0, p0:10, vol:0.035, pmin:4, pmax:22},
     alt:    {name:'Altcoinchain', coin:'alt', sym:'ALT', color:0xffb020, lam:0.004, reward:2.2, p0:25, vol:0.10, pmin:5, pmax:95},
@@ -72,10 +76,17 @@ const CFG = {
 };
 /* monitor sizes: diagonal inches -> [w,h] world units @2.25u/m (16:9; 38"=21:9; 49"=32:9) */
 const MONSIZES={24:[1.20,0.67],27:[1.34,0.76],32:[1.59,0.90],38:[1.98,0.84],49:[2.68,0.75]};
-const SLOTS = [ // 9 rig positions [x,z,ry]
-  [-4.6,-1.2, 0],[ 0,-1.2, 0],[ 4.6,-1.2, 0],
-  [-4.6,-4.6, 0],[ 0,-4.6, 0],[ 4.6,-4.6, 0],
-  [-4.6, 2.2, 0],[ 0, 2.2, 0],[ 4.6, 2.2, 0],
+const SLOTS = [ // rig positions [x,z,shelfY] — 0-8 garage desks, 9-20 container racks, 21-32 warehouse racks
+  [-4.6,-1.2],[ 0,-1.2],[ 4.6,-1.2],
+  [-4.6,-4.6],[ 0,-4.6],[ 4.6,-4.6],
+  [-4.6, 2.2],[ 0, 2.2],[ 4.6, 2.2],
+  // container A (x=-8): 3 columns × 2 shelves
+  [-9.1,12,0.55],[-9.1,12,2.05],[-9.1,15,0.55],[-9.1,15,2.05],[-9.1,18,0.55],[-9.1,18,2.05],
+  // container B (x=+8)
+  [ 9.1,12,0.55],[ 9.1,12,2.05],[ 9.1,15,0.55],[ 9.1,15,2.05],[ 9.1,18,0.55],[ 9.1,18,2.05],
+  // warehouse (z=27): 4 columns × 3 shelves
+  [-9,27,0.55],[-9,27,1.9],[-9,27,3.25],[-3,27,0.55],[-3,27,1.9],[-3,27,3.25],
+  [ 3,27,0.55],[ 3,27,1.9],[ 3,27,3.25],[ 9,27,0.55],[ 9,27,1.9],[ 9,27,3.25],
 ];
 const SAVEKEY='tmg3d_v1';
 const now=()=>Date.now();
@@ -86,6 +97,8 @@ function freshState(){ const inv={},bought={2:0,17:0,18:0,19:0,23:0}; INV_IDS.fo
   upg:{power:0,cooling:0,rack:0}, gen:1, blocks:0, blocksNet:{pol:0,alt:0,wtx:0}, lucky:0,
   temp:24, muted:false, tut:0, created:now(), lastSeen:now(), sold:{pol:0,alt:0,wtx:0}, netSwitchT:0,
   payCur:'watt', w3claim:{}, monSize:27, chair:0,
+  usdt:0, dai:0, containers:0, warehouse:0,
+  stakedWatt:0, shopPool:25000, shopEarned:0,
   pool:{pol:'nucash',alt:'nucash',wtx:'genesis'}, myPools:{}, pend:{pol:0,alt:0,wtx:0}, payThresh:3,
   shares:0, burned:0, altH:6998800, altHybrid:0, altNodes:0, altLocked:0, valEarn:0, poolEarnW:0, poolEarnC:{pol:0,alt:0,wtx:0},
 };}
@@ -102,6 +115,7 @@ function load(){ try{ const r=localStorage.getItem(SAVEKEY); if(r){ const o=JSON
   st.blocksNet.wtx=st.blocksNet.wtx||0; st.sold.wtx=st.sold.wtx||0;
   st.pool=Object.assign({pol:'nucash',alt:'nucash',wtx:'genesis'},o.pool||{});
   st.myPools=o.myPools||{}; st.pend=Object.assign({pol:0,alt:0,wtx:0},o.pend||{});
+  for(const c of ['pol','alt','wtx']) if(st.pool[c]==='solo'&&!st.myPools[c]) st.pool[c]=c==='wtx'?'genesis':'nucash';
   st.poolEarnC=Object.assign({pol:0,alt:0,wtx:0},o.poolEarnC||{});
   return st; } } }catch(e){} return null; }
 /* number formatting */
@@ -131,7 +145,12 @@ function rigValue(r){ let v=ITEMS[1].price; if(r.cpu) v+=ITEMS[r.cpu].price; if(
 function repairCost(r){ return Math.ceil(rigValue(r)*0.18*(r.wear||0)/100); }
 function stakeMult(){ return S.tower?CFG.towerStakeMult:1; }
 function powerCap(){ return CFG.powerBase + S.upg.power*CFG.powerPerLvl; }
-function slotCount(){ return 3 + S.upg.rack*3; }
+function eligibleSlots(){ const out=[];
+  for(let i=0;i<3+S.upg.rack*3;i++) out.push(i);                       // garage desks
+  for(let i=0;i<S.containers*6;i++) out.push(9+i);                     // container racks
+  if(S.warehouse) for(let i=0;i<12;i++) out.push(21+i);                // warehouse racks
+  return out; }
+function slotCount(){ return eligibleSlots().length; }
 function periphCount(){ return (S.periph[17]?1:0)+(S.periph[18]?1:0)+(S.periph[23]?1:0); }
 function luckMult(){ const pc=periphCount(); return 1 + (S.badge?0.10:0) + pc*0.02 + (pc===3?0.03:0) + (S.chair?0.03:0); }
 function effMult(){ return S.badge?0.90:1; }
@@ -140,4 +159,5 @@ function difficulty(){ return 1 + S.blocks/CFG.diffSoft; }
 function powerFactor(){ const d=totWatt(); return d<=powerCap()?1:powerCap()/d; }
 function tempTarget(){ return 24 + totWatt()*CFG.coolBase*(1-S.upg.cooling*CFG.coolPerLvl); }
 function heatFactor(){ return S.temp>=100?0.25 : S.temp>=85?0.6 : 1; }
-function netWorth(){ return S.watt + (S.pol+S.pend.pol)*S.price.pol + (S.alt+S.pend.alt+S.altLocked)*S.price.alt + (S.wtx+S.pend.wtx)*S.price.wtx; }
+function farmStatus(){ return S.warehouse?'ELITE':S.containers?'PRO':'GARAGE'; }
+function netWorth(){ return S.watt + S.stakedWatt + S.usdt + S.dai + (S.pol+S.pend.pol)*S.price.pol + (S.alt+S.pend.alt+S.altLocked)*S.price.alt + (S.wtx+S.pend.wtx)*S.price.wtx; }

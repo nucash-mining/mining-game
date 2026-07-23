@@ -296,6 +296,10 @@ button{font-family:inherit;cursor:pointer}
 .prog{height:9px;background:#0e1526;border:1px solid var(--line);border-radius:5px;overflow:hidden;margin-top:8px}
 .prog i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),#ff7a3c)}
 #coin-pool:hover{border-color:var(--cyan)}
+#standbtn{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:30;background:var(--panel);border:1px solid var(--cyan);color:var(--txt);border-radius:12px;padding:10px 22px;font:700 13px monospace;cursor:pointer;box-shadow:0 0 18px #35e0ff33}
+#standbtn small{color:var(--dim);font-weight:400}
+#farmpill{display:flex;align-items:center;gap:5px;background:linear-gradient(90deg,#2a1c00,#3a2a08);border:1px solid var(--gold);border-radius:10px;padding:6px 11px;font-size:11px;color:var(--gold);letter-spacing:.08em}
+#farmpill b{font-size:12px}
 </style>
 </head>
 <body>
@@ -312,6 +316,7 @@ button{font-family:inherit;cursor:pointer}
     <div class="stat" id="s-blk"><span class="ic">🧱</span><span class="col"><b id="v-blk">0</b><small>BLOCKS</small></span></div>
   </div>
   <div id="hudbtns">
+    <div id="farmpill" style="display:none" title="Mining farm status"><b id="farmtier">PRO</b> FARM</div>
     <div id="net" title="Switch network"><span class="dot"></span><span id="netname">Polygon</span><small id="netdiff"></small></div>
     <button class="hbtn" id="b-wallet">🦊 WALLET</button>
     <button class="hbtn gold" id="b-shop">🛒 SHOP</button>
@@ -325,9 +330,12 @@ button{font-family:inherit;cursor:pointer}
   <div class="coin" id="coin-pol">🟣 <b id="v-pol">0</b> POL <span class="pr" id="p-pol">@10.0</span><button id="sell-pol">SELL</button></div>
   <div class="coin" id="coin-alt">🟠 <b id="v-alt">0</b> ALT <span class="pr" id="p-alt">@25.0</span><button id="sell-alt">SELL</button></div>
   <div class="coin" id="coin-wtx">🟡 <b id="v-wtx">0</b> WTX <span class="pr" id="p-wtx">@2.0</span><button id="sell-wtx">SELL</button></div>
+  <div class="coin" id="coin-usdt" style="display:none">💵 <b id="v-usdt">0</b> USDT</div>
+  <div class="coin" id="coin-dai" style="display:none">◈ <b id="v-dai">0</b> DAI</div>
   <div class="coin" id="coin-pool" title="Mining pool — click to open Pool Hub" style="cursor:pointer">🏊 <b id="v-pool">nucash-mining</b><span class="pr" id="p-pend"></span></div>
 </div>
 <div id="feed"></div>
+<button id="standbtn" style="display:none">🧍 STAND UP <small>(esc)</small></button>
 <div id="tut"></div>
 
 <!-- ============ SHOP ============ -->
@@ -337,7 +345,10 @@ button{font-family:inherit;cursor:pointer}
     <button class="paybtn" data-cur="watt">⚡ WATT</button>
     <button class="paybtn" data-cur="pol">🟣 POL</button>
     <button class="paybtn" data-cur="alt">🟠 ALT</button>
-    <small>each purchase runs a contract call on the selected currency</small></div>
+    <button class="paybtn" data-cur="wtx">🟡 WTX</button>
+    <button class="paybtn" data-cur="usdt">💵 USDT</button>
+    <button class="paybtn" data-cur="dai">◈ DAI</button>
+    <small>wrapped versions accepted · get stables on SwapinDEX (rig OS) · ⚡WATT purchases feed the stakers rewards pool</small></div>
   <div class="cards" id="shopcards"></div>
 </div></div>
 
@@ -472,6 +483,10 @@ const CFG = {
   upPrice:{power:[400,1100,2600,6000,14000,32000,70000,160000], cooling:[350,900,2200,5200,12000,28000,60000,130000], rack:[1500,9000]},
   towerStakeMult: 1.2,
   chairPrice: 2500,
+  containerPrice: 250000, containerMax: 2,        // 20ft container · 6 rack slots · PRO farm
+  warehousePrice: 2000000,                        // warehouse · 12 rack slots · ELITE farm
+  shopStakeNPC: 150000,                           // sim stakers sharing the rewards pool
+  shopStakeRate: 0.012,                           // pool % paid out per minute (pro-rata)
   nets:{
     polygon:{name:'Polygon', coin:'pol', sym:'POL', color:0x8247e5, lam:0.007, reward:3.0, p0:10, vol:0.035, pmin:4, pmax:22},
     alt:    {name:'Altcoinchain', coin:'alt', sym:'ALT', color:0xffb020, lam:0.004, reward:2.2, p0:25, vol:0.10, pmin:5, pmax:95},
@@ -486,10 +501,17 @@ const CFG = {
 };
 /* monitor sizes: diagonal inches -> [w,h] world units @2.25u/m (16:9; 38"=21:9; 49"=32:9) */
 const MONSIZES={24:[1.20,0.67],27:[1.34,0.76],32:[1.59,0.90],38:[1.98,0.84],49:[2.68,0.75]};
-const SLOTS = [ // 9 rig positions [x,z,ry]
-  [-4.6,-1.2, 0],[ 0,-1.2, 0],[ 4.6,-1.2, 0],
-  [-4.6,-4.6, 0],[ 0,-4.6, 0],[ 4.6,-4.6, 0],
-  [-4.6, 2.2, 0],[ 0, 2.2, 0],[ 4.6, 2.2, 0],
+const SLOTS = [ // rig positions [x,z,shelfY] — 0-8 garage desks, 9-20 container racks, 21-32 warehouse racks
+  [-4.6,-1.2],[ 0,-1.2],[ 4.6,-1.2],
+  [-4.6,-4.6],[ 0,-4.6],[ 4.6,-4.6],
+  [-4.6, 2.2],[ 0, 2.2],[ 4.6, 2.2],
+  // container A (x=-8): 3 columns × 2 shelves
+  [-9.1,12,0.55],[-9.1,12,2.05],[-9.1,15,0.55],[-9.1,15,2.05],[-9.1,18,0.55],[-9.1,18,2.05],
+  // container B (x=+8)
+  [ 9.1,12,0.55],[ 9.1,12,2.05],[ 9.1,15,0.55],[ 9.1,15,2.05],[ 9.1,18,0.55],[ 9.1,18,2.05],
+  // warehouse (z=27): 4 columns × 3 shelves
+  [-9,27,0.55],[-9,27,1.9],[-9,27,3.25],[-3,27,0.55],[-3,27,1.9],[-3,27,3.25],
+  [ 3,27,0.55],[ 3,27,1.9],[ 3,27,3.25],[ 9,27,0.55],[ 9,27,1.9],[ 9,27,3.25],
 ];
 const SAVEKEY='tmg3d_v1';
 const now=()=>Date.now();
@@ -500,6 +522,8 @@ function freshState(){ const inv={},bought={2:0,17:0,18:0,19:0,23:0}; INV_IDS.fo
   upg:{power:0,cooling:0,rack:0}, gen:1, blocks:0, blocksNet:{pol:0,alt:0,wtx:0}, lucky:0,
   temp:24, muted:false, tut:0, created:now(), lastSeen:now(), sold:{pol:0,alt:0,wtx:0}, netSwitchT:0,
   payCur:'watt', w3claim:{}, monSize:27, chair:0,
+  usdt:0, dai:0, containers:0, warehouse:0,
+  stakedWatt:0, shopPool:25000, shopEarned:0,
   pool:{pol:'nucash',alt:'nucash',wtx:'genesis'}, myPools:{}, pend:{pol:0,alt:0,wtx:0}, payThresh:3,
   shares:0, burned:0, altH:6998800, altHybrid:0, altNodes:0, altLocked:0, valEarn:0, poolEarnW:0, poolEarnC:{pol:0,alt:0,wtx:0},
 };}
@@ -516,6 +540,7 @@ function load(){ try{ const r=localStorage.getItem(SAVEKEY); if(r){ const o=JSON
   st.blocksNet.wtx=st.blocksNet.wtx||0; st.sold.wtx=st.sold.wtx||0;
   st.pool=Object.assign({pol:'nucash',alt:'nucash',wtx:'genesis'},o.pool||{});
   st.myPools=o.myPools||{}; st.pend=Object.assign({pol:0,alt:0,wtx:0},o.pend||{});
+  for(const c of ['pol','alt','wtx']) if(st.pool[c]==='solo'&&!st.myPools[c]) st.pool[c]=c==='wtx'?'genesis':'nucash';
   st.poolEarnC=Object.assign({pol:0,alt:0,wtx:0},o.poolEarnC||{});
   return st; } } }catch(e){} return null; }
 /* number formatting */
@@ -545,7 +570,12 @@ function rigValue(r){ let v=ITEMS[1].price; if(r.cpu) v+=ITEMS[r.cpu].price; if(
 function repairCost(r){ return Math.ceil(rigValue(r)*0.18*(r.wear||0)/100); }
 function stakeMult(){ return S.tower?CFG.towerStakeMult:1; }
 function powerCap(){ return CFG.powerBase + S.upg.power*CFG.powerPerLvl; }
-function slotCount(){ return 3 + S.upg.rack*3; }
+function eligibleSlots(){ const out=[];
+  for(let i=0;i<3+S.upg.rack*3;i++) out.push(i);                       // garage desks
+  for(let i=0;i<S.containers*6;i++) out.push(9+i);                     // container racks
+  if(S.warehouse) for(let i=0;i<12;i++) out.push(21+i);                // warehouse racks
+  return out; }
+function slotCount(){ return eligibleSlots().length; }
 function periphCount(){ return (S.periph[17]?1:0)+(S.periph[18]?1:0)+(S.periph[23]?1:0); }
 function luckMult(){ const pc=periphCount(); return 1 + (S.badge?0.10:0) + pc*0.02 + (pc===3?0.03:0) + (S.chair?0.03:0); }
 function effMult(){ return S.badge?0.90:1; }
@@ -554,7 +584,8 @@ function difficulty(){ return 1 + S.blocks/CFG.diffSoft; }
 function powerFactor(){ const d=totWatt(); return d<=powerCap()?1:powerCap()/d; }
 function tempTarget(){ return 24 + totWatt()*CFG.coolBase*(1-S.upg.cooling*CFG.coolPerLvl); }
 function heatFactor(){ return S.temp>=100?0.25 : S.temp>=85?0.6 : 1; }
-function netWorth(){ return S.watt + (S.pol+S.pend.pol)*S.price.pol + (S.alt+S.pend.alt+S.altLocked)*S.price.alt + (S.wtx+S.pend.wtx)*S.price.wtx; }
+function farmStatus(){ return S.warehouse?'ELITE':S.containers?'PRO':'GARAGE'; }
+function netWorth(){ return S.watt + S.stakedWatt + S.usdt + S.dai + (S.pol+S.pend.pol)*S.price.pol + (S.alt+S.pend.alt+S.altLocked)*S.price.alt + (S.wtx+S.pend.wtx)*S.price.wtx; }
 
 /* ================= AUDIO (hand-rolled WebAudio, routed via master) ================= */
 const AU = { ctx:null, master:null, humG:null, dest:null, started:false };
@@ -734,7 +765,7 @@ const deskMat = new THREE.MeshStandardMaterial({color:0x241d47, roughness:.7, me
 const deskTopMat = new THREE.MeshStandardMaterial({color:0x2d2557, roughness:.55, metalness:.45});
 /* real ratios @2.25u/m: desk 1.9m wide × 0.98m deep, surface 75cm (1.68u) — ATX tower 46cm no longer dwarfs it */
 const DESK={W:4.3, D:2.2, TOP:1.60, SURF:1.68, SHELF:3.05};
-function makeDesk(x,z){
+function makeDesk(x,z,slot){
   const g=new THREE.Group();
   const top=new THREE.Mesh(new THREE.BoxGeometry(DESK.W,0.16,DESK.D), deskTopMat); top.position.y=DESK.TOP; g.add(top);
   const legG=new THREE.BoxGeometry(0.14,DESK.TOP,0.14);
@@ -745,7 +776,9 @@ function makeDesk(x,z){
   const pole=new THREE.BoxGeometry(0.09,DESK.SHELF-DESK.TOP,0.09);
   [[-DESK.W/2+0.1,-0.62],[DESK.W/2-0.1,-0.62]].forEach(([px,pz])=>{
     const p=new THREE.Mesh(pole,deskMat); p.position.set(px,(DESK.SHELF+DESK.TOP)/2,pz); g.add(p); });
-  g.add(makeChair(!!S.chair));
+  const ch=makeChair(!!S.chair); g.add(ch);
+  const chit=new THREE.Mesh(new THREE.BoxGeometry(1.0,2.6,1.0), new THREE.MeshBasicMaterial({visible:false}));
+  chit.position.set(0.55,1.3,1.55); chit.userData.chairSlot=slot; g.add(chit);
   g.position.set(x,0,z); scene.add(g); return g;
 }
 /* procedural office / gaming chair (no chair NFT model exists yet — see repo TODO) */
@@ -792,6 +825,93 @@ function rebuildChairs(){ for(const k in deskAt){ const d=deskAt[k];
   const old=d.children.find(c=>c.name==='chairG'); if(old) d.remove(old);
   d.add(makeChair(!!S.chair)); } }
 const deskAt={}; // slotIndex -> desk
+/* ---------- PRO/ELITE mining farm structures ---------- */
+const farmG={containers:[], warehouse:null, pads:[]};
+const steelMat=new THREE.MeshStandardMaterial({color:0x2a2440, roughness:.55, metalness:.75});
+const rackMat=new THREE.MeshStandardMaterial({color:0x191430, roughness:.5, metalness:.8});
+function corrTex(base,stripe){
+  const c=cnv(256,256), x=c.getContext('2d');
+  x.fillStyle=base; x.fillRect(0,0,256,256);
+  for(let i=0;i<16;i++){ x.fillStyle=i%2?stripe:base; x.fillRect(i*16,0,8,256); }
+  const t=ctex(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; return t;
+}
+function makeRack(x,z,shelves){
+  const g=new THREE.Group();
+  const h=shelves[shelves.length-1]+1.1;
+  [[-0.8,-0.55],[0.8,-0.55],[-0.8,0.55],[0.8,0.55]].forEach(([px,pz])=>{
+    const p=new THREE.Mesh(new THREE.BoxGeometry(0.09,h,0.09),rackMat); p.position.set(px,h/2,pz); g.add(p); });
+  shelves.forEach(sy=>{ const sh=new THREE.Mesh(new THREE.BoxGeometry(1.7,0.07,1.2),steelMat);
+    sh.position.y=sy-0.04; g.add(sh); });
+  g.position.set(x,0,z); return g;
+}
+function makeContainer(cx){
+  const g=new THREE.Group();
+  const tex=corrTex('#1c2f45','#16263a');
+  const L=11.5, W=5.0, H=5.5;                       // ~20ft at 2.25u/m (long axis z)
+  const mat=new THREE.MeshStandardMaterial({map:tex, roughness:.7, metalness:.5});
+  const wall=(w,h,px,py,pz,ry)=>{ const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat.clone());
+    m.position.set(px,py,pz); m.rotation.y=ry||0; m.material.side=THREE.DoubleSide; g.add(m); };
+  wall(L,H, cx>0? W/2:-W/2, H/2, 15, Math.PI/2);    // outer long wall
+  wall(L,H, cx>0?-W/2: W/2, H/2, 15, Math.PI/2);    // inner long wall (door cut below? keep open front instead)
+  wall(W,H, 0, H/2, 15+L/2, 0);                      // far end
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(W,0.12,L),mat.clone()); roof.position.set(0,H,15); g.add(roof);
+  const fl=new THREE.Mesh(new THREE.BoxGeometry(W,0.1,L),steelMat.clone()); fl.position.set(0,0.05,15); g.add(fl);
+  // open front end (z=15-L/2) with door frame + hazard stripes
+  const hz=cnv(128,32), hx=hz.getContext('2d');
+  for(let i=0;i<8;i++){ hx.fillStyle=i%2?'#ffd23f':'#141021'; hx.beginPath();
+    hx.moveTo(i*16,32); hx.lineTo(i*16+16,0); hx.lineTo(i*16+32,0); hx.lineTo(i*16+16,32); hx.fill(); }
+  const hzm=new THREE.Mesh(new THREE.PlaneGeometry(W,0.5), new THREE.MeshBasicMaterial({map:ctex(hz)}));
+  hzm.position.set(0,H-0.3,15-L/2-0.01); hzm.rotation.y=Math.PI; g.add(hzm);
+  // interior cool light
+  const il=new THREE.PointLight(0x35e0ff, 65, 13); il.position.set(0,H-1,12); g.add(il);
+  const il2=new THREE.PointLight(0x8247e5, 45, 13); il2.position.set(0,H-1,18); g.add(il2);
+  // racks at the 3 slot columns (z=12,15,18), inner side
+  [12,15,18].forEach(z=>g.add(makeRack(cx>0?1.1:-1.1, z, [0.55,2.05])));
+  g.position.x=cx;
+  scene.add(g); return g;
+}
+function makeWarehouse(){
+  const g=new THREE.Group();
+  const tex=corrTex('#3a2f18','#2c2412');
+  const Wd=26, Dp=10, H=7.5, Z=27;
+  const mat=new THREE.MeshStandardMaterial({map:tex, roughness:.75, metalness:.45, side:THREE.DoubleSide});
+  const back=new THREE.Mesh(new THREE.PlaneGeometry(Wd,H),mat); back.position.set(0,H/2,Z+Dp/2); g.add(back);
+  const l=new THREE.Mesh(new THREE.PlaneGeometry(Dp,H),mat.clone()); l.rotation.y=Math.PI/2; l.position.set(-Wd/2,H/2,Z); g.add(l);
+  const r=l.clone(); r.position.x=Wd/2; g.add(r);
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(Wd,0.15,Dp),mat.clone()); roof.position.set(0,H,Z); g.add(roof);
+  // front header + sign
+  const hdr=new THREE.Mesh(new THREE.PlaneGeometry(Wd,1.6),mat.clone()); hdr.position.set(0,H-0.8,Z-Dp/2); g.add(hdr);
+  const sc=cnv(512,64), sx=sc.getContext('2d');
+  sx.fillStyle='#0d0a1c'; sx.fillRect(0,0,512,64); sx.font='900 38px monospace';
+  sx.fillStyle='#ffd23f'; sx.textAlign='center'; sx.fillText('⛏ ELITE MINING FARM',256,45);
+  const sign=new THREE.Mesh(new THREE.PlaneGeometry(10,1.25), new THREE.MeshBasicMaterial({map:ctex(sc),transparent:true}));
+  sign.position.set(0,H-0.8,Z-Dp/2-0.05); sign.rotation.y=Math.PI; g.add(sign);
+  const il=new THREE.PointLight(0xffb020, 110, 24); il.position.set(0,H-1.5,Z); g.add(il);
+  const il2=new THREE.PointLight(0x35e0ff, 70, 20); il2.position.set(-8,H-2,Z-2); g.add(il2);
+  const il3=il2.clone(); il3.position.x=8; g.add(il3);
+  [-9,-3,3,9].forEach(x=>g.add(makeRack(x,Z,[0.55,1.9,3.25])));
+  scene.add(g); return g;
+}
+function buildFarm(){
+  // concrete pads + structures, idempotent
+  while(farmG.containers.length<Math.min(S.containers,2)){
+    const i=farmG.containers.length;
+    if(!farmG.pads[0]){ const pad=new THREE.Mesh(new THREE.PlaneGeometry(26,14),
+      new THREE.MeshStandardMaterial({color:0x141126, roughness:.95}));
+      pad.rotation.x=-Math.PI/2; pad.position.set(0,0.01,15); scene.add(pad); farmG.pads[0]=pad;
+      const fl=new THREE.PointLight(0xbcd6ff, 55, 26); fl.position.set(0,8,15); scene.add(fl); }
+    farmG.containers.push(makeContainer(i===0?-8:8));
+  }
+  if(S.warehouse&&!farmG.warehouse){
+    if(!farmG.pads[1]){ const pad=new THREE.Mesh(new THREE.PlaneGeometry(30,14),
+      new THREE.MeshStandardMaterial({color:0x141126, roughness:.95}));
+      pad.rotation.x=-Math.PI/2; pad.position.set(0,0.01,27); scene.add(pad); farmG.pads[1]=pad; }
+    farmG.warehouse=makeWarehouse();
+  }
+  // widen the world as the farm grows
+  const far=S.warehouse?46:S.containers?38:24;
+  controls.maxDistance=far; scene.fog.far=S.warehouse?95:S.containers?75:40;
+}
 /* shared animated terminal texture */
 const termC=cnv(256,160), termX=termC.getContext('2d');
 const termTex=ctex(termC);
@@ -1005,8 +1125,9 @@ function clearRigVis(i){ if(rigVis[i]){ scene.remove(rigVis[i].group); rigVis[i]
 function buildRigVis(i){
   clearRigVis(i);
   const r=S.rigs[i]; if(!r) return;
-  const [sx,sz]=SLOTS[r.slot];
-  if(!deskAt[r.slot]) deskAt[r.slot]=makeDesk(sx,sz);
+  const [sx,sz,sy]=SLOTS[r.slot];
+  if(r.slot>=9){ buildRackRig(i,r,sx,sz,sy); return; }
+  if(!deskAt[r.slot]) deskAt[r.slot]=makeDesk(sx,sz,r.slot);
   const g=new THREE.Group();
   // PC on desk — real-life scale: ATX mid-tower ≈46cm on a 75cm-high, 1.9m desk (2.25 u/m)
   const pc=normalize(instOf('pc'),1.03);
@@ -1031,14 +1152,13 @@ function buildRigVis(i){
   // second monitor (LC23 peripheral) — left of the main screen
   if(S.periph[23]&&PROTO.lc23){ const m2=normalize(instOf('lc23'),0.68);
     m2.position.x+=-0.55; m2.position.z+=-0.55; m2.position.y+=DESK.SURF; m2.rotation.y=0.35; g.add(m2); }
-  // keyboard: RGB model if owned, else plain box
-  if(S.periph[18]&&PROTO.kb){ const kbm=normalizeW(instOf('kb'),0.82);
+  // real Mining Game keyboard + mouse GLBs on every desk
+  if(PROTO.kb){ const kbm=normalizeW(instOf('kb'),0.82);
     kbm.position.x+=0.55; kbm.position.z+=0.55; kbm.position.y+=DESK.SURF+0.02; kbm.rotation.y=-0.1; g.add(kbm); }
   else{ const kb=new THREE.Mesh(new THREE.BoxGeometry(0.78,0.035,0.26),
     new THREE.MeshStandardMaterial({color:0x241d47,roughness:.6,metalness:.4}));
     kb.position.set(0.55,DESK.SURF+0.02,0.55); kb.rotation.y=-0.1; g.add(kb); }
-  // red mouse peripheral
-  if(S.periph[17]&&PROTO.mouse){ const mm=normalizeW(instOf('mouse'),0.16);
+  if(PROTO.mouse){ const mm=normalizeW(instOf('mouse'),0.16);
     mm.position.x+=1.35; mm.position.z+=0.58; mm.position.y+=DESK.SURF+0.02; mm.rotation.y=-0.3; g.add(mm); }
   // CPU + GPUs live INSIDE the case (see 🔧 WORKBENCH) unless an open-air frame is racked
   let cpuM=null;
@@ -1071,11 +1191,31 @@ function buildRigVis(i){
   scene.add(g);
   rigVis[i]={group:g,led,gpuMeshes:gpuMs,cpuMesh:cpuM,pcMesh:pc,slot:r.slot};
 }
-function rebuildAllRigs(){ for(let i=0;i<9;i++) clearRigVis(i); S.rigs.forEach((r,i)=>buildRigVis(i)); refreshRings(); }
+/* rack-mounted rig inside a container / warehouse shelf */
+function buildRackRig(i,r,sx,sz,sy){
+  const g=new THREE.Group();
+  const pc=normalize(instOf('pc'),1.03);
+  pc.position.y+=sy; pc.rotation.y=sx>0?-Math.PI/2:Math.PI/2;
+  g.add(pc);
+  if(r.asic&&PROTO.asic){ const am=normalizeFit(instOf('asic'),0.6);
+    am.position.set(0, sy+0.02, 0.75); am.rotation.y=0.3; g.add(am); }
+  if(r.gpus.length||r.cpu){
+    const glow=new THREE.PointLight(0x2ee6d6, 0.3+0.18*r.gpus.length, 1.8);
+    glow.position.set(0, sy+0.5, 0.3); g.add(glow);
+  }
+  const led=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.06,0.06),
+    new THREE.MeshBasicMaterial({color:0x3dff8a}));
+  led.position.set(0, sy+1.12, 0.6); g.add(led);
+  g.position.set(sx,0,sz);
+  scene.add(g);
+  rigVis[i]={group:g,led,gpuMeshes:[],cpuMesh:null,pcMesh:pc,slot:r.slot};
+}
+function rebuildAllRigs(){ for(let i=0;i<SLOTS.length;i++) clearRigVis(i); S.rigs.forEach((r,i)=>buildRigVis(i)); refreshRings(); }
 /* rings show free/occupied slots when shopping for PC */
 function refreshRings(){
+  const gar=3+S.upg.rack*3;
   for(let i=0;i<9;i++){ if(!rings[i]) rings[i]=makeRing(i);
-    rings[i].visible = i<slotCount();
+    rings[i].visible = i<gar;
   }
 }
 /* ---------- particles ---------- */
@@ -1497,13 +1637,15 @@ function simTick(dt){ // dt seconds (fixed 0.1)
   if(AU.humG) AU.humG.gain.value=(S.muted?0:Math.min(0.5,0.05+draw*0.004))*(noWatt?0.3:1);
 }
 /* market */
-function sellCoin(cn, amt){
+function sellCoin(cn, amt, recv){
   amt = amt===undefined ? S[cn] : Math.min(amt, S[cn]);
   if(amt<=0.001){ SFX.err(); return false; }
   const val=amt*S.price[cn];
-  S[cn]-=amt; S.watt+=val; S.lifeWatt+=val; S.sold[cn]+=val;
-  SFX.sell(); toast(`Sold ${fmt(amt)} ${cn.toUpperCase()} → +${fmt(val)} ⚡WATT`,'grn');
-  renderHud(); save(); return true;
+  S[cn]-=amt; S.sold[cn]+=val;
+  if(recv==='usdt'){ S.usdt+=val; toast(`Swapped ${fmt(amt)} ${cn.toUpperCase()} → +${fmt(val)} USDT`,'grn'); }
+  else if(recv==='dai'){ S.dai+=val; toast(`Swapped ${fmt(amt)} ${cn.toUpperCase()} → +${fmt(val)} DAI`,'grn'); }
+  else { S.watt+=val; S.lifeWatt+=val; toast(`Sold ${fmt(amt)} ${cn.toUpperCase()} → +${fmt(val)} ⚡WATT`,'grn'); }
+  SFX.sell(); renderHud(); save(); return true;
 }
 /* overclock + reboot (Mining Game OS) */
 function setOC(ri,c,m){
@@ -1540,19 +1682,27 @@ function mintPC(free){
   if(S.pcCount>0 && S.rigs.length>=slotCount()){ SFX.err(); toast('No free rack space — buy a Rack Expansion in 🔧 GARAGE','red'); return false; }
   const price=free?0:pcPrice();
   if(S.watt<price){ SFX.err(); toast('Not enough WATT','red'); return false; }
-  S.watt-=price;
+  S.watt-=price; S.shopPool+=price;
   const used=new Set(S.rigs.map(r=>r.slot));
-  let slot=-1; for(let i=0;i<slotCount();i++) if(!used.has(i)){slot=i;break;}
+  let slot=-1; for(const i of eligibleSlots()) if(!used.has(i)){slot=i;break;}
   S.rigs.push({slot,cpu:0,gpus:[],asic:0,frame:0,oc:{c:0,m:0},crashT:0,on:1,wear:0}); S.pcCount++;
   buildRigVis(S.rigs.length-1);
   burst(new THREE.Vector3(SLOTS[slot][0],1.8,SLOTS[slot][1]),30,partMatCyan,3);
   SFX.mint(); toast(free?'🖥 Gaming PC minted — FREE':'🖥 Gaming PC minted for '+fmt(price)+' ⚡','grn');
   renderHud(); save(); return true;
 }
-function costIn(cur,wattPrice){ return cur==='pol'?wattPrice/S.price.pol : cur==='alt'?wattPrice/S.price.alt : wattPrice; }
-function curBal(cur){ return cur==='pol'?S.pol : cur==='alt'?S.alt : S.watt; }
-function curSym(cur){ return cur==='pol'?'POL' : cur==='alt'?'ALT' : '⚡WATT'; }
-function curPay(cur,amt){ if(cur==='pol') S.pol-=amt; else if(cur==='alt') S.alt-=amt; else S.watt-=amt; }
+function costIn(cur,wattPrice){
+  if(cur==='pol') return wattPrice/S.price.pol;
+  if(cur==='alt') return wattPrice/S.price.alt;
+  if(cur==='wtx') return wattPrice/S.price.wtx;
+  return wattPrice; } // watt / usdt / dai are 1:1 in-sim
+function curBal(cur){ return {pol:S.pol,alt:S.alt,wtx:S.wtx,usdt:S.usdt,dai:S.dai}[cur]??S.watt; }
+function curSym(cur){ return {pol:'POL',alt:'ALT',wtx:'WTX',usdt:'USDT',dai:'DAI'}[cur]||'⚡WATT'; }
+function curPay(cur,amt){
+  if(cur==='pol') S.pol-=amt; else if(cur==='alt') S.alt-=amt; else if(cur==='wtx') S.wtx-=amt;
+  else if(cur==='usdt') S.usdt-=amt; else if(cur==='dai') S.dai-=amt;
+  else { S.watt-=amt; S.shopPool+=amt; } // WATT spent in the shop feeds the stakers rewards pool
+}
 function buyItem(id){
   const it=ITEMS[id];
   if(id===1){ if(mintPC(S.pcCount===0)) renderShop(); return; }
@@ -1613,7 +1763,7 @@ function buyUpgrade(k){
   if(lv>=arr.length){ SFX.err(); return; }
   const p=arr[lv];
   if(S.watt<p){ SFX.err(); toast('Not enough WATT','red'); return; }
-  S.watt-=p; S.upg[k]++;
+  S.watt-=p; S.shopPool+=p; S.upg[k]++;
   SFX.buy();
   const names={power:'⚡ Power grid upgraded',cooling:'❄ Cooling upgraded',rack:'🗄 Rack expansion built — 3 new slots'};
   toast(names[k]+` (Lv ${S.upg[k]})`,'grn');
@@ -1827,12 +1977,13 @@ const POOLS={
 function netKey(coin){ return coin==='pol'?'polygon':coin==='alt'?'alt':'wattx'; }
 function poolFor(coin,id){
   if(id==='mine') return S.myPools[coin]?{id:'mine',name:S.myPools[coin].name,fee:0,speed:1.35,mine:true}:null;
+  if(id==='solo') return S.myPools[coin]?{id:'solo',name:'own node',fee:0,speed:1,mine:true,direct:true}:null;
   const p=(POOLS[coin]||[]).find(p=>p.id===id);
-  return (p&&!p.solo)?p:null; // solo → null (raw protocol mining)
+  return (p&&!p.solo)?p:null;
 }
 function curPool(){ const c=CFG.nets[S.net].coin; return poolFor(c,S.pool[c]); }
 function poolCredit(coin,amt,P){
-  if(!P){ S[coin]+=amt; return; } // solo & hostless: direct credit
+  if(!P||P.direct){ S[coin]+=amt; return; } // solo node: full reward, direct credit
   S.pend[coin]+=amt;
   const th=S.payThresh*CFG.nets[netKey(coin)].reward;
   if(S.pend[coin]>=th){
@@ -1853,8 +2004,17 @@ function poolTick(dt){
     const earn=CFG.altBlockRate*(CFG.nets.alt.reward/2)*share*dt;
     S.alt+=earn; S.valEarn+=earn;
   }
+  // WATT rewards pool: every ⚡ spent on NFTs drips back to stakers pro-rata until depleted
+  if(S.shopPool>0.01){
+    const tot=S.stakedWatt+CFG.shopStakeNPC;
+    const out=Math.min(S.shopPool, S.shopPool*CFG.shopStakeRate/60*dt);
+    S.shopPool-=out;
+    if(S.stakedWatt>0){ const mine=out*S.stakedWatt/tot;
+      S.watt+=mine; S.lifeWatt+=mine; S.shopEarned+=mine; }
+  }
   for(const c in S.myPools){
     const m=S.myPools[c];
+    if(m.solo) continue; // private node: no NPC miners, no fee income
     const cap=Math.max(300, 3000*(1-m.fee*6));       // low fee attracts NPC hashrate
     m.npc=(m.npc||0)+(cap-(m.npc||0))*Math.min(1,dt*0.0025);
     const n=CFG.nets[netKey(c)];
@@ -1867,21 +2027,25 @@ function poolTick(dt){
 }
 /* ---------- actions ---------- */
 function joinPool(coin,id){
+  if(id==='solo'&&!S.myPools[coin]){ SFX.err();
+    toast(`⛏ SOLO mining = running your own node — lock ${fmtInt(CFG.poolHostWatt)} ⚡ + ${fmtInt(CFG.poolHostCoin)} ${coin.toUpperCase()} below (same as hosting a pool)`,'red',7000);
+    return; }
   S.pool[coin]=id; SFX.swap();
   const P=poolFor(coin,id);
   toast(P?`🏊 Connected to ${P.name} — fee ${(P.fee*100).toFixed(1)}%, smooth payouts x${P.speed}`:'⛏ SOLO mining — full block reward, pure Poisson luck', P&&P.official?'gold':'cyan');
   renderPoolHub(); renderHud(); save();
 }
-function hostPool(c,feePct){
-  if(S.myPools[c]){ toast('Already hosting a pool on this chain','red'); return; }
-  const fee=clamp(feePct,0,12)/100;
+function hostPool(c,feePct,solo){
+  if(S.myPools[c]){ toast('Already running a node on this chain','red'); return; }
+  const fee=solo?0:clamp(feePct,0,12)/100;
   if(S.watt<CFG.poolHostWatt || S[c]<CFG.poolHostCoin){
-    SFX.err(); toast(`Hosting locks ${fmtInt(CFG.poolHostWatt)} ⚡WATT + ${fmtInt(CFG.poolHostCoin)} ${c.toUpperCase()}`,'red'); return;
+    SFX.err(); toast(`A node locks ${fmtInt(CFG.poolHostWatt)} ⚡WATT + ${fmtInt(CFG.poolHostCoin)} ${c.toUpperCase()}`,'red'); return;
   }
   S.watt-=CFG.poolHostWatt; S[c]-=CFG.poolHostCoin;
-  S.myPools[c]={name:'my-'+c+'.pool.watt', fee, npc:0, earnW:0, earnC:0, lockW:CFG.poolHostWatt, lockC:CFG.poolHostCoin, t:now()};
-  S.pool[c]='mine'; SFX.mint();
-  toast(`🏊 POOL LAUNCHED on ${CFG.nets[netKey(c)].name} — fee ${(fee*100).toFixed(1)}% · you now mine POWER-FREE + earn 1% of all WATT burned here`,'gold',10000);
+  S.myPools[c]={name:solo?('node-'+c+'.solo.watt'):('my-'+c+'.pool.watt'), fee, solo:solo?1:0, npc:0, earnW:0, earnC:0, lockW:CFG.poolHostWatt, lockC:CFG.poolHostCoin, t:now()};
+  S.pool[c]=solo?'solo':'mine'; SFX.mint();
+  toast(solo?`⛏ PRIVATE NODE ONLINE on ${CFG.nets[netKey(c)].name} — SOLO mining unlocked: full block rewards, POWER-FREE`
+            :`🏊 POOL LAUNCHED on ${CFG.nets[netKey(c)].name} — fee ${(fee*100).toFixed(1)}% · you now mine POWER-FREE + earn 1% of all WATT burned here`,'gold',10000);
   renderPoolHub(); renderHud(); save();
 }
 function closePool(c){
@@ -1904,6 +2068,18 @@ function exitValidators(){
   toast(`🛰 ${S.altNodes} validator${S.altNodes>1?'s':''} exited — ${fmt(S.altLocked)} ALT unlocked`,'cyan');
   S.altLocked=0; S.altNodes=0; SFX.click(); renderPoolHub(); renderHud(); save();
 }
+function stakeShop(amt){
+  amt=Math.min(amt===undefined?S.watt:amt, S.watt);
+  if(amt<=0){ SFX.err(); return; }
+  S.watt-=amt; S.stakedWatt+=amt; SFX.buy();
+  toast(`🥩 Staked ${fmt(amt)} ⚡ in the WATT Rewards Pool — earning ${(100*S.stakedWatt/(S.stakedWatt+CFG.shopStakeNPC)).toFixed(2)}% of the drip`,'grn');
+  renderPoolHub(); renderHud(); save();
+}
+function unstakeShop(){
+  if(S.stakedWatt<=0){ SFX.err(); return; }
+  S.watt+=S.stakedWatt; toast(`Unstaked ${fmt(S.stakedWatt)} ⚡`,'cyan'); S.stakedWatt=0;
+  SFX.click(); renderPoolHub(); renderHud(); save();
+}
 function repairRig(ri){
   const r=S.rigs[ri]; if(!r||r.wear<1){ SFX.err(); return; }
   const c=repairCost(r);
@@ -1924,22 +2100,24 @@ function renderPoolHub(){
   const coin=CFG.nets[S.net].coin, sym=CFG.nets[S.net].sym, mine=S.myPools[coin];
   const rows=POOLS[coin].map(p=>{
     const sel=S.pool[coin]===p.id;
+    const soloLocked=p.solo&&!mine;
     return `<div class="prow ${sel?'sel':''}${p.official?' off':''}">
-      <div class="pi"><b>${p.official?'⭐ ':''}${p.name}</b><small>${p.blurb}</small></div>
+      <div class="pi"><b>${p.official?'⭐ ':''}${p.name}</b><small>${p.solo?(mine?'your node is online — full reward, power-free':'requires your own node — same lock as hosting (below)'):p.blurb}</small></div>
       <div class="pf">${p.solo?'—':(p.fee*100).toFixed(1)+'%'}<small>fee</small></div>
       <div class="pf">x${p.speed}<small>payout freq</small></div>
-      <button class="hbtn ${sel?'':'accent'}" data-join="${p.id}" ${sel?'disabled':''}>${sel?'CONNECTED':'JOIN'}</button></div>`;
+      <button class="hbtn ${sel?'':'accent'}" data-join="${p.id}" ${sel?'disabled':''}>${sel?'CONNECTED':soloLocked?'🔒 JOIN':'JOIN'}</button></div>`;
   }).join('');
   const mineRow = mine?`<div class="prow sel host">
-      <div class="pi"><b>🏊 ${mine.name}</b><small>YOUR pool · fee ${(mine.fee*100).toFixed(1)}% · NPC hashrate ${fmtInt(mine.npc||0)} H</small></div>
-      <div class="pf">+${fmt(mine.earnC||0)}<small>${sym} earned</small></div>
-      <div class="pf">+${fmt(mine.earnW||0)}<small>⚡ from burn</small></div>
-      ${S.pool[coin]==='mine'?'<button class="hbtn" disabled>CONNECTED</button>':`<button class="hbtn accent" data-join="mine">JOIN</button>`}
+      <div class="pi"><b>${mine.solo?'⛏':'🏊'} ${mine.name}</b><small>${mine.solo?'YOUR private node · solo mining · power-free':'YOUR pool · fee '+(mine.fee*100).toFixed(1)+'% · NPC hashrate '+fmtInt(mine.npc||0)+' H'}</small></div>
+      ${mine.solo?'':`<div class="pf">+${fmt(mine.earnC||0)}<small>${sym} earned</small></div>
+      <div class="pf">+${fmt(mine.earnW||0)}<small>⚡ from burn</small></div>`}
+      ${(S.pool[coin]==='mine'||S.pool[coin]==='solo')?'<button class="hbtn" disabled>CONNECTED</button>':`<button class="hbtn accent" data-join="${mine.solo?'solo':'mine'}">JOIN</button>`}
       <button class="hbtn" data-closepool="1" style="color:var(--red)">CLOSE</button></div>`
-    :`<div class="hostbox"><b>🏗 HOST YOUR OWN POOL on ${CFG.nets[S.net].name}</b>
-      <small>Lock ${fmtInt(CFG.poolHostWatt)} ⚡WATT + ${fmtInt(CFG.poolHostCoin)} ${sym}. You mine <b>power-free</b>, keep 1% of all WATT burned in the pool, and take your fee % of every NPC block. Lower fee → more NPC miners join.</small>
+    :`<div class="hostbox"><b>🏗 RUN A NODE on ${CFG.nets[S.net].name}</b>
+      <small>Lock ${fmtInt(CFG.poolHostWatt)} ⚡WATT + ${fmtInt(CFG.poolHostCoin)} ${sym}. Either way you mine <b>power-free</b>. A <b>public pool</b> earns your fee % of NPC blocks + 1% of all WATT burned (lower fee → more NPC miners). A <b>private node</b> is pure solo: full block rewards, no crowd.</small>
       <div class="rowbtns" style="margin-top:8px">FEE <input id="hostfee" type="range" min="0" max="12" value="3" step="0.5" style="flex:1"> <b id="hostfeev">3.0%</b>
-      <button class="hbtn gold" id="hostgo">LAUNCH POOL</button></div></div>`;
+      <button class="hbtn gold" id="hostgo">🏊 PUBLIC POOL</button>
+      <button class="hbtn accent" id="hostsolo">⛏ PRIVATE NODE</button></div></div>`;
   const alt=`<div class="valbox"><b>⛓ ALTCOINCHAIN HYBRID PoS ${S.altHybrid?'<span style="color:var(--grn)">— LIVE</span>':''}</b>
       <small>height <b>${fmtInt(S.altH)}</b> / 7.00M ${S.altHybrid?'· reward split 1/1 miners : stakers':'· hybrid fork at block 7,000,000'}</small>
       ${S.altHybrid?`<div class="rowbtns" style="margin-top:8px">
@@ -1947,7 +2125,15 @@ function renderPoolHub(){
         <button class="hbtn gold" id="valbuy">+ NODE (32 ALT)</button>
         ${S.altNodes?'<button class="hbtn" id="valexit">EXIT ALL</button>':''}</div>`
       :`<div class="prog"><i style="width:${Math.min(100,(S.altH/CFG.altHybridBlock)*100).toFixed(2)}%"></i></div>`}</div>`;
-  $('poolbody').innerHTML=`
+  const shopShare=S.stakedWatt/(S.stakedWatt+CFG.shopStakeNPC);
+  const stakeBox=`<div class="valbox" style="border-color:#3dff8a44"><b>🥩 WATT REWARDS POOL <span style="color:var(--grn)">${fmt(S.shopPool)} ⚡</span></b>
+    <small>Every ⚡WATT spent on NFTs &amp; hardware in the game flows here (nothing is burned in the shop — only mining burns). Stakers split ${(CFG.shopStakeRate*100).toFixed(1)}%/min of the pool pro-rata until it runs dry; it refills whenever anyone buys hardware.</small>
+    <div class="rowbtns" style="margin-top:8px">
+      <span>your stake: <b>${fmt(S.stakedWatt)} ⚡</b> (${(shopShare*100).toFixed(2)}%) · earned <b>${fmt(S.shopEarned)} ⚡</b></span>
+      <button class="hbtn gold" id="stk25">STAKE 25%</button>
+      <button class="hbtn gold" id="stkall">ALL-IN</button>
+      ${S.stakedWatt>0?'<button class="hbtn" id="stkout">UNSTAKE</button>':''}</div></div>`;
+  $('poolbody').innerHTML=`${stakeBox}
     <p style="color:var(--dim);font-size:11px;margin:2px 0 10px">Network: <b style="color:var(--txt)">${CFG.nets[S.net].name}</b> (switch on the HUD pill) · pending payout <b>${fmt(S.pend[coin])} ${sym}</b> · threshold ${S.payThresh}× reward
     <button class="hbtn" id="thresh" style="padding:2px 8px;font-size:10px">TH ${S.payThresh}×</button></p>
     ${rows}${mineRow}${alt}
@@ -1955,10 +2141,14 @@ function renderPoolHub(){
   $('poolbody').querySelectorAll('[data-join]').forEach(b=>b.onclick=()=>joinPool(coin,b.dataset.join));
   const cp=$('poolbody').querySelector('[data-closepool]'); if(cp) cp.onclick=()=>closePool(coin);
   const hf=$('hostfee'); if(hf){ hf.oninput=()=>$('hostfeev').textContent=(+hf.value).toFixed(1)+'%';
-    $('hostgo').onclick=()=>hostPool(coin,+hf.value); }
+    $('hostgo').onclick=()=>hostPool(coin,+hf.value);
+    $('hostsolo').onclick=()=>hostPool(coin,0,true); }
   const vb=$('valbuy'); if(vb) vb.onclick=buyValidator;
   const ve=$('valexit'); if(ve) ve.onclick=exitValidators;
   const th=$('thresh'); if(th) th.onclick=()=>{ S.payThresh=S.payThresh===3?10:S.payThresh===10?1:3; SFX.click(); renderPoolHub(); save(); };
+  const s25=$('stk25'); if(s25) s25.onclick=()=>stakeShop(S.watt*0.25);
+  const sa=$('stkall'); if(sa) sa.onclick=()=>stakeShop();
+  const so=$('stkout'); if(so) so.onclick=unstakeShop;
 }
 function openPoolHub(){ openModal('m-pool'); renderPoolHub(); }
 $('b-pool').onclick=openPoolHub;
@@ -1989,6 +2179,12 @@ function renderHud(){
   pp.className='pr '+(S.price.pol>=CFG.nets.polygon.p0?'up':'dn');
   pa.className='pr '+(S.price.alt>=CFG.nets.alt.p0?'up':'dn');
   pw.className='pr '+(S.price.wtx>=CFG.nets.wattx.p0?'up':'dn');
+  $('v-usdt').textContent=fmt(S.usdt); $('v-dai').textContent=fmt(S.dai);
+  $('coin-usdt').style.display=S.usdt>0.005?'flex':'none';
+  $('coin-dai').style.display=S.dai>0.005?'flex':'none';
+  const fs=farmStatus();
+  $('farmpill').style.display=fs==='GARAGE'?'none':'flex';
+  $('farmtier').textContent=fs;
   const coin=CFG.nets[S.net].coin, P=curPool();
   $('v-pool').textContent=P?(P.mine?'🏗 '+P.name:P.name):'SOLO';
   $('p-pend').textContent=S.pend[coin]>0.005?('pend '+fmt(S.pend[coin])+' '+CFG.nets[S.net].sym):'';
@@ -2149,8 +2345,30 @@ function renderUpg(){
     toast(`🖥 Monitors swapped to ${S.monSize}&Prime; on every desk`,'cyan'); });
   const chb=document.querySelector('[data-chair]');
   if(chb) chb.onclick=()=>{ if(S.chair||S.watt<CFG.chairPrice){SFX.err();return;}
-    S.watt-=CFG.chairPrice; S.chair=1; rebuildChairs(); SFX.buy();
+    S.watt-=CFG.chairPrice; S.shopPool+=CFG.chairPrice; S.chair=1; rebuildChairs(); SFX.buy();
     toast('🏎️ GAMING CHAIRS rolled in — +3% luck comfort bonus','gold'); renderUpg(); renderHud(); save(); };
+  // mining farm expansion — payable in WATT/POL/ALT/WTX/USDT/DAI (shop pay currency)
+  const cur=S.payCur||'watt';
+  const cCost=costIn(cur,CFG.containerPrice), wCost=costIn(cur,CFG.warehousePrice);
+  $('upgrows').insertAdjacentHTML('beforeend',`
+    <div class="uprow" style="border-color:${S.containers?'var(--gold)':''}"><div class="uic">🚢</div>
+      <div class="ubody"><h3>Shipping Container <small style="color:var(--dim)">${S.containers}/${CFG.containerMax} · unlocks 🏭 PRO FARM</small></h3>
+      <p>A 20ft high-cube on the lot: <b>6 rack slots</b> for rack-mounted rigs. Pay in ⚡/POL/ALT/WTX/USDT/DAI (set in 🛒 SHOP — now: ${curSym(cur)}).</p></div>
+      <button class="ubuy" data-cont="1" ${S.containers>=CFG.containerMax||curBal(cur)<cCost?'disabled':''}>${S.containers>=CFG.containerMax?'MAX':fmt(cCost)+' '+curSym(cur)}</button></div>
+    <div class="uprow" style="border-color:${S.warehouse?'var(--gold)':''}"><div class="uic">🏭</div>
+      <div class="ubody"><h3>Warehouse <small style="color:var(--dim)">${S.warehouse?'owned · ⛏ ELITE FARM':'requires 2 containers'}</small></h3>
+      <p>The big leagues: <b>12 rack slots</b> and ELITE MINING FARM status.</p></div>
+      <button class="ubuy" data-ware="1" ${S.warehouse||S.containers<CFG.containerMax||curBal(cur)<wCost?'disabled':''}>${S.warehouse?'OWNED ✓':fmt(wCost)+' '+curSym(cur)}</button></div>`);
+  const cb=document.querySelector('[data-cont]');
+  if(cb) cb.onclick=()=>{ if(S.containers>=CFG.containerMax||curBal(cur)<cCost){SFX.err();return;}
+    curPay(cur,cCost); S.containers++; buildFarm(); refreshRings(); SFX.gen2();
+    toast(S.containers===1?'🚢 SHIPPING CONTAINER delivered — 6 rack slots · 🏭 <b>PRO MINING FARM</b> status!':'🚢 Second container down — 6 more rack slots','gold',9000);
+    renderUpg(); renderHud(); save(); };
+  const wb=document.querySelector('[data-ware]');
+  if(wb) wb.onclick=()=>{ if(S.warehouse||S.containers<CFG.containerMax||curBal(cur)<wCost){SFX.err();return;}
+    curPay(cur,wCost); S.warehouse=1; buildFarm(); refreshRings(); SFX.gen2();
+    toast('🏭 WAREHOUSE ONLINE — 12 rack slots · ⛏ <b>ELITE MINING FARM</b> status!','gold',10000);
+    renderUpg(); renderHud(); save(); };
   const ok=S.lifeWatt>=CFG.gen2Req;
   $('gen2box').innerHTML=`<div class="big">🚀 <b>GENERATION ${S.gen+1}</b><br>
     <small style="color:var(--dim)">Reset your garage (Genesis Badge & Battlestation stay) for a permanent ×${CFG.gen2Mult} hashpower multiplier${S.gen===1?` — and unlock the <b style="color:var(--gold)">GEN 2 hardware shop</b>: TX190 · GP720 · GPX880 · XXL270 · Bit Hammer ASIC · Server Tower`:''}.<br>
@@ -2165,6 +2383,8 @@ function renderStats(){
     ['NET WORTH',fmt(netWorth())+' ⚡'],['LIFETIME EARNED',fmt(S.lifeWatt)+' ⚡'],
     ['⚡ BURNED MINING',fmt(S.burned)],['POOL HOST EARNED',fmt(S.poolEarnW)+' ⚡'],
     ['ALT VALIDATORS',S.altNodes+' ('+fmt(S.valEarn)+' ALT)'],['WTX MINED',fmt(S.blocksNet.wtx)+' blk'],
+    ['FARM STATUS','🏭 '+farmStatus()],['RACK SLOTS',slotCount()+' ('+S.containers+' cont'+(S.warehouse?' + WH':'')+')'],
+    ['REWARDS POOL',fmt(S.shopPool)+' ⚡'],['STAKE EARNED',fmt(S.shopEarned)+' ⚡'],
     ['BLOCKS MINED',fmtInt(S.blocks)],['LUCKY BLOCKS',fmtInt(S.lucky)],
     ['POL BLOCKS',fmtInt(S.blocksNet.pol)],['ALT BLOCKS',fmtInt(S.blocksNet.alt)],
     ['TOTAL HASH',fmt(totHash())+' H'],['STAKE WEIGHT',fmtInt(totSW())],
@@ -2467,13 +2687,17 @@ function osAppDex(body){
       <input class="os-in" id="dx-amt" type="number" min="0" step="any" placeholder="amount">
       <button class="os-task" id="dx-max" style="padding:5px 10px">MAX</button>
     </div>
+    <label style="font-size:10px;color:#8a8a90;letter-spacing:.1em">RECEIVE</label>
+    <select class="os-sel" id="dx-recv" style="width:130px;margin:6px 0 10px">
+      <option value="watt">⚡ WATT</option><option value="usdt">💵 USDT</option><option value="dai">◈ DAI</option>
+    </select>
     <div class="os-kv">
       <div><small>BALANCE</small><b id="dx-bal">0</b></div>
       <div><small>RATE</small><b id="dx-rate">0 ⚡</b></div>
       <div><small>YOU RECEIVE</small><b id="dx-out">0 ⚡</b></div>
       <div><small>POOL FEE</small><b style="color:#3dff8a">0%</b></div>
     </div>
-    <button class="os-abtn" id="dx-swap">SWAP → ⚡WATT</button>
+    <button class="os-abtn" id="dx-swap">SWAP</button>
     <div class="os-note" id="dx-hint">ALT is volatile — watch the rate and time your swaps.</div>`;
   const coin=body.querySelector('#dx-coin'), amt=body.querySelector('#dx-amt');
   const upd=()=>{
@@ -2488,7 +2712,7 @@ function osAppDex(body){
   body.querySelector('#dx-max').onclick=()=>{ amt.value=S[coin.value].toFixed(3); upd(); };
   body.querySelector('#dx-swap').onclick=()=>{
     const a=parseFloat(amt.value)||0;
-    if(sellCoin(coin.value,a)){ amt.value=''; }
+    if(sellCoin(coin.value,a,body.querySelector('#dx-recv').value)){ amt.value=''; }
     upd();
   };
   OS.wins.dex.refresh=upd; upd();
@@ -2534,25 +2758,36 @@ let hoverRig=-1, pdown=null;
 function rigHitboxes(){
   const out=[];
   rigVis.forEach((rv,i)=>{ if(!rv) return;
-    if(!rv.hit){ const m=new THREE.Mesh(new THREE.BoxGeometry(4.4,3.6,2.5),
-      new THREE.MeshBasicMaterial({visible:false}));
-      m.position.set(SLOTS[rv.slot][0],1.8,SLOTS[rv.slot][1]); m.userData.rig=i;
+    if(!rv.hit){
+      const rack=rv.slot>=9, sy=rack?SLOTS[rv.slot][2]:0;
+      const m=new THREE.Mesh(rack?new THREE.BoxGeometry(1.7,1.5,1.4):new THREE.BoxGeometry(4.4,3.6,2.5),
+        new THREE.MeshBasicMaterial({visible:false}));
+      m.position.set(SLOTS[rv.slot][0], rack?sy+0.6:1.8, SLOTS[rv.slot][1]); m.userData.rig=i;
       scene.add(m); rv.hit=m; }
     out.push(rv.hit);
   });
+  return out;
+}
+function chairHitboxes(){
+  const out=[];
+  for(const k in deskAt) deskAt[k].traverse(o=>{ if(o.userData&&o.userData.chairSlot!==undefined) out.push(o); });
   return out;
 }
 function pick(e){
   const r=canvas.getBoundingClientRect();
   mouse.x=((e.clientX-r.left)/r.width)*2-1; mouse.y=-((e.clientY-r.top)/r.height)*2+1;
   ray.setFromCamera(mouse,cam);
+  const ch=ray.intersectObjects(chairHitboxes(),false);
   const hits=ray.intersectObjects(rigHitboxes(),false);
+  if(ch.length&&(!hits.length||ch[0].distance<hits[0].distance)) return {chair:ch[0].object.userData.chairSlot};
   return hits.length?hits[0].object.userData.rig:-1;
 }
 canvas.addEventListener('pointermove',e=>{
   if(TRAILER) return;
   const h=pick(e);
-  if(h!==hoverRig){ hoverRig=h; canvas.style.cursor=h>=0?'pointer':'default'; }
+  const hr=(typeof h==='number')?h:-1;
+  if(hr!==hoverRig){ hoverRig=hr; }
+  canvas.style.cursor=(hr>=0||(h&&h.chair!==undefined))?'pointer':'default';
 });
 canvas.addEventListener('pointerdown',e=>{ pdown=[e.clientX,e.clientY]; });
 canvas.addEventListener('pointerup',e=>{
@@ -2560,9 +2795,34 @@ canvas.addEventListener('pointerup',e=>{
   const dx=e.clientX-pdown[0], dy=e.clientY-pdown[1]; pdown=null;
   if(dx*dx+dy*dy>36) return;
   const h=pick(e);
+  if(h&&h.chair!==undefined){ sitDown(h.chair); return; }
+  if(SIT.on){ standUp(); return; }
   if(h>=0){ selRig=h; SFX.click(); renderRigPanel(); if(S.tut===1){S.tut=2;save();showTut();} }
   else { selRig=-1; renderRigPanel(); }
 });
+/* ---------- sit at a desk (click/tap the chair) ---------- */
+const SIT={on:false, slot:-1, save:null};
+function sitDown(slot){
+  const [sx,sz]=SLOTS[slot];
+  if(!SIT.on) SIT.save={pos:cam.position.clone(), tgt:controls.target.clone()};
+  SIT.on=true; SIT.slot=slot; controls.enabled=false;
+  SIT.toPos=new THREE.Vector3(sx+0.55, DESK.SURF+0.78, sz+0.95);
+  SIT.toTgt=new THREE.Vector3(sx+0.55, DESK.SURF+0.60, sz-0.45);
+  SFX.click();
+  const ri=S.rigs.findIndex(r=>r.slot===slot);
+  if(ri>=0){ selRig=ri; renderRigPanel(); }
+  $('standbtn').style.display='block';
+  if(!S.satHint){ S.satHint=1; save(); toast('🪑 Seated — hit <b>LOG IN — RIG OS</b> on the right, or tap anywhere to stand up','cyan',6000); }
+}
+function standUp(){
+  if(!SIT.on) return;
+  SIT.on=false; controls.enabled=true;
+  SIT.toPos=null;
+  if(SIT.save){ cam.position.copy(SIT.save.pos); controls.target.copy(SIT.save.tgt); }
+  $('standbtn').style.display='none'; SFX.click();
+}
+$('standbtn').onclick=standUp;
+addEventListener('keydown',e=>{ if(e.key==='Escape'&&SIT.on) standUp(); });
 /* buttons */
 $('b-shop').onclick=()=>{ openModal('m-shop'); renderShop(); if(S.tut===2){S.tut=3;save();showTut();} };
 $('b-upg').onclick=()=>{ openModal('m-upg'); renderUpg(); };
@@ -2598,7 +2858,8 @@ function frame(t){
   acc+=dt;
   while(acc>=SIMDT){ simTick(SIMDT); acc-=SIMDT; }
   // visuals
-  controls.update();
+  if(SIT.on&&SIT.toPos){ cam.position.lerp(SIT.toPos,Math.min(1,dt*5)); controls.target.lerp(SIT.toTgt,Math.min(1,dt*5)); cam.lookAt(controls.target); }
+  else controls.update();
   tickParts(dt);
   if(badgeMesh&&badgeMesh.visible) badgeMesh.rotation.y+=dt*0.9;
   if(badgeHolo&&badgeHolo.visible) badgeHolo.rotation.y+=dt*0.5;
@@ -2648,7 +2909,7 @@ async function init(){
     setBadgeOwned(!!S.badge); setTowerOwned(!!S.tower);
     if(S.rigs.length===0){ mintPC(true); S.tut=0; showTut(); }
     else { rebuildAllRigs(); applyOffline(); showTut(); }
-    refreshRings(); renderHud(); drawScreen(); save();
+    buildFarm(); refreshRings(); renderHud(); drawScreen(); save();
     running=true;
     if(TRAILER) startTrailerScript();
   };
@@ -2657,6 +2918,7 @@ async function init(){
     give:w=>{S.watt+=w;renderHud();}, save, mintPC, buyItem, installPart, forceBlock, cam, controls, scene, THREE,
     openOS, closeOS, setOC, rebootRig, openBench, closeBench, W3, WEB3CFG, w3Connect, w3Refresh,
     joinPool, hostPool, closePool, buyValidator, exitValidators, repairRig, togglePower, openPoolHub, switchNet, POOLS,
+    stakeShop, unstakeShop, buildFarm, sitDown, standUp, eligibleSlots, farmStatus,
     state:()=>JSON.parse(JSON.stringify(S)) };
 }
 function forceBlock(lucky=false){

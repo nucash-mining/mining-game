@@ -268,13 +268,17 @@ function osAppDex(body){
       <input class="os-in" id="dx-amt" type="number" min="0" step="any" placeholder="amount">
       <button class="os-task" id="dx-max" style="padding:5px 10px">MAX</button>
     </div>
+    <label style="font-size:10px;color:#8a8a90;letter-spacing:.1em">RECEIVE</label>
+    <select class="os-sel" id="dx-recv" style="width:130px;margin:6px 0 10px">
+      <option value="watt">⚡ WATT</option><option value="usdt">💵 USDT</option><option value="dai">◈ DAI</option>
+    </select>
     <div class="os-kv">
       <div><small>BALANCE</small><b id="dx-bal">0</b></div>
       <div><small>RATE</small><b id="dx-rate">0 ⚡</b></div>
       <div><small>YOU RECEIVE</small><b id="dx-out">0 ⚡</b></div>
       <div><small>POOL FEE</small><b style="color:#3dff8a">0%</b></div>
     </div>
-    <button class="os-abtn" id="dx-swap">SWAP → ⚡WATT</button>
+    <button class="os-abtn" id="dx-swap">SWAP</button>
     <div class="os-note" id="dx-hint">ALT is volatile — watch the rate and time your swaps.</div>`;
   const coin=body.querySelector('#dx-coin'), amt=body.querySelector('#dx-amt');
   const upd=()=>{
@@ -289,7 +293,7 @@ function osAppDex(body){
   body.querySelector('#dx-max').onclick=()=>{ amt.value=S[coin.value].toFixed(3); upd(); };
   body.querySelector('#dx-swap').onclick=()=>{
     const a=parseFloat(amt.value)||0;
-    if(sellCoin(coin.value,a)){ amt.value=''; }
+    if(sellCoin(coin.value,a,body.querySelector('#dx-recv').value)){ amt.value=''; }
     upd();
   };
   OS.wins.dex.refresh=upd; upd();

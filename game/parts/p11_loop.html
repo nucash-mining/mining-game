@@ -5,25 +5,36 @@ let hoverRig=-1, pdown=null;
 function rigHitboxes(){
   const out=[];
   rigVis.forEach((rv,i)=>{ if(!rv) return;
-    if(!rv.hit){ const m=new THREE.Mesh(new THREE.BoxGeometry(4.4,3.6,2.5),
-      new THREE.MeshBasicMaterial({visible:false}));
-      m.position.set(SLOTS[rv.slot][0],1.8,SLOTS[rv.slot][1]); m.userData.rig=i;
+    if(!rv.hit){
+      const rack=rv.slot>=9, sy=rack?SLOTS[rv.slot][2]:0;
+      const m=new THREE.Mesh(rack?new THREE.BoxGeometry(1.7,1.5,1.4):new THREE.BoxGeometry(4.4,3.6,2.5),
+        new THREE.MeshBasicMaterial({visible:false}));
+      m.position.set(SLOTS[rv.slot][0], rack?sy+0.6:1.8, SLOTS[rv.slot][1]); m.userData.rig=i;
       scene.add(m); rv.hit=m; }
     out.push(rv.hit);
   });
+  return out;
+}
+function chairHitboxes(){
+  const out=[];
+  for(const k in deskAt) deskAt[k].traverse(o=>{ if(o.userData&&o.userData.chairSlot!==undefined) out.push(o); });
   return out;
 }
 function pick(e){
   const r=canvas.getBoundingClientRect();
   mouse.x=((e.clientX-r.left)/r.width)*2-1; mouse.y=-((e.clientY-r.top)/r.height)*2+1;
   ray.setFromCamera(mouse,cam);
+  const ch=ray.intersectObjects(chairHitboxes(),false);
   const hits=ray.intersectObjects(rigHitboxes(),false);
+  if(ch.length&&(!hits.length||ch[0].distance<hits[0].distance)) return {chair:ch[0].object.userData.chairSlot};
   return hits.length?hits[0].object.userData.rig:-1;
 }
 canvas.addEventListener('pointermove',e=>{
   if(TRAILER) return;
   const h=pick(e);
-  if(h!==hoverRig){ hoverRig=h; canvas.style.cursor=h>=0?'pointer':'default'; }
+  const hr=(typeof h==='number')?h:-1;
+  if(hr!==hoverRig){ hoverRig=hr; }
+  canvas.style.cursor=(hr>=0||(h&&h.chair!==undefined))?'pointer':'default';
 });
 canvas.addEventListener('pointerdown',e=>{ pdown=[e.clientX,e.clientY]; });
 canvas.addEventListener('pointerup',e=>{
@@ -31,9 +42,34 @@ canvas.addEventListener('pointerup',e=>{
   const dx=e.clientX-pdown[0], dy=e.clientY-pdown[1]; pdown=null;
   if(dx*dx+dy*dy>36) return;
   const h=pick(e);
+  if(h&&h.chair!==undefined){ sitDown(h.chair); return; }
+  if(SIT.on){ standUp(); return; }
   if(h>=0){ selRig=h; SFX.click(); renderRigPanel(); if(S.tut===1){S.tut=2;save();showTut();} }
   else { selRig=-1; renderRigPanel(); }
 });
+/* ---------- sit at a desk (click/tap the chair) ---------- */
+const SIT={on:false, slot:-1, save:null};
+function sitDown(slot){
+  const [sx,sz]=SLOTS[slot];
+  if(!SIT.on) SIT.save={pos:cam.position.clone(), tgt:controls.target.clone()};
+  SIT.on=true; SIT.slot=slot; controls.enabled=false;
+  SIT.toPos=new THREE.Vector3(sx+0.55, DESK.SURF+0.78, sz+0.95);
+  SIT.toTgt=new THREE.Vector3(sx+0.55, DESK.SURF+0.60, sz-0.45);
+  SFX.click();
+  const ri=S.rigs.findIndex(r=>r.slot===slot);
+  if(ri>=0){ selRig=ri; renderRigPanel(); }
+  $('standbtn').style.display='block';
+  if(!S.satHint){ S.satHint=1; save(); toast('🪑 Seated — hit <b>LOG IN — RIG OS</b> on the right, or tap anywhere to stand up','cyan',6000); }
+}
+function standUp(){
+  if(!SIT.on) return;
+  SIT.on=false; controls.enabled=true;
+  SIT.toPos=null;
+  if(SIT.save){ cam.position.copy(SIT.save.pos); controls.target.copy(SIT.save.tgt); }
+  $('standbtn').style.display='none'; SFX.click();
+}
+$('standbtn').onclick=standUp;
+addEventListener('keydown',e=>{ if(e.key==='Escape'&&SIT.on) standUp(); });
 /* buttons */
 $('b-shop').onclick=()=>{ openModal('m-shop'); renderShop(); if(S.tut===2){S.tut=3;save();showTut();} };
 $('b-upg').onclick=()=>{ openModal('m-upg'); renderUpg(); };
@@ -69,7 +105,8 @@ function frame(t){
   acc+=dt;
   while(acc>=SIMDT){ simTick(SIMDT); acc-=SIMDT; }
   // visuals
-  controls.update();
+  if(SIT.on&&SIT.toPos){ cam.position.lerp(SIT.toPos,Math.min(1,dt*5)); controls.target.lerp(SIT.toTgt,Math.min(1,dt*5)); cam.lookAt(controls.target); }
+  else controls.update();
   tickParts(dt);
   if(badgeMesh&&badgeMesh.visible) badgeMesh.rotation.y+=dt*0.9;
   if(badgeHolo&&badgeHolo.visible) badgeHolo.rotation.y+=dt*0.5;
@@ -119,7 +156,7 @@ async function init(){
     setBadgeOwned(!!S.badge); setTowerOwned(!!S.tower);
     if(S.rigs.length===0){ mintPC(true); S.tut=0; showTut(); }
     else { rebuildAllRigs(); applyOffline(); showTut(); }
-    refreshRings(); renderHud(); drawScreen(); save();
+    buildFarm(); refreshRings(); renderHud(); drawScreen(); save();
     running=true;
     if(TRAILER) startTrailerScript();
   };
@@ -128,6 +165,7 @@ async function init(){
     give:w=>{S.watt+=w;renderHud();}, save, mintPC, buyItem, installPart, forceBlock, cam, controls, scene, THREE,
     openOS, closeOS, setOC, rebootRig, openBench, closeBench, W3, WEB3CFG, w3Connect, w3Refresh,
     joinPool, hostPool, closePool, buyValidator, exitValidators, repairRig, togglePower, openPoolHub, switchNet, POOLS,
+    stakeShop, unstakeShop, buildFarm, sitDown, standUp, eligibleSlots, farmStatus,
     state:()=>JSON.parse(JSON.stringify(S)) };
 }
 function forceBlock(lucky=false){

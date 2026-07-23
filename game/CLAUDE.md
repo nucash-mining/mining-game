@@ -66,7 +66,27 @@ Replace the procedural chairs with proper assets:
    keep the position/rotation lines (tucked at the keyboard side, facing the desk),
    and keep `rebuildChairs()` working (it swaps chairs on upgrade).
 
-## Task 4 — fix source .blend ratios
+## Task 4 — farm structure models (new: PRO/ELITE mining farm)
+
+The game now has a farm progression: garage -> shipping containers (PRO status,
+6 rack slots each) -> warehouse (ELITE status, 12 rack slots). All are procedural
+(`makeContainer`/`makeWarehouse`/`makeRack` in p07). Better assets:
+
+1. `container.glb` — 20ft high-cube shipping container, one long side/end open,
+   real scale 6.0 x 2.4 x 2.9 m, weathered cyberpunk paint, < 2 MB.
+2. `warehouse.glb` — open-front steel warehouse shell, ~11.5 x 4.5 x 3.3 m footprint
+   in world units 26 x 10 x 7.5 (2.25 u/m).
+3. `server_rack.glb` — 2-post/4-post open rack with 2-3 shelves; the game places PC
+   cases on shelf heights listed in `SLOTS` (index 9+ entries are [x,z,shelfY]).
+4. Wire-in points: `makeContainer`, `makeWarehouse`, `makeRack` in p07 — keep the
+   rack shelf Y coordinates aligned with the `SLOTS` table in p04 or move both together.
+
+## Task 5 — chair sit-pose player avatar (optional polish)
+
+Chairs are clickable/tappable (sit function: first-person at the desk, `sitDown()` in
+p11). An optional seated character or VR-style hands would sell it.
+
+## Task 6 — fix source .blend ratios
 
 `CpuCaseProject.blend` / `CpuCaseProject Built.blend`: normalize object scales
 (Ctrl+A apply scale) and make sure the case, board, GPUs, monitor, keyboard and mouse
