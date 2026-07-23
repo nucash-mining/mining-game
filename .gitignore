@@ -1,0 +1,18 @@
+node_modules/
+.env
+.env.local
+
+# Hardhat
+cache/
+artifacts/
+typechain-types/
+coverage/
+coverage.json
+
+# Frontend build
+frontend/dist/
+frontend/build/
+
+# Editor / OS
+.DS_Store
+*.blend1

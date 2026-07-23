@@ -1,0 +1,21 @@
+{
+  "name": "wattx-mining-game",
+  "version": "1.0.0",
+  "description": "WATTx Mining Game Smart Contracts",
+  "type": "module",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "deploy:wattx": "hardhat run scripts/deploy.js --network wattx_local",
+    "deploy:polygon": "hardhat run scripts/deploy.js --network polygon",
+    "deploy:altcoin": "hardhat run scripts/deploy.js --network altcoinchain",
+    "verify": "hardhat verify"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@openzeppelin/contracts": "^5.0.0",
+    "dotenv": "^16.3.1",
+    "hardhat": "^2.19.0"
+  }
+}

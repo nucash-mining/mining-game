@@ -1,0 +1,204 @@
+[
+{
+  "description": "The basic PC needed to play the Mining Game. Free to mint!",
+  "external_url": "https://web.archive.org/web/20220327074932/https://mining.game/nfts/free/",
+  "url": "https://web.archive.org/web/20220327074932/https://api.mining.game/1.json",
+  "image": "https://web.archive.org/web/20220327074932/https://api.mining.game/1.png",
+  "animation_url": "https://web.archive.org/web/20220327074932/https://api.mining.game/1.glb",
+  "specs": "102200050000000000",
+  "name": "Gaming PC",
+  "attributes": [
+    {
+      "trait_type": "Brand",
+      "value": "Minga"
+    },
+    {
+      "trait_type": "Component", 
+      "value": "Basic PC"
+    }, 
+    {
+      "trait_type": "Generation", 
+      "value": "Gen1"
+    }, 
+
+    {
+      "display_type": "boost_number", 
+      "trait_type": "Mining Hashpower", 
+      "value": 2
+    }, 
+    {
+      "display_type": "boost_number", 
+      "trait_type": "WATT Usage", 
+      "value": 5
+    }, 
+    {
+      "display_type": "boost_number", 
+      "trait_type": "Stake Weight", 
+      "value": 1
+    }
+  ]
+}
+,
+{
+  "description": "The exclusive Genesis Badge, increasing luck and efficience with 10%! Only 100 will ever be minted! This NFT receives Play to Earn Rewards.",
+  "external_url": "https://web.archive.org/web/20250308122104/https://mining.game/nfts/genesis-badge/",
+  "url": "https://web.archive.org/web/20250308122104/https://api.mining.game/2.json",
+  "image": "https://web.archive.org/web/20250308122104/https://api.mining.game/2.png",
+  "image_small": "https://web.archive.org/web/20250308122104/https://api.mining.game/2.jpg",
+  "animation_url": "https://web.archive.org/web/20250308122104/https://api.mining.game/2.mp4",
+  "specs": "101000000000001010",
+  "name": "Genesis Badge",
+  "attributes": [
+    {
+      "trait_type": "Component", 
+      "value": "Badge"
+    }, 
+    {
+      "trait_type": "Generation", 
+      "value": "Gen1"
+    }, 
+
+    {
+      "display_type": "boost_percentage", 
+      "trait_type": "Luck Boost", 
+      "value": 10
+    },
+    {
+      "display_type": "boost_percentage",
+      "trait_type": "Efficiency multiplier",
+      "value": 10
+    },
+    {
+      "display_type": "boost_number",
+      "trait_type": "Stake Weight",
+      "value": 42
+    }
+
+
+  ]
+}
+,
+{
+  "description": "CPU upgrade for your Gaming PC! This NFT receives Play to Earn Rewards.",
+  "external_url": "https://web.archive.org/web/20250308122104/https://mining.game/nfts/kirtex-xl1-cpu/",
+  "url": "https://web.archive.org/web/20250308122104/https://api.mining.game/3.json",
+  "image": "https://web.archive.org/web/20250308122104/https://api.mining.game/3.png",
+  "image_small": "https://web.archive.org/web/20250308122104/https://api.mining.game/3.jpg",
+  "animation_url": "https://web.archive.org/web/20250308122104/https://api.mining.game/3.glb",
+  "specs": "103300070000000000",
+  "name": "XL1 Processor",
+"attributes": [
+    {
+      "trait_type": "Brand",
+      "value": "Kirtex"
+    },
+    {
+      "trait_type": "Component", 
+      "value": "Processor"
+    }, 
+    {
+      "trait_type": "Generation", 
+      "value": "Gen1"
+    }, 
+
+    {
+      "display_type": "boost_number",
+      "trait_type": "Mining Hashpower", 
+      "value": 10
+    }, 
+    {
+      "display_type": "boost_number",
+      "trait_type": "WATT Usage", 
+      "value": 2
+    }, 
+    {
+      "display_type": "boost_number",
+      "trait_type": "Stake Weight", 
+      "value": 9
+    }
+  ]
+}
+,
+{
+  "description": "GPU upgrade for your Gaming PC! This NFT receives Play to Earn Rewards.",
+  "external_url": "https://web.archive.org/web/20250308122106/https://mining.game/nfts/oblivia-tx120-gpu/",
+  "url": "https://web.archive.org/web/20250308122106/https://api.mining.game/4.json",
+  "image": "https://web.archive.org/web/20250308122106/https://api.mining.game/4.png",
+  "image_small": "https://web.archive.org/web/20250308122106/https://api.mining.game/4.jpg",
+  "animation_url": "https://web.archive.org/web/20250308122106/https://api.mining.game/4.glb",
+  "specs": "104500100000000000",
+  "name": "TX120 GPU",
+  "attributes": [
+    {
+      "trait_type": "Brand",
+      "value": "Oblivia"
+    },
+    {
+      "trait_type": "Component",
+      "value": "GPU"
+    },
+    {
+      "trait_type": "Generation",
+      "value": "Gen1"
+    },
+
+    {
+      "display_type": "boost_number",
+      "trait_type": "Mining Hashpower",
+      "value": 20
+    },
+    {
+      "display_type": "boost_number",
+      "trait_type": "WATT Usage",
+      "value": 10
+    },
+    {
+      "display_type": "boost_number",
+      "trait_type": "Stake Weight",
+      "value": 11
+    }
+  ]
+
+}
+,
+{
+  "description": "A powerful GPU upgrade for your Gaming PC!",
+  "external_url": "https://web.archive.org/web/20220418080358/https://mining.game/mad-gp50-gpu/",
+  "url": "https://web.archive.org/web/20220418080358/https://api.mining.game/5.json",  
+  "image": "https://web.archive.org/web/20220418080358/https://api.mining.game/5.png",
+  "animation_url": "https://web.archive.org/web/20220418080358/https://api.mining.game/5.glb",
+  "specs": "104001000160090000",
+  "name": "GP50 GPU",
+  "attributes": [
+    {
+      "trait_type": "Brand",
+      "value": "MAD"
+    },
+    {
+      "trait_type": "Component",
+      "value": "GPU"
+    },
+    {
+      "trait_type": "Generation",
+      "value": "Gen1"
+    },
+
+    {
+      "display_type": "boost_number",
+      "trait_type": "Mining Hashpower",
+      "value": 33
+    },
+    {
+      "display_type": "boost_number",
+      "trait_type": "WATT Usage",
+      "value": 16
+    },
+    {
+      "display_type": "boost_number",
+      "trait_type": "Stake Weight",
+      "value": 18
+    }
+  ]
+
+}
+]
