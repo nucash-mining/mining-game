@@ -1,0 +1,254 @@
+/* ================= WORKBENCH — open case, real-scale motherboard, drag-snap install ================= */
+/* bench scale: 6 units per meter. ATX board 305x244mm, GPU 300mm, CPU package 40mm. */
+const BM=6;
+let benchOpen=false, benchRi=0, benchInit=false;
+let bR=null, bScene=null, bCam=null, bBoardG=null, bMountG=null, bSlotG=null;
+let bSlots=[], bDrag=null, bSel=null, bT=0, bPuffs=[];
+const bRay=new THREE.Raycaster(), bPtr=new THREE.Vector2();
+const BOARD_TILT=0.98; // rad, test-bench tilt toward camera (component face up)
+function benchSetup(){
+  if(benchInit) return; benchInit=true;
+  bScene=new THREE.Scene();
+  bScene.fog=new THREE.Fog(0x07051a, 9, 20);
+  bCam=new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 60);
+  bCam.position.set(0, 3.1, 6.4); bCam.lookAt(0, 1.35, 0);
+  bR=new THREE.WebGLRenderer({antialias:true, alpha:true});
+  bR.setPixelRatio(Math.min(devicePixelRatio,2)); bR.setSize(innerWidth,innerHeight);
+  $('bench').insertBefore(bR.domElement, $('bench-top'));
+  bScene.add(new THREE.AmbientLight(0x8890c0, 0.55));
+  const key=new THREE.SpotLight(0xfff2d8, 90, 30, 0.7, 0.5); key.position.set(3,7,5); bScene.add(key);
+  const cyan=new THREE.PointLight(0x2ee6d6, 26, 12); cyan.position.set(-4,2.5,2.5); bScene.add(cyan);
+  const pur=new THREE.PointLight(0x8247e5, 30, 12); pur.position.set(4,1.6,-2); bScene.add(pur);
+  // platform
+  const plat=new THREE.Mesh(new THREE.CylinderGeometry(3.4,3.7,0.22,48),
+    new THREE.MeshStandardMaterial({color:0x17123a,roughness:.55,metalness:.6}));
+  plat.position.y=-0.11; bScene.add(plat);
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(3.42,0.03,8,64),
+    new THREE.MeshBasicMaterial({color:0x2ee6d6}));
+  rim.rotation.x=Math.PI/2; rim.position.y=0.02; bScene.add(rim);
+  // grid backdrop
+  const grid=new THREE.GridHelper(30,30,0x2a2160,0x1a1440); grid.position.y=-0.2; bScene.add(grid);
+  // tilted stand arms
+  const armM=new THREE.MeshStandardMaterial({color:0x241d47,roughness:.5,metalness:.7});
+  [[-0.95],[0.95]].forEach(([x])=>{
+    const a=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.14,1.9),armM);
+    a.position.set(x,0.62,0.22); a.rotation.x=BOARD_TILT; bScene.add(a);
+  });
+  // the REAL Mining Game PC Board NFT model (token #20 in the project files)
+  bBoardG=new THREE.Group();
+  const board=normalizeFit(instOf('board'), 2.05); // real PC Board NFT — long axis ≈ 305mm at bench scale
+  board.position.y-=0.02;
+  bBoardG.add(board);
+  bBoardG.rotation.x=BOARD_TILT;
+  bBoardG.position.set(0,1.06,0.28);
+  bScene.add(bBoardG);
+  bSlotG=new THREE.Group(); bBoardG.add(bSlotG);
+  bMountG=new THREE.Group(); bBoardG.add(bMountG);
+  window.__bench={ get board(){return bBoardG}, get scene(){return bScene}, get cam(){return bCam}, sync:benchSync };
+  addEventListener('resize',()=>{ if(!bR) return; bCam.aspect=innerWidth/innerHeight; bCam.updateProjectionMatrix(); bR.setSize(innerWidth,innerHeight); });
+  benchPointerWire();
+}
+/* board-local slot layout (board length axis = z, width = x, surface y≈0.29) */
+const SLOT_Y=0.32;
+function benchSlotDefs(r){
+  const defs=[];
+  defs.push({kind:'cpu', x:-0.28, z:-0.52, y:0.46, label:'CPU SOCKET', filled:!!r.cpu});
+  const cap=gpuCap(r);
+  for(let k=0;k<cap;k++)
+    defs.push({kind:'gpu', idx:k, x:0, z:0.12+k*0.26, label:'PCIe x16 · '+(k+1), filled:!!r.gpus[k]});
+  defs.push({kind:'asic', x:-2.6, z:0.4, floor:true, label:'FLOOR PAD', filled:!!r.asic});
+  defs.push({kind:'frame', x:2.6, z:0.4, floor:true, label:'RACK ZONE', filled:!!r.frame});
+  return defs;
+}
+function benchGpuMesh(gid, target){
+  const it=ITEMS[gid];
+  const raw=instOf(it.key); if(it.flip) raw.rotation.x=Math.PI;
+  const m=normalizeFit(raw, target);
+  const bb=new THREE.Box3().setFromObject(m); const sz=new THREE.Vector3(); bb.getSize(sz);
+  if(sz.z>sz.x){ const p=new THREE.Group(); p.add(m); m.rotation.y=Math.PI/2; return p; } // long axis → x
+  const p=new THREE.Group(); p.add(m); return p;
+}
+function benchCompMesh(kind, id){
+  if(kind==='gpu') return benchGpuMesh(id, 0.30*BM); // 300mm
+  if(kind==='cpu'){ const g=new THREE.Group(); g.add(normalizeFit(instOf(ITEMS[id].key), 0.62)); return g; } // cooler on 40mm socket
+  if(kind==='asic'){ const g=new THREE.Group(); g.add(normalizeFit(instOf('asic'), 1.5)); return g; }
+  if(kind==='frame'){ const g=new THREE.Group(); g.add(normalizeFit(instOf('frame'), 1.7)); return g; }
+  return new THREE.Group();
+}
+let bSceneBits=[];
+function benchSync(){
+  const r=S.rigs[benchRi]; if(!r) return;
+  while(bSlotG.children.length) bSlotG.remove(bSlotG.children[0]);
+  while(bMountG.children.length) bMountG.remove(bMountG.children[0]);
+  bSceneBits.forEach(o=>bScene.remove(o)); bSceneBits=[];
+  bSlots=[];
+  for(const d of benchSlotDefs(r)){
+    if(d.floor && d.filled) continue;
+    let marker;
+    if(d.kind==='cpu'){
+      marker=new THREE.Mesh(new THREE.RingGeometry(0.16,0.24,4), new THREE.MeshBasicMaterial({color:0xffd23f,transparent:true,opacity:.5,side:THREE.DoubleSide}));
+      marker.rotation.x=-Math.PI/2; marker.rotation.z=Math.PI/4;
+    } else if(d.kind==='gpu'){
+      marker=new THREE.Mesh(new THREE.PlaneGeometry(1.35,0.12), new THREE.MeshBasicMaterial({color:0x2ee6d6,transparent:true,opacity:.4,side:THREE.DoubleSide}));
+      marker.rotation.x=-Math.PI/2;
+    } else {
+      marker=new THREE.Mesh(new THREE.RingGeometry(0.55,0.62,32), new THREE.MeshBasicMaterial({color:d.kind==='asic'?0xff5a68:0xb47cff,transparent:true,opacity:.4,side:THREE.DoubleSide}));
+      marker.rotation.x=-Math.PI/2;
+    }
+    let world;
+    const my=d.y||SLOT_Y;
+    if(d.floor){ marker.position.set(d.x,0.02,d.z); bScene.add(marker); bSceneBits.push(marker); world=new THREE.Vector3(d.x,0.1,d.z); }
+    else { marker.position.set(d.x,my,d.z); bSlotG.add(marker); world=bBoardG.localToWorld(new THREE.Vector3(d.x,my,d.z)); }
+    // hit sphere for tap-to-install
+    const hit=new THREE.Mesh(new THREE.SphereGeometry(d.kind==='gpu'?0.55:0.62,8,8), new THREE.MeshBasicMaterial({visible:false}));
+    hit.position.copy(marker.position); if(d.floor){ bScene.add(hit); bSceneBits.push(hit); } else bSlotG.add(hit);
+    const slot={...d, marker, hit, world};
+    hit.userData.slot=slot;
+    if(d.filled){ marker.visible=false; hit.visible=false; }
+    bSlots.push(slot);
+  }
+  // mounted components
+  const r2=S.rigs[benchRi];
+  if(r2.cpu){ const m=benchCompMesh('cpu',r2.cpu); m.position.set(-0.28,0.42,-0.52); bMountG.add(m); }
+  r2.gpus.forEach((gid,k)=>{
+    const m=benchCompMesh('gpu',gid); m.position.set(0,SLOT_Y+0.06,0.12+k*0.26); bMountG.add(m);
+  });
+  if(r2.asic){ const m=benchCompMesh('asic',0); m.position.set(-2.6,0,0.4); m.rotation.y=0.7; bScene.add(m); bSceneBits.push(m); }
+  if(r2.frame){ const m=benchCompMesh('frame',0); m.position.set(2.75,0,-0.3); m.rotation.y=-0.55; bScene.add(m); bSceneBits.push(m); }
+  benchTray();
+}
+function benchCompat(slot,it){
+  if(slot.filled) return false;
+  if(slot.kind==='cpu') return it.comp==='Processor';
+  if(slot.kind==='gpu') return it.comp==='GPU';
+  if(slot.kind==='asic') return it.comp==='ASIC';
+  if(slot.kind==='frame') return it.comp==='Frame';
+  return false;
+}
+function benchTray(){
+  const t=$('bench-tray'); if(!t) return;
+  const r=S.rigs[benchRi];
+  const rows=[];
+  for(const id of INV_IDS){
+    const n=S.inv[id]||0; if(n<=0) continue;
+    const it=ITEMS[id];
+    if(!['Processor','GPU','ASIC','Frame'].includes(it.comp)) continue;
+    rows.push(`<div class="traypart ${bSel===id?'drag':''}" data-id="${id}">
+      <img src="${THUMB[id]||''}" draggable="false"><b>${it.name}</b><small>${it.comp} · ${it.hash} H</small><span class="n">×${n} in inventory</span></div>`);
+  }
+  t.innerHTML=rows.length?rows.join(''):`<div class="traypart" style="cursor:default;min-width:260px"><b>inventory empty</b><small>hit 🛒 BUY COMPONENTS — GPUs &amp; CPUs are sold separately</small></div>`;
+  t.querySelectorAll('.traypart[data-id]').forEach(el=>{
+    el.addEventListener('pointerdown',e=>{ e.preventDefault(); benchDragStart(+el.dataset.id, e); });
+  });
+  const sub=$('bench-sub');
+  if(sub&&r) sub.textContent=`side panel off · ${r.cpu?'1':'0'}/1 CPU · ${r.gpus.length}/${gpuCap(r)} GPU slots · components at real-life scale`;
+}
+/* ---------- drag & snap ---------- */
+function benchRayAt(e){
+  const rc=bR.domElement.getBoundingClientRect();
+  bPtr.x=((e.clientX-rc.left)/rc.width)*2-1; bPtr.y=-((e.clientY-rc.top)/rc.height)*2+1;
+  bRay.setFromCamera(bPtr,bCam);
+}
+const bDragPlane=new THREE.Plane();
+function benchDragStart(id,e){
+  const it=ITEMS[id];
+  const kind=it.comp==='Processor'?'cpu':it.comp==='GPU'?'gpu':it.comp==='ASIC'?'asic':'frame';
+  const ghost=benchCompMesh(kind,id);
+  ghost.traverse(n=>{ if(n.isMesh&&n.material){ n.material=n.material.clone(); n.material.transparent=true; n.material.opacity=.75; } });
+  bScene.add(ghost);
+  bDrag={id,it,kind,ghost,snap:null,moved:false,sx:e.clientX,sy:e.clientY};
+  bDragPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0,0.42,1).normalize(), new THREE.Vector3(0,1.5,0.6));
+  SFX.click();
+  benchDragMove(e);
+}
+function benchDragMove(e){
+  if(!bDrag) return;
+  if(Math.abs(e.clientX-bDrag.sx)+Math.abs(e.clientY-bDrag.sy)>7) bDrag.moved=true;
+  benchRayAt(e);
+  const p=new THREE.Vector3();
+  bRay.ray.intersectPlane(bDragPlane,p)||p.set(0,1.5,1);
+  // screen-space snap: nearest compatible slot to the pointer
+  const asp=bCam.aspect;
+  let best=null,bd=1e9;
+  for(const s of bSlots){
+    if(!benchCompat(s,bDrag.it)) continue;
+    const w=s.floor?s.world.clone():bBoardG.localToWorld(new THREE.Vector3(s.x,s.y||SLOT_Y,s.z));
+    const ndc=w.clone().project(bCam);
+    const d=Math.hypot((ndc.x-bPtr.x)*asp,(ndc.y-bPtr.y));
+    if(d<bd){bd=d;best={s,w};}
+  }
+  if(best&&bd<0.33){
+    bDrag.snap=best.s;
+    bDrag.ghost.position.lerp(best.w,0.55);
+    if(bDrag.kind==='gpu'||bDrag.kind==='cpu') bDrag.ghost.rotation.x=BOARD_TILT; else bDrag.ghost.rotation.x=0;
+  } else {
+    bDrag.snap=null;
+    bDrag.ghost.position.copy(p);
+    bDrag.ghost.rotation.x=BOARD_TILT*0.4;
+  }
+}
+function benchDragEnd(){
+  if(!bDrag) return;
+  const d=bDrag; bDrag=null;
+  bScene.remove(d.ghost);
+  if(d.snap){ benchInstall(d.snap,d.id); }
+  else if(!d.moved){ bSel=(bSel===d.id?null:d.id); benchTray(); } // tap = arm for tap-on-slot
+}
+function benchInstall(slot,id){
+  const before=S.rigs[benchRi].gpus.length + (S.rigs[benchRi].cpu?1:0);
+  installPart(benchRi,id);
+  const after=S.rigs[benchRi].gpus.length + (S.rigs[benchRi].cpu?1:0) + (S.rigs[benchRi].asic?1:0) + (S.rigs[benchRi].frame?1:0);
+  bSel=null;
+  benchSync();
+  // snap pop on the mount point
+  const w=slot.floor?slot.world:bBoardG.localToWorld(new THREE.Vector3(slot.x,SLOT_Y,slot.z));
+  for(let i=0;i<10;i++){
+    const m=new THREE.Mesh(partGeo, partMatCyan.clone());
+    m.position.copy(w); m.userData.v=new THREE.Vector3((Math.random()-0.5)*2,(Math.random())*2,(Math.random()-0.5)*2);
+    m.userData.life=0.8; bScene.add(m); bPuffs.push(m);
+  }
+}
+function benchPointerWire(){
+  const el=$('bench');
+  el.addEventListener('pointermove',benchDragMove);
+  el.addEventListener('pointerup',benchDragEnd);
+  bR.domElement.addEventListener('pointerdown',e=>{
+    if(bDrag||!bSel) return;
+    benchRayAt(e);
+    const hits=bRay.intersectObjects(bSlots.filter(s=>!s.filled).map(s=>s.hit),true);
+    if(hits.length){
+      const slot=hits[0].object.userData.slot;
+      if(benchCompat(slot,ITEMS[bSel])) benchInstall(slot,bSel);
+      else { SFX.err(); }
+    }
+  });
+}
+/* ---------- open/close/loop ---------- */
+function openBench(ri){
+  if(!S.rigs[ri]) return;
+  benchRi=ri; benchSetup();
+  $('bench-rig').textContent=ri+1;
+  $('bench').classList.add('open');
+  benchOpen=true; bSel=null;
+  benchSync();
+  SFX.install();
+}
+function closeBench(){ benchOpen=false; $('bench').classList.remove('open'); bSel=null; if(bDrag){ bScene.remove(bDrag.ghost); bDrag=null; } }
+function benchLoop(dt){
+  if(!benchOpen||!bR) return;
+  bT+=dt;
+  const pulse=0.35+0.35*Math.sin(bT*4);
+  for(const s of bSlots){
+    if(s.filled||!s.marker.visible) continue;
+    const active=(bDrag&&benchCompat(s,bDrag.it))||(bSel&&benchCompat(s,ITEMS[bSel]));
+    s.marker.material.opacity=active?0.45+pulse*0.5:(bDrag||bSel?0.08:0.3+pulse*0.18);
+    if(bDrag&&bDrag.snap===s) s.marker.material.opacity=1;
+  }
+  for(let i=bPuffs.length-1;i>=0;i--){ const m=bPuffs[i];
+    m.userData.life-=dt; m.position.addScaledVector(m.userData.v,dt*2); m.material.opacity=m.userData.life;
+    m.material.transparent=true;
+    if(m.userData.life<=0){ bScene.remove(m); bPuffs.splice(i,1); } }
+  bBoardG.rotation.z=Math.sin(bT*0.5)*0.012;
+  bCam.position.x=Math.sin(bT*0.22)*0.25; bCam.lookAt(0,1.35,0);
+  bR.render(bScene,bCam);
+}

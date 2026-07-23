@@ -1,0 +1,2829 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>The Mining Game — WATT Tycoon</title>
+<meta name="description" content="3D crypto-mining simulator built on the real Mining Game NFTs. Mint rigs, install GPUs, burn WATT, mine blocks on Polygon and Altcoinchain.">
+<meta property="og:title" content="The Mining Game — WATT Tycoon">
+<meta property="og:description" content="Build 3D mining rigs from real Mining Game NFT hardware. WATT is electricity. Blocks are money. How big can your garage get?">
+<meta property="og:image" content="https://mining-game.games.bu.app/og.png">
+<meta property="og:url" content="https://mining-game.games.bu.app/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230d0b1e'/%3E%3Cpath d='M36 6 14 38h12l-4 20 22-32H32z' fill='%23ffd23f'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0d0b1e; --panel:rgba(16,13,38,.92); --panel2:rgba(24,20,54,.94);
+  --line:rgba(130,71,229,.35); --pur:#8247e5; --cyan:#2ee6d6; --gold:#ffd23f;
+  --red:#ff4d5e; --grn:#3dff8a; --txt:#e8e4ff; --dim:#9a93c4;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans-serif;-webkit-user-select:none;user-select:none}
+#c3d{position:fixed;inset:0;display:block;touch-action:none}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+button{font-family:inherit;cursor:pointer}
+/* ---------- HUD ---------- */
+#hud{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;padding:8px 10px;pointer-events:none;z-index:20}
+#hud>*{pointer-events:auto}
+#logo{display:flex;flex-direction:column;line-height:1;padding:7px 12px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+#logo b{font-size:13px;letter-spacing:.12em;color:var(--gold)}
+#logo span{font-size:9px;color:var(--dim);letter-spacing:.2em;margin-top:3px}
+#stats{display:flex;gap:6px;flex-wrap:wrap}
+.stat{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:13px}
+.stat .ic{font-size:14px}
+.stat b{font-variant-numeric:tabular-nums}
+.stat small{color:var(--dim);font-size:10px;display:block}
+.stat .col{display:flex;flex-direction:column;line-height:1.15}
+#s-watt b{color:var(--gold)} #s-hash b{color:var(--cyan)} #s-pow b{color:#b7a6ff}
+#s-temp b{color:var(--grn)} #s-temp.hot b{color:#ffae42} #s-temp.crit b{color:var(--red)}
+#hudbtns{margin-left:auto;display:flex;gap:6px}
+.hbtn{background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 12px;font-size:12.5px;font-weight:600;letter-spacing:.04em;transition:all .15s}
+.hbtn:hover{border-color:var(--pur);background:var(--panel2);transform:translateY(-1px)}
+.hbtn.gold{color:var(--gold)} .hbtn.accent{color:var(--cyan)}
+/* network pill */
+#net{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 11px;font-size:12.5px;font-weight:600}
+#net .dot{width:8px;height:8px;border-radius:50%;background:var(--pur);box-shadow:0 0 8px var(--pur)}
+#net.alt .dot{background:var(--gold);box-shadow:0 0 8px var(--gold)}
+#net.wtx .dot{background:#ffd23f;box-shadow:0 0 8px #ffd23f;border-radius:2px}
+#net:hover{border-color:var(--pur);cursor:pointer}
+#net small{color:var(--dim);font-weight:400}
+/* wallet strip */
+#wallet{position:fixed;top:56px;left:10px;display:flex;gap:6px;z-index:19;flex-wrap:wrap}
+.coin{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:5px 10px;font-size:12px}
+.coin b{font-variant-numeric:tabular-nums}
+.coin .pr{color:var(--dim);font-size:10.5px}
+.coin .pr.up{color:var(--grn)} .coin .pr.dn{color:var(--red)}
+.coin button{background:rgba(130,71,229,.25);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:2px 8px;font-size:10.5px}
+.coin button:hover{background:var(--pur)}
+/* toasts + feed */
+#feed{position:fixed;left:10px;bottom:10px;width:290px;display:flex;flex-direction:column;gap:5px;z-index:18;pointer-events:none}
+.msg{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--pur);border-radius:8px;padding:7px 10px;font-size:12px;animation:slidein .25s ease;opacity:.95}
+.msg.gold{border-left-color:var(--gold)} .msg.grn{border-left-color:var(--grn)}
+.msg.red{border-left-color:var(--red)} .msg.cyan{border-left-color:var(--cyan)}
+.msg small{color:var(--dim)}
+@keyframes slidein{from{transform:translateX(-20px);opacity:0}to{transform:none;opacity:.95}}
+/* floating 3d labels */
+.f3d{position:fixed;z-index:15;pointer-events:none;font-weight:800;font-size:15px;text-shadow:0 2px 8px #000;transition:none;color:var(--gold)}
+/* vignette */
+#vig{position:fixed;inset:0;pointer-events:none;z-index:10;opacity:0;transition:opacity .6s;
+  background:radial-gradient(ellipse at center,transparent 55%,rgba(255,40,40,.38) 100%)}
+</style>
+<style>
+/* ---------- modals & panels ---------- */
+.modal{position:fixed;inset:0;background:rgba(5,3,15,.66);backdrop-filter:blur(3px);z-index:40;display:none;align-items:center;justify-content:center}
+.modal.open{display:flex}
+.mbox{background:var(--panel2);border:1px solid var(--line);border-radius:16px;max-width:860px;width:min(94vw,860px);max-height:86vh;overflow:auto;padding:18px;box-shadow:0 20px 80px rgba(0,0,0,.6)}
+.mhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.mhead h2{font-size:17px;letter-spacing:.06em}
+.mhead .x{background:none;border:1px solid var(--line);color:var(--dim);border-radius:8px;width:30px;height:30px;font-size:15px}
+.mhead .x:hover{color:#fff;border-color:var(--pur)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(238px,1fr));gap:12px}
+.card{background:rgba(10,8,26,.8);border:1px solid var(--line);border-radius:13px;padding:12px;display:flex;flex-direction:column;gap:8px;position:relative}
+.card .thumb{height:110px;border-radius:9px;background:linear-gradient(160deg,#161233,#0b0920);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.card .thumb img{max-width:100%;max-height:100%;object-fit:contain}
+.card h3{font-size:14px}
+.card .brand{color:var(--dim);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase}
+.traits{display:flex;flex-wrap:wrap;gap:4px}
+.tr{font-size:10px;background:rgba(130,71,229,.16);border:1px solid rgba(130,71,229,.3);color:#cfc2ff;padding:2px 7px;border-radius:20px}
+.tr.gold{background:rgba(255,210,63,.12);border-color:rgba(255,210,63,.4);color:var(--gold)}
+.card .sup{font-size:10.5px;color:var(--dim)}
+.card .buy{background:linear-gradient(90deg,var(--pur),#5f2ec7);border:none;color:#fff;padding:9px;border-radius:9px;font-weight:700;font-size:13px;letter-spacing:.03em}
+.card .buy:hover:not(:disabled){filter:brightness(1.2)}
+.card .buy:disabled{opacity:.4;cursor:not-allowed}
+.card .buy.own{background:rgba(61,255,138,.15);border:1px solid rgba(61,255,138,.4);color:var(--grn)}
+.tag{position:absolute;top:8px;right:8px;font-size:9.5px;font-weight:800;letter-spacing:.1em;padding:3px 8px;border-radius:20px;background:rgba(255,210,63,.15);border:1px solid rgba(255,210,63,.5);color:var(--gold)}
+.tag.g2{background:rgba(46,230,214,.12);border-color:rgba(46,230,214,.5);color:var(--cyan)}
+.card.locked{opacity:.55;filter:saturate(.4)}
+.shead{grid-column:1/-1;font-size:11.5px;font-weight:800;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;border-bottom:1px solid var(--line);padding:10px 2px 6px;margin-top:2px}
+/* rig side panel */
+#rigp{position:fixed;top:56px;right:10px;width:300px;background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:14px;z-index:30;display:none;max-height:calc(100vh - 130px);overflow:auto}
+#rigp.open{display:block}
+#rigp h2{font-size:15px;margin-bottom:2px}
+#rigp .sub{color:var(--dim);font-size:11px;margin-bottom:10px}
+.slotrow{display:flex;align-items:center;gap:9px;background:rgba(10,8,26,.7);border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:7px}
+.slotrow .ic{width:38px;height:38px;border-radius:8px;background:#161233;display:flex;align-items:center;justify-content:center;font-size:17px;overflow:hidden}
+.slotrow .ic img{width:100%;height:100%;object-fit:cover}
+.slotrow .nm{flex:1;font-size:12px}
+.slotrow .nm small{display:block;color:var(--dim);font-size:10px}
+.slotrow button{background:rgba(130,71,229,.25);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:5px 9px;font-size:11px}
+.slotrow button:hover:not(:disabled){background:var(--pur)}
+.slotrow button:disabled{opacity:.35;cursor:not-allowed}
+.slotrow.empty{border-style:dashed;opacity:.85}
+#rigp .stats2{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0}
+.st2{background:rgba(10,8,26,.7);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
+.st2 small{color:var(--dim);font-size:9.5px;display:block;letter-spacing:.08em}
+.st2 b{font-size:14px}
+/* upgrades rows */
+.uprow{display:flex;align-items:center;gap:10px;background:rgba(10,8,26,.8);border:1px solid var(--line);border-radius:12px;padding:11px;margin-bottom:9px}
+.uprow .uic{font-size:22px;width:40px;text-align:center}
+.uprow .ubody{flex:1}
+.uprow h3{font-size:13.5px}
+.uprow p{font-size:11px;color:var(--dim);margin-top:2px}
+.uprow .pips{display:flex;gap:3px;margin-top:5px}
+.pip{width:18px;height:5px;border-radius:3px;background:rgba(130,71,229,.2)}
+.pip.on{background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+.uprow .ubuy{background:linear-gradient(90deg,var(--pur),#5f2ec7);border:none;color:#fff;padding:8px 12px;border-radius:9px;font-weight:700;font-size:12px;white-space:nowrap}
+.uprow .ubuy:disabled{opacity:.4;cursor:not-allowed}
+/* splash */
+#splash{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  background:radial-gradient(ellipse at 50% 35%,#1b1440 0%,#0d0b1e 70%);text-align:center;padding:20px}
+#splash h1{font-size:clamp(30px,6vw,54px);letter-spacing:.1em;background:linear-gradient(90deg,var(--gold),#ff9d2e);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 4px 24px rgba(255,180,40,.25))}
+#splash .sub1{font-size:clamp(13px,2vw,17px);color:var(--cyan);letter-spacing:.34em;font-weight:700}
+#splash p{color:var(--dim);max-width:520px;font-size:13.5px;line-height:1.55}
+#mintbtn{margin-top:10px;background:linear-gradient(90deg,#8247e5,#5f2ec7);color:#fff;border:none;font-size:17px;font-weight:800;letter-spacing:.05em;padding:16px 38px;border-radius:14px;box-shadow:0 8px 40px rgba(130,71,229,.45);transition:transform .15s}
+#mintbtn:hover{transform:scale(1.05)}
+#splash .chain{display:flex;gap:14px;margin-top:8px;font-size:11px;color:var(--dim)}
+#splash .chain span{display:flex;align-items:center;gap:5px}
+#splash .cd{width:7px;height:7px;border-radius:50%}
+#loadnote{font-size:11px;color:var(--dim);margin-top:6px}
+/* tutorial */
+#tut{position:fixed;z-index:50;background:var(--panel2);border:1px solid var(--pur);border-radius:12px;padding:13px 15px;width:270px;font-size:13px;line-height:1.5;box-shadow:0 10px 50px rgba(0,0,0,.6);display:none}
+#tut b{color:var(--gold)}
+#tut .tbtn{margin-top:9px;background:var(--pur);border:none;color:#fff;border-radius:8px;padding:7px 14px;font-weight:700;font-size:12px}
+/* misc */
+.pricetag{color:var(--gold);font-weight:800}
+.rowbtns{display:flex;gap:8px;margin-top:10px}
+.rowbtns .hbtn{flex:1;text-align:center}
+#gen2box{text-align:center;padding:10px}
+#gen2box .big{font-size:15px;line-height:1.6;margin-bottom:10px}
+@media (max-width:760px){
+  #stats .stat small{display:none}
+  .stat{padding:5px 7px;font-size:11.5px}
+  #logo span{display:none}
+  #hudbtns .hbtn{padding:7px 9px;font-size:11px}
+  #rigp{width:calc(100vw - 20px);top:auto;bottom:10px;max-height:55vh}
+  #feed{width:210px;bottom:76px}
+  #wallet{top:96px}
+}
+/* ================= MINING GAME OS ================= */
+#os{position:fixed;inset:0;z-index:200;display:none;background:#0a0a0b;color:#ddd;font-family:ui-monospace,Menlo,Consolas,monospace}
+#os.open{display:block}
+#os *{box-sizing:border-box}
+.os-crt{position:absolute;inset:0;pointer-events:none;z-index:60;background:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px)}
+/* boot */
+#os-boot{position:absolute;inset:0;background:#050505;padding:34px;font-size:13px;line-height:1.75;color:#7dffb0;white-space:pre-wrap;z-index:30}
+#os-boot .dim{color:#3f7a55}
+/* desktop */
+#os-desk{position:absolute;inset:0 0 44px 0;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 30%,#141416 0%,#0a0a0b 70%)}
+#os-wall{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;pointer-events:none;opacity:.9}
+#os-wall .mg1{font-size:clamp(34px,7vw,72px);font-weight:800;letter-spacing:.06em;color:#2ecc5f;
+  text-shadow:3px 3px 0 #0c3a1c, 6px 6px 0 rgba(0,0,0,.7);font-family:ui-monospace,monospace}
+#os-wall .mg2{font-size:11px;color:#4a4a4f;letter-spacing:.5em}
+#os-wall img{height:130px;image-rendering:auto;filter:drop-shadow(0 8px 24px rgba(0,0,0,.8));margin-bottom:8px}
+.os-pat{position:absolute;inset:0;opacity:.05;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Ccircle cx='45' cy='45' r='20' fill='none' stroke='%23ffd23f' stroke-width='2'/%3E%3Crect x='38' y='36' width='14' height='11' rx='2' fill='none' stroke='%23ffd23f' stroke-width='2'/%3E%3Cline x1='41' y1='31' x2='41' y2='37' stroke='%23ffd23f' stroke-width='2'/%3E%3Cline x1='49' y1='31' x2='49' y2='37' stroke='%23ffd23f' stroke-width='2'/%3E%3Cline x1='45' y1='47' x2='45' y2='53' stroke='%23ffd23f' stroke-width='2'/%3E%3C/svg%3E")}
+/* icons */
+#os-icons{position:absolute;top:18px;left:14px;display:flex;flex-direction:column;gap:16px;z-index:2}
+.os-ic{width:86px;text-align:center;cursor:pointer;padding:6px 2px;border-radius:8px}
+.os-ic:hover{background:rgba(255,210,63,.08)}
+.os-ic .g{width:46px;height:46px;margin:0 auto 5px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;
+  background:#161618;border:1px solid #2a2a2e;box-shadow:0 4px 14px rgba(0,0,0,.5)}
+.os-ic span{font-size:10.5px;color:#c9c9ce;display:block;line-height:1.3}
+/* windows */
+.oswin{position:absolute;min-width:300px;background:#121214;border:1px solid #2e2e33;border-radius:9px;box-shadow:0 18px 60px rgba(0,0,0,.7);z-index:5;display:flex;flex-direction:column;overflow:hidden}
+.oswin.focus{border-color:#ffd23f55}
+.oswin .whead{display:flex;align-items:center;gap:8px;background:#1a1a1d;padding:7px 10px;cursor:grab;border-bottom:1px solid #26262a;font-size:12px;color:#eee}
+.oswin .whead .wic{font-size:13px}
+.oswin .whead .wx{margin-left:auto;background:none;border:none;color:#888;font-size:13px;padding:1px 6px;border-radius:5px}
+.oswin .whead .wx:hover{background:#3a1518;color:#ff6b74}
+.oswin .wbody{padding:12px;font-size:12px;overflow:auto}
+/* login modal */
+#os-login{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:40;background:rgba(0,0,0,.45)}
+.os-lbox{width:min(360px,92vw);background:#141416;border:1px solid #2c2c31;border-radius:10px;box-shadow:0 24px 80px rgba(0,0,0,.8);overflow:hidden}
+.os-lhead{display:flex;align-items:center;gap:8px;background:#1a1a1d;border-bottom:1px solid #26262a;padding:9px 12px;font-size:12px}
+.os-lbody{padding:18px 20px;text-align:center}
+.os-lbody label{display:block;text-align:left;font-size:10px;letter-spacing:.14em;color:#8a8a90;margin-bottom:7px}
+.os-sel{width:100%;background:#1c1c2a;color:#eee;border:1px solid #34344a;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;margin-bottom:16px}
+.os-plug{margin:4px auto 10px;filter:drop-shadow(0 0 18px rgba(255,210,63,.35))}
+.os-chain{color:#ffd23f;font-weight:800;font-size:16px;letter-spacing:.03em}
+.os-cid{color:#8a8a90;font-size:11px;margin:5px 0 16px}
+.os-btn1{width:100%;background:linear-gradient(90deg,#f2a93b,#e8912e);color:#1b1206;border:none;border-radius:8px;padding:11px;font-weight:800;font-size:13px;font-family:inherit;margin-bottom:9px}
+.os-btn1:hover{filter:brightness(1.1)}
+.os-btn2{width:100%;background:none;border:1px solid #333;color:#9a9aa0;border-radius:8px;padding:10px;font-size:12px;font-family:inherit}
+.os-btn2:hover{border-color:#555;color:#ccc}
+/* taskbar */
+#os-bar{position:absolute;left:0;right:0;bottom:0;height:44px;background:#101012;border-top:1px solid #232327;display:flex;align-items:center;gap:8px;padding:0 10px;z-index:45}
+#os-bar .plug{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid #2c2c30}
+#os-bar .plug:hover{background:#1d1d20}
+.os-task{background:#18181b;border:1px solid #2a2a2e;color:#ccc;border-radius:7px;padding:5px 12px;font-size:11.5px;font-family:inherit;display:flex;gap:6px;align-items:center}
+.os-task.on{border-color:#ffd23f66;color:#ffd23f}
+#os-clock{margin-left:auto;text-align:right;font-size:11px;line-height:1.3;color:#bbb;display:flex;align-items:center;gap:8px}
+#os-clock .dot{width:7px;height:7px;border-radius:50%;background:#3dff8a;box-shadow:0 0 8px #3dff8a}
+#os-clock small{color:#666;display:block}
+/* app widgets */
+.os-term{background:#050805;border:1px solid #1d2b1f;border-radius:7px;padding:9px;height:190px;overflow-y:auto;font-size:11.5px;line-height:1.65;color:#2f9c5c}
+.os-term .hl{color:#7dffb0}
+.os-term .warn{color:#ffae42}.os-term .bad{color:#ff6b74}
+.os-kv{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
+.os-kv div{background:#0e0e10;border:1px solid #232327;border-radius:7px;padding:7px 9px}
+.os-kv small{color:#77777d;display:block;font-size:9.5px;letter-spacing:.1em}
+.os-kv b{font-size:13px;color:#ffd23f}
+.os-row{display:flex;align-items:center;gap:10px;margin:10px 0}
+.os-row label{width:86px;font-size:11px;color:#aaa}
+.os-row input[type=range]{flex:1;accent-color:#ffd23f}
+.os-row .val{width:38px;text-align:right;color:#ffd23f;font-weight:700}
+.os-note{font-size:10.5px;color:#77777d;line-height:1.5;margin-top:8px}
+.os-note .risk{color:#ff6b74;font-weight:700}
+.os-abtn{width:100%;background:#ffd23f;border:none;color:#151005;border-radius:7px;padding:9px;font-weight:800;font-family:inherit;font-size:12px;margin-top:10px}
+.os-abtn:disabled{opacity:.35}
+.os-abtn.warn{background:#ff6b74;color:#fff}
+.os-in{width:100%;background:#1c1c2a;border:1px solid #34344a;color:#eee;border-radius:7px;padding:9px;font-family:inherit;font-size:13px}
+.os-url{display:flex;gap:6px;align-items:center;background:#0e0e10;border:1px solid #232327;border-radius:7px;padding:6px 10px;font-size:11px;color:#9a9aa0;margin-bottom:10px}
+.os-url .lock{color:#3dff8a}
+@media (max-width:760px){ .oswin{min-width:260px} #os-icons{gap:8px} }
+/* ---------- web3 wallet ---------- */
+#paybar{display:flex;align-items:center;gap:7px;margin:2px 0 12px;font-size:10px;color:var(--dim);letter-spacing:.08em}
+#paybar small{margin-left:auto;font-size:9px;letter-spacing:0}
+.paybtn{background:#171232;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:5px 11px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
+.paybtn.on{border-color:var(--gold);color:var(--gold);background:#241c3f}
+.w3addr{font-size:11px;color:var(--dim);word-break:break-all;margin-bottom:9px}
+.w3chips{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
+.w3chip{background:#171232;border:1px solid var(--line);color:var(--fg);border-radius:20px;padding:6px 12px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
+.w3chip.on{border-color:var(--grn);color:var(--grn)}
+.w3chip.pre{opacity:.55}
+.w3chip small{font-size:8px;color:var(--gold)}
+.w3sec{font-size:10px;color:var(--dim);letter-spacing:.14em;margin:10px 0 6px}
+.w3nfts{display:flex;flex-direction:column;gap:4px}
+.w3nft{display:flex;gap:8px;align-items:baseline;background:#14102a;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--dim)}
+.w3nft.own{color:var(--fg);border-color:var(--grn)}
+.w3nft.own b{color:var(--grn)}
+.w3nft small{margin-left:auto;color:var(--dim);font-size:10px}
+.w3note{font-size:11.5px;line-height:1.55;color:var(--dim);background:#14102a;border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin:6px 0}
+.w3err{color:var(--red);font-size:11px;margin-top:7px}
+.w3dim{color:var(--dim)}
+#m-tx{position:fixed;right:12px;bottom:12px;z-index:80;pointer-events:none;opacity:0;transform:translateY(12px);transition:all .25s}
+#m-tx.show{opacity:1;transform:none}
+.txbox{background:#0d0a1f;border:1px solid var(--pur);border-radius:11px;padding:11px 13px;width:290px;box-shadow:0 12px 40px rgba(0,0,0,.6);font-size:11px}
+.txh{font-family:ui-monospace,Menlo,monospace;color:var(--cyan);font-size:10.5px;margin-bottom:7px}
+.txr{display:flex;justify-content:space-between;margin:2.5px 0;color:var(--dim)}
+.txr b{color:var(--fg);font-weight:600}
+.txst{color:var(--gold)}
+.txtag{margin-top:7px;font-size:9px;letter-spacing:.06em;color:var(--dim);border-top:1px dashed var(--line);padding-top:6px}
+/* ---------- workbench ---------- */
+#bench{position:fixed;inset:0;z-index:90;display:none;background:radial-gradient(ellipse at 50% 30%,#141031 0%,#07051a 70%)}
+#bench.open{display:block}
+#bench canvas{position:absolute;inset:0}
+#bench-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:10px;padding:12px 14px;z-index:3}
+#bench-top h3{margin:0;font-size:15px;color:var(--gold);letter-spacing:.06em}
+#bench-top small{color:var(--dim)}
+#bench-tray{position:absolute;left:0;right:0;bottom:0;display:flex;gap:8px;justify-content:center;align-items:flex-end;padding:10px 12px 14px;z-index:3;flex-wrap:wrap}
+.traypart{background:#14102ad9;border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:104px;cursor:grab;user-select:none;text-align:center;transition:border-color .15s,transform .12s}
+.traypart:hover{border-color:var(--cyan);transform:translateY(-3px)}
+.traypart.drag{opacity:.35}
+.traypart img{width:72px;height:54px;object-fit:contain;display:block;margin:0 auto 3px}
+.traypart b{display:block;font-size:10.5px}
+.traypart small{color:var(--dim);font-size:9px}
+.traypart .n{color:var(--gold);font-size:9px}
+#bench-hint{position:absolute;left:50%;top:54px;transform:translateX(-50%);z-index:3;font-size:11.5px;color:var(--dim);background:#0d0a1fd0;border:1px solid var(--line);border-radius:9px;padding:6px 13px;white-space:nowrap}
+#bench-scale{position:absolute;right:14px;bottom:104px;z-index:3;font-size:9.5px;color:var(--dim);text-align:right;line-height:1.6}
+/* pools & wear */
+.wearrow{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:11px}
+.wearrow small{color:var(--dim)}
+.wearbar{flex:1;height:8px;background:#0e1526;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.wearbar i{display:block;height:100%;transition:width .3s}
+.prow{display:flex;align-items:center;gap:10px;background:#0d1424;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin:6px 0}
+.prow.sel{border-color:var(--cyan);box-shadow:0 0 10px #35e0ff22}
+.prow.off{background:#151022}
+.prow.host{border-color:var(--gold)}
+.prow .pi{flex:1;min-width:0}.prow .pi b{font-size:12.5px}.prow .pi small{display:block;color:var(--dim);font-size:10px;margin-top:2px}
+.prow .pf{text-align:center;min-width:56px;font-weight:700;font-size:12px}
+.prow .pf small{display:block;color:var(--dim);font-weight:400;font-size:9px}
+.hostbox,.valbox{background:#0d1424;border:1px dashed var(--line);border-radius:10px;padding:11px 13px;margin:10px 0;font-size:12px}
+.hostbox small,.valbox small{display:block;color:var(--dim);font-size:10.5px;margin-top:4px;line-height:1.5}
+.valbox{border-style:solid;border-color:#ffb02044}
+.prog{height:9px;background:#0e1526;border:1px solid var(--line);border-radius:5px;overflow:hidden;margin-top:8px}
+.prog i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),#ff7a3c)}
+#coin-pool:hover{border-color:var(--cyan)}
+</style>
+</head>
+<body>
+<canvas id="c3d"></canvas>
+<div id="vig"></div>
+<!-- ============ HUD ============ -->
+<div id="hud">
+  <div id="logo"><b>⛏ THE MINING GAME</b><span>WATT&nbsp;TYCOON</span></div>
+  <div id="stats">
+    <div class="stat" id="s-watt"><span class="ic">⚡</span><span class="col"><b id="v-watt">0</b><small>WATT</small></span></div>
+    <div class="stat" id="s-hash"><span class="ic">⛏</span><span class="col"><b id="v-hash">0</b><small>HASH</small></span></div>
+    <div class="stat" id="s-pow"><span class="ic">🔌</span><span class="col"><b id="v-pow">0/60</b><small>POWER</small></span></div>
+    <div class="stat" id="s-temp"><span class="ic">🌡</span><span class="col"><b id="v-temp">22°</b><small>TEMP</small></span></div>
+    <div class="stat" id="s-blk"><span class="ic">🧱</span><span class="col"><b id="v-blk">0</b><small>BLOCKS</small></span></div>
+  </div>
+  <div id="hudbtns">
+    <div id="net" title="Switch network"><span class="dot"></span><span id="netname">Polygon</span><small id="netdiff"></small></div>
+    <button class="hbtn" id="b-wallet">🦊 WALLET</button>
+    <button class="hbtn gold" id="b-shop">🛒 SHOP</button>
+    <button class="hbtn accent" id="b-upg">🔧 GARAGE</button>
+    <button class="hbtn" id="b-pool">🏊 POOLS</button>
+    <button class="hbtn" id="b-stats">📊</button>
+    <button class="hbtn" id="b-mute">🔊</button>
+  </div>
+</div>
+<div id="wallet">
+  <div class="coin" id="coin-pol">🟣 <b id="v-pol">0</b> POL <span class="pr" id="p-pol">@10.0</span><button id="sell-pol">SELL</button></div>
+  <div class="coin" id="coin-alt">🟠 <b id="v-alt">0</b> ALT <span class="pr" id="p-alt">@25.0</span><button id="sell-alt">SELL</button></div>
+  <div class="coin" id="coin-wtx">🟡 <b id="v-wtx">0</b> WTX <span class="pr" id="p-wtx">@2.0</span><button id="sell-wtx">SELL</button></div>
+  <div class="coin" id="coin-pool" title="Mining pool — click to open Pool Hub" style="cursor:pointer">🏊 <b id="v-pool">nucash-mining</b><span class="pr" id="p-pend"></span></div>
+</div>
+<div id="feed"></div>
+<div id="tut"></div>
+
+<!-- ============ SHOP ============ -->
+<div class="modal" id="m-shop"><div class="mbox">
+  <div class="mhead"><h2>🛒 NFT SHOP <small style="color:var(--dim);font-weight:400;font-size:11px">&nbsp;the real Mining Game collection · Polygon &amp; Altcoinchain</small></h2><button class="x" data-close="m-shop">✕</button></div>
+  <div id="paybar"><span>PAY WITH</span>
+    <button class="paybtn" data-cur="watt">⚡ WATT</button>
+    <button class="paybtn" data-cur="pol">🟣 POL</button>
+    <button class="paybtn" data-cur="alt">🟠 ALT</button>
+    <small>each purchase runs a contract call on the selected currency</small></div>
+  <div class="cards" id="shopcards"></div>
+</div></div>
+
+<!-- ============ WALLET (web3) ============ -->
+<div class="modal" id="m-web3"><div class="mbox" style="max-width:520px">
+  <div class="mhead"><h2>🦊 WALLET <small style="color:var(--dim);font-weight:400;font-size:11px">&nbsp;live contracts on Polygon &amp; Altcoinchain</small></h2><button class="x" data-close="m-web3">✕</button></div>
+  <div id="w3-body"></div>
+</div></div>
+<div id="m-tx"></div>
+
+<!-- ============ WORKBENCH (open case / drag-snap install) ============ -->
+<div id="bench">
+  <div id="bench-top">
+    <h3>🔧 WORKBENCH — RIG <span id="bench-rig">1</span></h3>
+    <small id="bench-sub">side panel off · components at real-life scale</small>
+    <span style="flex:1"></span>
+    <button class="hbtn gold" id="bench-shop">🛒 BUY COMPONENTS</button>
+    <button class="hbtn" id="bench-close">✕ CLOSE</button>
+  </div>
+  <div id="bench-hint">drag a component from the tray — compatible slots glow — release to snap it in</div>
+  <div id="bench-tray"></div>
+  <div id="bench-scale">REAL-SCALE RATIOS<br>ATX board 305×244mm · GPU 300mm<br>CPU package 40×40mm</div>
+</div>
+
+<!-- ============ GARAGE UPGRADES ============ -->
+<div class="modal" id="m-upg"><div class="mbox" style="max-width:560px">
+  <div class="mhead"><h2>🔧 GARAGE UPGRADES</h2><button class="x" data-close="m-upg">✕</button></div>
+  <div id="upgrows"></div>
+  <div id="gen2box"></div>
+</div></div>
+
+<!-- ============ POOL HUB ============ -->
+<div class="modal" id="m-pool"><div class="mbox" style="max-width:620px">
+  <div class="mhead"><h2>🏊 POOL HUB <small style="color:var(--dim);font-weight:400;font-size:11px">&nbsp;mining pools · hosting · validators</small></h2><button class="x" data-close="m-pool">✕</button></div>
+  <div id="poolbody"></div>
+</div></div>
+
+<!-- ============ STATS ============ -->
+<div class="modal" id="m-stats"><div class="mbox" style="max-width:520px">
+  <div class="mhead"><h2>📊 MINING STATS</h2><button class="x" data-close="m-stats">✕</button></div>
+  <div class="stats2" id="statsgrid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+  <div class="rowbtns">
+    <button class="hbtn accent" id="b-share">🐦 Share on X</button>
+    <button class="hbtn" id="b-reset" style="color:var(--red)">Reset save</button>
+  </div>
+  <p style="color:var(--dim);font-size:10.5px;margin-top:12px;line-height:1.6">
+    Traits are the real on-chain specs of the Mining Game ERC-1155 collection
+    (Polygon 0x970a…9728 / Altcoinchain 0xf967…ffb2). WATT is electricity — every
+    component draws it, staking weight regenerates it. This is a simulation: no wallet, no chain calls.
+  </p>
+</div></div>
+
+<!-- ============ RIG PANEL ============ -->
+<div id="rigp"></div>
+
+<!-- ============ MINING GAME OS ============ -->
+<div id="os"></div>
+
+<!-- ============ SPLASH ============ -->
+<div id="splash">
+  <div class="sub1">FREE TO PLAY · PLAY TO EARN</div>
+  <h1>THE MINING GAME</h1>
+  <p>The 3D crypto-mining simulator built from the <b style="color:var(--txt)">real Mining Game NFT hardware</b>.
+  Mint your free Gaming PC, bolt in CPUs and GPUs, feed the rig <b style="color:var(--gold)">⚡WATT</b> as electricity,
+  and race the difficulty curve mining blocks on Polygon and Altcoinchain.</p>
+  <button id="mintbtn">⚡ FREE MINT — Gaming PC</button>
+  <div class="chain">
+    <span><span class="cd" style="background:#8247e5"></span>Polygon</span>
+    <span><span class="cd" style="background:#ffd23f"></span>Altcoinchain</span>
+    <span><span class="cd" style="background:#fff3b0"></span>WATTxchain testnet</span>
+    <span>⛏ mining pools · validators · real NFT hardware</span>
+  </div>
+  <div id="loadnote">loading 3D hardware…</div>
+</div>
+<script type="importmap">{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"
+}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+
+/* ================= DATA : the real Mining Game collection ================= */
+const ITEMS = {
+  1:{id:1,key:'pc',   name:'Gaming PC',    brand:'Minga', comp:'Basic PC', gen:1, hash:2,  watt:5,  sw:1,  supply:0, price:0,    model:'pc.glb',
+     desc:'The basic PC needed to play the Mining Game. Free to mint!'},
+  2:{id:2,key:'badge',name:'Genesis Badge',brand:'',      comp:'Badge',    gen:1, hash:0,  watt:0,  sw:42, supply:100, price:20000, model:null, luck:10, eff:10,
+     desc:'Only 100 will ever be minted. +10% luck, +10% efficiency, stake weight 42.'},
+  3:{id:3,key:'cpu',  name:'XL1 Processor',brand:'Kirtex',comp:'Processor',gen:1, hash:10, watt:2,  sw:9,  supply:10000, price:200,  model:'cpu.glb',
+     desc:'CPU upgrade for your Gaming PC. Receives Play to Earn rewards.'},
+  4:{id:4,key:'tx120',name:'TX120 GPU',    brand:'Oblivia',comp:'GPU',     gen:1, hash:20, watt:10, sw:11, supply:4884, price:700,  model:'gpu_tx120.glb',
+     desc:'GPU upgrade for your Gaming PC. Receives Play to Earn rewards.'},
+  5:{id:5,key:'gp50', name:'GP50 GPU',     brand:'MAD',   comp:'GPU',      gen:1, hash:33, watt:16, sw:18, supply:2611, price:1200, model:'gpu_gp50.glb',
+     desc:'A powerful GPU upgrade for your Gaming PC!'},
+  /* Gen2 hardware — from the official repo's unreleased Components lineup */
+  14:{id:14,key:'frame', name:'Mining Rig Frame', brand:'Minga', comp:'Frame', gen:1, hash:0, watt:0, sw:10, supply:5000, price:8000, scene:'14_Mining_Rig_Frame',
+     desc:'Open-air frame. Expands a rig from 2 to 4 GPU slots.'},
+  8:{id:8,key:'tx190', name:'TX190 GPU',   brand:'Oblivia',comp:'GPU',     gen:2, hash:60, watt:22, sw:30, supply:3000, price:6000, scene:'8_TX_190', gen2:1, flip:1,
+     desc:'Second-generation Oblivia silicon. Triple the hash of the TX120.'},
+  9:{id:9,key:'xl190', name:'XL190 CPU',   brand:'Kirtex', comp:'Processor',gen:2, hash:35, watt:8,  sw:22, supply:2500, price:4500, scene:'9_XL_190_CPU', gen2:1,
+     desc:'Kirtex second-gen processor. Massive uplift over the XL1.'},
+  10:{id:10,key:'gp720',name:'GP720 GPU',  brand:'MAD',    comp:'GPU',     gen:2, hash:110,watt:38, sw:48, supply:1200, price:14000, scene:'10_GP_720_GPU', gen2:1, flip:1,
+     desc:'MAD flagship. Hashes harder than three GP50s.'},
+  12:{id:12,key:'xxl270',name:'XXL270 CPU',brand:'Kirtex', comp:'Processor',gen:2, hash:70, watt:15, sw:40, supply:800, price:12000, scene:'10_XXL_270_CPU', gen2:1,
+     desc:'The biggest chip Kirtex ever fabbed. Server-grade.'},
+  11:{id:11,key:'gpx880',name:'GPX880 GPU',brand:'GPX',    comp:'GPU',     gen:2, hash:180,watt:60, sw:75, supply:500, price:30000, scene:'11_GPX_880_a', gen2:1,
+     desc:'Legendary dual-fan monster. The fastest GPU in the game.'},
+  13:{id:13,key:'asic', name:'Bit Hammer ASIC',brand:'Bit Hammer',comp:'ASIC',gen:2, hash:320,watt:110,sw:120, supply:250, price:60000, scene:'13_Bit_Hammer_ASIC', gen2:1,
+     desc:'Purpose-built hashing brick. One per rig. Runs HOT.'},
+  19:{id:19,key:'tower',name:'Server Tower',brand:'Minga', comp:'Structure',gen:2, hash:0, watt:0,  sw:40, supply:1, price:20000, scene:'19_Server_Tower', gen2:1,
+     desc:'Garage centerpiece. +40 stake weight and +20% stake income.'},
+  /* battlestation peripherals — small permanent luck boosts, survive prestige */
+  17:{id:17,key:'mouse',  name:'Red Mouse',   brand:'Minga', comp:'Peripheral', gen:1, hash:0, watt:0, sw:0, supply:1, price:2500, scene:'17_Red_Mouse', luck:2,
+     desc:'+2% luck. Appears on every desk. Set bonus with keyboard & monitor.'},
+  18:{id:18,key:'kb',     name:'RGB Keyboard',brand:'Minga', comp:'Peripheral', gen:1, hash:0, watt:0, sw:0, supply:1, price:3500, scene:'18_RGB_Keyboard', luck:2,
+     desc:'+2% luck. Replaces every desk keyboard. Set bonus with mouse & monitor.'},
+  23:{id:23,key:'lc23',   name:'LC23 Monitor',brand:'Minga', comp:'Peripheral', gen:1, hash:0, watt:0, sw:0, supply:1, price:5000, scene:'23_LC_23_Monitor', luck:2,
+     desc:'+2% luck. A second screen for every desk. Set bonus with mouse & keyboard.'},
+};
+const INV_IDS=[3,4,5,8,9,10,11,12,13,14];
+const CPU_IDS=[3,9,12], GPU_IDS=[4,5,8,10,11];
+const CFG = {
+  startWatt: 250,
+  pcBasePrice: 500, pcPriceGrowth: 1.45,     // extra PCs
+  consumePerWatt: 0.02,                       // WATT/s per wattage point
+  stakePerSW: 0.05,                           // WATT/s per stake weight
+  powerBase: 60, powerPerLvl: 70, powerMax: 8,
+  coolBase: 0.55, coolPerLvl: 0.115, coolMax: 8,
+  rackMax: 2,                                 // +3 slots each
+  upPrice:{power:[400,1100,2600,6000,14000,32000,70000,160000], cooling:[350,900,2200,5200,12000,28000,60000,130000], rack:[1500,9000]},
+  towerStakeMult: 1.2,
+  chairPrice: 2500,
+  nets:{
+    polygon:{name:'Polygon', coin:'pol', sym:'POL', color:0x8247e5, lam:0.007, reward:3.0, p0:10, vol:0.035, pmin:4, pmax:22},
+    alt:    {name:'Altcoinchain', coin:'alt', sym:'ALT', color:0xffb020, lam:0.004, reward:2.2, p0:25, vol:0.10, pmin:5, pmax:95},
+    wattx:  {name:'WATTxchain', coin:'wtx', sym:'WTX', color:0xffd23f, lam:0.0055, reward:5.0, p0:2.0, vol:0.05, pmin:0.6, pmax:9, sim:true},
+  },
+  poolHostWatt:100000, poolHostCoin:100000, hostBurnCut:0.01,
+  altHybridBlock:7000000, valNodeAlt:32, altNetStake:40000, altBlockRate:0.62,
+  luckyChance: 0.05, luckyMult: 5,
+  diffSoft: 260,                               // blocks for +100% difficulty
+  gen2Req: 60000, gen2Mult: 1.6,
+  offlineCapH: 8, offlineEff: 0.5,
+};
+/* monitor sizes: diagonal inches -> [w,h] world units @2.25u/m (16:9; 38"=21:9; 49"=32:9) */
+const MONSIZES={24:[1.20,0.67],27:[1.34,0.76],32:[1.59,0.90],38:[1.98,0.84],49:[2.68,0.75]};
+const SLOTS = [ // 9 rig positions [x,z,ry]
+  [-4.6,-1.2, 0],[ 0,-1.2, 0],[ 4.6,-1.2, 0],
+  [-4.6,-4.6, 0],[ 0,-4.6, 0],[ 4.6,-4.6, 0],
+  [-4.6, 2.2, 0],[ 0, 2.2, 0],[ 4.6, 2.2, 0],
+];
+const SAVEKEY='tmg3d_v1';
+const now=()=>Date.now();
+let S=null;
+function freshState(){ const inv={},bought={2:0,17:0,18:0,19:0,23:0}; INV_IDS.forEach(i=>{inv[i]=0;bought[i]=0;}); return {
+  watt:CFG.startWatt, lifeWatt:0, pol:0, alt:0, wtx:0, price:{pol:CFG.nets.polygon.p0, alt:CFG.nets.alt.p0, wtx:CFG.nets.wattx.p0},
+  net:'polygon', rigs:[], inv, badge:0, bought, pcCount:0, periph:{17:0,18:0,23:0}, tower:0,
+  upg:{power:0,cooling:0,rack:0}, gen:1, blocks:0, blocksNet:{pol:0,alt:0,wtx:0}, lucky:0,
+  temp:24, muted:false, tut:0, created:now(), lastSeen:now(), sold:{pol:0,alt:0,wtx:0}, netSwitchT:0,
+  payCur:'watt', w3claim:{}, monSize:27, chair:0,
+  pool:{pol:'nucash',alt:'nucash',wtx:'genesis'}, myPools:{}, pend:{pol:0,alt:0,wtx:0}, payThresh:3,
+  shares:0, burned:0, altH:6998800, altHybrid:0, altNodes:0, altLocked:0, valEarn:0, poolEarnW:0, poolEarnC:{pol:0,alt:0,wtx:0},
+};}
+function save(){ if(!S) return; S.lastSeen=now(); try{localStorage.setItem(SAVEKEY,JSON.stringify(S));}catch(e){} }
+function load(){ try{ const r=localStorage.getItem(SAVEKEY); if(r){ const o=JSON.parse(r); if(o&&o.rigs){
+  const f=freshState();
+  const inv=Object.assign({},f.inv,o.inv||{}), bought=Object.assign({},f.bought,o.bought||{});
+  const st=Object.assign(f,o);
+  st.inv=inv; st.bought=bought;
+  st.periph=Object.assign({17:0,18:0,23:0},o.periph||{}); st.tower=o.tower||0;
+  st.rigs.forEach(r=>{ if(r.cpu===1||r.cpu===true) r.cpu=3; r.cpu=r.cpu||0; r.asic=r.asic||0; r.frame=r.frame||0;
+    r.oc=r.oc||{c:0,m:0}; r.crashT=r.crashT||0; r.on=r.on===undefined?1:r.on; r.wear=r.wear||0; });
+  st.monSize=MONSIZES[st.monSize]?st.monSize:27; st.price.wtx=st.price.wtx||CFG.nets.wattx.p0; st.wtx=st.wtx||0;
+  st.blocksNet.wtx=st.blocksNet.wtx||0; st.sold.wtx=st.sold.wtx||0;
+  st.pool=Object.assign({pol:'nucash',alt:'nucash',wtx:'genesis'},o.pool||{});
+  st.myPools=o.myPools||{}; st.pend=Object.assign({pol:0,alt:0,wtx:0},o.pend||{});
+  st.poolEarnC=Object.assign({pol:0,alt:0,wtx:0},o.poolEarnC||{});
+  return st; } } }catch(e){} return null; }
+/* number formatting */
+function fmt(n){ n=Number(n)||0; const a=Math.abs(n);
+  if(a>=1e9) return (n/1e9).toFixed(2)+'B'; if(a>=1e6) return (n/1e6).toFixed(2)+'M';
+  if(a>=1e4) return (n/1e3).toFixed(1)+'k'; if(a>=100) return Math.floor(n).toString();
+  if(a>=10) return n.toFixed(1); return n.toFixed(2); }
+function fmtInt(n){ n=Number(n)||0; if(n>=1e6) return (n/1e6).toFixed(2)+'M'; if(n>=1e4) return (n/1e3).toFixed(1)+'k'; return Math.floor(n).toString(); }
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+/* derived stats */
+function ocHashMult(r){ const o=r.oc||{c:0,m:0}; return 1 + o.c*0.05 + o.m*0.02; }
+function ocWattMult(r){ const o=r.oc||{c:0,m:0}; return 1 + o.c*0.07 + o.m*0.03; }
+function ocRiskPerMin(r){ const o=r.oc||{c:0,m:0}, s=o.c+o.m; if(!s) return 0;
+  const base=s*s*0.0015; return base*(S&&S.temp>=100?12:S&&S.temp>=85?4:1); }
+function rigHash(r){ if(r.crashT>0||!r.on||r.wear>=100) return 0;
+  let h=ITEMS[1].hash; if(r.cpu) h+=ITEMS[r.cpu].hash; if(r.asic) h+=ITEMS[r.asic].hash; for(const g of r.gpus) h+=ITEMS[g].hash; return h*ocHashMult(r)*(1-0.5*(r.wear||0)/100); }
+function rigWatt(r){ if(!r.on) return 0; let w=ITEMS[1].watt; if(r.cpu) w+=ITEMS[r.cpu].watt; if(r.asic) w+=ITEMS[r.asic].watt; for(const g of r.gpus) w+=ITEMS[g].watt;
+  return (r.crashT>0||r.wear>=100) ? w*0.25 : w*ocWattMult(r); }
+function rigSW(r){ let s=ITEMS[1].sw; if(r.cpu) s+=ITEMS[r.cpu].sw; if(r.asic) s+=ITEMS[r.asic].sw; if(r.frame) s+=ITEMS[14].sw; for(const g of r.gpus) s+=ITEMS[g].sw; return s; }
+function gpuCap(r){ return r.frame?4:2; }
+function totHash(){ return S.rigs.reduce((a,r)=>a+rigHash(r),0) * Math.pow(CFG.gen2Mult,S.gen-1); }
+function totWatt(){ return S.rigs.reduce((a,r)=>a+rigWatt(r),0); }
+function totSW(){ return S.rigs.reduce((a,r)=>a+rigSW(r),0) + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
+function totSWStake(){ return S.rigs.reduce((a,r)=>a+rigSW(r)*(r.on?0.25:1),0) + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
+function rigValue(r){ let v=ITEMS[1].price; if(r.cpu) v+=ITEMS[r.cpu].price; if(r.asic) v+=ITEMS[r.asic].price; if(r.frame) v+=ITEMS[14].price; for(const g of r.gpus) v+=ITEMS[g].price; return v; }
+function repairCost(r){ return Math.ceil(rigValue(r)*0.18*(r.wear||0)/100); }
+function stakeMult(){ return S.tower?CFG.towerStakeMult:1; }
+function powerCap(){ return CFG.powerBase + S.upg.power*CFG.powerPerLvl; }
+function slotCount(){ return 3 + S.upg.rack*3; }
+function periphCount(){ return (S.periph[17]?1:0)+(S.periph[18]?1:0)+(S.periph[23]?1:0); }
+function luckMult(){ const pc=periphCount(); return 1 + (S.badge?0.10:0) + pc*0.02 + (pc===3?0.03:0) + (S.chair?0.03:0); }
+function effMult(){ return S.badge?0.90:1; }
+function pcPrice(){ return Math.round(CFG.pcBasePrice*Math.pow(CFG.pcPriceGrowth,Math.max(0,S.pcCount-1))); }
+function difficulty(){ return 1 + S.blocks/CFG.diffSoft; }
+function powerFactor(){ const d=totWatt(); return d<=powerCap()?1:powerCap()/d; }
+function tempTarget(){ return 24 + totWatt()*CFG.coolBase*(1-S.upg.cooling*CFG.coolPerLvl); }
+function heatFactor(){ return S.temp>=100?0.25 : S.temp>=85?0.6 : 1; }
+function netWorth(){ return S.watt + (S.pol+S.pend.pol)*S.price.pol + (S.alt+S.pend.alt+S.altLocked)*S.price.alt + (S.wtx+S.pend.wtx)*S.price.wtx; }
+
+/* ================= AUDIO (hand-rolled WebAudio, routed via master) ================= */
+const AU = { ctx:null, master:null, humG:null, dest:null, started:false };
+function auInit(){
+  if(AU.started) return;
+  AU.ctx = new (window.AudioContext||window.webkitAudioContext)();
+  AU.master = AU.ctx.createGain(); AU.master.gain.value = (S&&S.muted)?0:0.85;
+  AU.master.connect(AU.ctx.destination);
+  AU.dest = AU.ctx.createMediaStreamDestination(); AU.master.connect(AU.dest);
+  // --- garage hum: filtered noise + 60hz ---
+  const nbuf = AU.ctx.createBuffer(1, AU.ctx.sampleRate*2, AU.ctx.sampleRate);
+  const d = nbuf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  const noise = AU.ctx.createBufferSource(); noise.buffer=nbuf; noise.loop=true;
+  const nf = AU.ctx.createBiquadFilter(); nf.type='lowpass'; nf.frequency.value=320; nf.Q.value=0.6;
+  const hum = AU.ctx.createOscillator(); hum.type='triangle'; hum.frequency.value=58;
+  const humF = AU.ctx.createBiquadFilter(); humF.type='lowpass'; humF.frequency.value=140;
+  AU.humG = AU.ctx.createGain(); AU.humG.gain.value=0.0;
+  noise.connect(nf).connect(AU.humG); hum.connect(humF).connect(AU.humG);
+  AU.humG.connect(AU.master); noise.start(); hum.start();
+  // --- ambient music: slow synth pad arpeggio ---
+  AU.musG = AU.ctx.createGain(); AU.musG.gain.value=0.12; AU.musG.connect(AU.master);
+  musicLoop();
+  AU.started=true;
+}
+const MUS = { seq:[0,3,7,10,12,10,7,3], root:[110,98,87.3,116.5], bar:0, t:null };
+function musicLoop(){
+  if(!AU.ctx) return;
+  const bar = MUS.bar++ % 4, root = MUS.root[bar];
+  const t0 = AU.ctx.currentTime+0.05;
+  MUS.seq.forEach((st,i)=>{
+    const f = root*Math.pow(2,st/12);
+    const o = AU.ctx.createOscillator(); o.type = i%2?'sine':'triangle'; o.frequency.value=f*2;
+    const g = AU.ctx.createGain(); const ts=t0+i*0.5;
+    g.gain.setValueAtTime(0,ts); g.gain.linearRampToValueAtTime(0.5,ts+0.06);
+    g.gain.exponentialRampToValueAtTime(0.001,ts+0.48);
+    const fl=AU.ctx.createBiquadFilter(); fl.type='lowpass'; fl.frequency.value=1200;
+    o.connect(g).connect(fl).connect(AU.musG); o.start(ts); o.stop(ts+0.5);
+  });
+  // bass drone
+  const b=AU.ctx.createOscillator(); b.type='sawtooth'; b.frequency.value=root/2;
+  const bg=AU.ctx.createGain(); bg.gain.setValueAtTime(0.0,t0);
+  bg.gain.linearRampToValueAtTime(0.10,t0+0.4); bg.gain.linearRampToValueAtTime(0.0,t0+3.9);
+  const bf=AU.ctx.createBiquadFilter(); bf.type='lowpass'; bf.frequency.value=240;
+  b.connect(bg).connect(bf).connect(AU.musG); b.start(t0); b.stop(t0+4);
+  MUS.t=setTimeout(musicLoop, 4000);
+}
+function tone(f0,f1,dur,type,vol,when=0){
+  if(!AU.ctx) return; const t=AU.ctx.currentTime+when;
+  const o=AU.ctx.createOscillator(), g=AU.ctx.createGain();
+  o.type=type; o.frequency.setValueAtTime(f0,t);
+  if(f1!==f0) o.frequency.exponentialRampToValueAtTime(Math.max(1,f1),t+dur);
+  g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.connect(g).connect(AU.master); o.start(t); o.stop(t+dur+0.02);
+}
+function noiseHit(dur,vol,freq=800){
+  if(!AU.ctx) return; const t=AU.ctx.currentTime;
+  const n=AU.ctx.createBufferSource(); const nb=AU.ctx.createBuffer(1,AU.ctx.sampleRate*dur,AU.ctx.sampleRate);
+  const dd=nb.getChannelData(0); for(let i=0;i<dd.length;i++) dd[i]=(Math.random()*2-1)*(1-i/dd.length);
+  n.buffer=nb; const f=AU.ctx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=freq;
+  const g=AU.ctx.createGain(); g.gain.value=vol;
+  n.connect(f).connect(g).connect(AU.master); n.start(t);
+}
+const SFX = {
+  click(){ tone(1400,900,0.06,'square',0.12); },
+  buy(){ tone(520,780,0.09,'square',0.2); tone(780,1170,0.12,'square',0.18,0.08); },
+  install(){ noiseHit(0.08,0.25,2400); tone(300,180,0.12,'square',0.15,0.02); },
+  block(){ tone(880,880,0.08,'sine',0.3); tone(1108,1108,0.09,'sine',0.28,0.07); tone(1318,1318,0.16,'sine',0.3,0.14); },
+  lucky(){ [660,830,990,1318,1660].forEach((f,i)=>tone(f,f,0.14,'triangle',0.3,i*0.07)); noiseHit(0.3,0.15,3000); },
+  sell(){ tone(700,1400,0.13,'sine',0.25); },
+  err(){ tone(220,150,0.16,'sawtooth',0.2); },
+  alarm(){ tone(950,700,0.28,'square',0.16); tone(950,700,0.28,'square',0.14,0.32); },
+  swap(){ tone(400,900,0.2,'sine',0.2); },
+  gen2(){ [523,659,784,1046,1318,1568].forEach((f,i)=>tone(f,f,0.25,'triangle',0.3,i*0.1)); },
+  mint(){ tone(392,392,0.12,'triangle',0.3); tone(523,523,0.12,'triangle',0.3,0.1); tone(659,659,0.2,'triangle',0.3,0.2); tone(784,784,0.34,'triangle',0.32,0.3); },
+};
+function setMuted(m){ S.muted=m; if(AU.master) AU.master.gain.value=m?0:0.85; $('b-mute').textContent=m?'🔇':'🔊'; save(); }
+
+/* ================= THREE SCENE ================= */
+const TRAILER = new URLSearchParams(location.search).has('trailer');
+const canvas = $('c3d');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, preserveDrawingBuffer:TRAILER});
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.35;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0818);
+scene.fog = new THREE.Fog(0x0a0818, 18, 40);
+const cam = new THREE.PerspectiveCamera(50, 2, 0.05, 120);
+cam.position.set(6.8, 4.6, 8.6);
+const controls = new OrbitControls(cam, canvas);
+controls.target.set(-0.6, 1.1, -1.4);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.maxPolarAngle = Math.PI*0.49; controls.minDistance = 3.5; controls.maxDistance = 24;
+controls.enablePan = false;
+function sizeRenderer(){
+  const w = TRAILER?1280:innerWidth, h = TRAILER?720:innerHeight;
+  renderer.setSize(w,h,!TRAILER); renderer.setPixelRatio(TRAILER?1:Math.min(devicePixelRatio,1.6));
+  cam.aspect=w/h; cam.updateProjectionMatrix();
+}
+sizeRenderer(); addEventListener('resize', sizeRenderer);
+/* ---------- lights ---------- */
+scene.add(new THREE.HemisphereLight(0x9c90e8, 0x1a1530, 1.25));
+const key = new THREE.DirectionalLight(0xcfc4ff, 2.2); key.position.set(6,12,8); scene.add(key);
+const purL = new THREE.PointLight(0x8247e5, 90, 30); purL.position.set(-7,4.5,-6); scene.add(purL);
+const cyanL = new THREE.PointLight(0x2ee6d6, 70, 28); cyanL.position.set(7,4,4); scene.add(cyanL);
+const badgeSpot = new THREE.SpotLight(0xffd23f, 120, 18, 0.42, 0.5); badgeSpot.position.set(0,7.5,-8.4);
+scene.add(badgeSpot);
+/* ---------- canvas texture helpers ---------- */
+function cnv(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+function ctex(c){ const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t; }
+/* floor */
+function makeFloorTex(){
+  const c=cnv(1024,1024), x=c.getContext('2d');
+  x.fillStyle='#100d22'; x.fillRect(0,0,1024,1024);
+  for(let i=0;i<9000;i++){ x.fillStyle=`rgba(${20+Math.random()*26|0},${16+Math.random()*22|0},${40+Math.random()*30|0},.35)`;
+    x.fillRect(Math.random()*1024,Math.random()*1024,2.2,2.2); }
+  x.strokeStyle='rgba(130,71,229,.30)'; x.lineWidth=2;
+  for(let i=0;i<=8;i++){ x.beginPath(); x.moveTo(i*128,0); x.lineTo(i*128,1024); x.stroke();
+    x.beginPath(); x.moveTo(0,i*128); x.lineTo(1024,i*128); x.stroke(); }
+  x.strokeStyle='rgba(46,230,214,.10)'; x.lineWidth=1;
+  for(let i=0;i<=32;i++){ x.beginPath(); x.moveTo(i*32,0); x.lineTo(i*32,1024); x.stroke();
+    x.beginPath(); x.moveTo(0,i*32); x.lineTo(1024,i*32); x.stroke(); }
+  return ctex(c);
+}
+const ROOM = {W:20, D:16, H:7.2};
+const floorTex = makeFloorTex(); floorTex.wrapS=floorTex.wrapT=THREE.RepeatWrapping; floorTex.repeat.set(2.4,2);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.W+6,ROOM.D+6),
+  new THREE.MeshStandardMaterial({map:floorTex, roughness:.92, metalness:.15}));
+floor.rotation.x=-Math.PI/2; scene.add(floor);
+/* walls */
+const wallMat = new THREE.MeshStandardMaterial({color:0x17132e, roughness:.95, metalness:.05, side:THREE.DoubleSide});
+const backWall = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.W+6,ROOM.H), wallMat);
+backWall.position.set(0,ROOM.H/2,-ROOM.D/2-1); scene.add(backWall);
+const sideL = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.D+6,ROOM.H), wallMat.clone());
+sideL.rotation.y=Math.PI/2; sideL.position.set(-ROOM.W/2-1,ROOM.H/2,0); scene.add(sideL);
+const sideR = sideL.clone(); sideR.rotation.y=-Math.PI/2; sideR.position.x=ROOM.W/2+1; scene.add(sideR);
+/* neon trims */
+function neonStrip(w, color, x,y,z, ry=0){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,0.07,0.07),
+    new THREE.MeshBasicMaterial({color}));
+  m.position.set(x,y,z); m.rotation.y=ry; scene.add(m); return m;
+}
+neonStrip(ROOM.W+6,0x8247e5, 0,ROOM.H-0.4,-ROOM.D/2-0.98);
+neonStrip(ROOM.W+6,0x2ee6d6, 0,0.12,-ROOM.D/2-0.97);
+neonStrip(ROOM.D+6,0x8247e5, -ROOM.W/2-0.98,ROOM.H-0.4,0, Math.PI/2);
+neonStrip(ROOM.D+6,0x8247e5, ROOM.W/2+0.98,ROOM.H-0.4,0, Math.PI/2);
+neonStrip(ROOM.D+6,0x2ee6d6, -ROOM.W/2-0.97,0.12,0, Math.PI/2);
+neonStrip(ROOM.D+6,0x2ee6d6, ROOM.W/2+0.97,0.12,0, Math.PI/2);
+/* logo wall text */
+function makeLogoTex(){
+  const c=cnv(1024,256), x=c.getContext('2d');
+  x.fillStyle='#0d0b1e'; x.fillRect(0,0,1024,256);
+  x.textAlign='center'; x.textBaseline='middle';
+  x.font='900 96px Segoe UI,Arial'; 
+  const g=x.createLinearGradient(0,60,0,200); g.addColorStop(0,'#ffd23f'); g.addColorStop(1,'#ff8d2e');
+  x.fillStyle=g; x.fillText('⛏ THE MINING GAME', 512, 106);
+  x.font='700 44px Segoe UI,Arial'; x.fillStyle='#2ee6d6'; x.letterSpacing='18px';
+  x.fillText('W A T T   T Y C O O N', 512, 202);
+  return ctex(c);
+}
+const logoM = new THREE.Mesh(new THREE.PlaneGeometry(9,2.25),
+  new THREE.MeshBasicMaterial({map:makeLogoTex(), transparent:false}));
+logoM.position.set(0, 5.6, -ROOM.D/2-0.95); scene.add(logoM);
+/* big wall screen (dynamic) */
+const scrC = cnv(1024,512), scrX = scrC.getContext('2d');
+const scrTex = ctex(scrC);
+const screenM = new THREE.Mesh(new THREE.PlaneGeometry(7.4,3.7),
+  new THREE.MeshBasicMaterial({map:scrTex}));
+screenM.position.set(-ROOM.W/2-0.9, 3.3, -1.4); screenM.rotation.y=Math.PI/2; scene.add(screenM);
+const screenFrame = new THREE.Mesh(new THREE.BoxGeometry(0.12,3.95,7.65),
+  new THREE.MeshStandardMaterial({color:0x0a0918,roughness:.4,metalness:.7}));
+screenFrame.position.set(-ROOM.W/2-0.97,3.3,-1.4); scene.add(screenFrame);
+/* right wall: NFT poster gallery (filled after models load) */
+const posterGroup = new THREE.Group(); scene.add(posterGroup);
+
+/* ---------- desks / racks ---------- */
+const deskMat = new THREE.MeshStandardMaterial({color:0x241d47, roughness:.7, metalness:.35});
+const deskTopMat = new THREE.MeshStandardMaterial({color:0x2d2557, roughness:.55, metalness:.45});
+/* real ratios @2.25u/m: desk 1.9m wide × 0.98m deep, surface 75cm (1.68u) — ATX tower 46cm no longer dwarfs it */
+const DESK={W:4.3, D:2.2, TOP:1.60, SURF:1.68, SHELF:3.05};
+function makeDesk(x,z){
+  const g=new THREE.Group();
+  const top=new THREE.Mesh(new THREE.BoxGeometry(DESK.W,0.16,DESK.D), deskTopMat); top.position.y=DESK.TOP; g.add(top);
+  const legG=new THREE.BoxGeometry(0.14,DESK.TOP,0.14);
+  [[-DESK.W/2+0.2,-DESK.D/2+0.15],[DESK.W/2-0.2,-DESK.D/2+0.15],[-DESK.W/2+0.2,DESK.D/2-0.15],[DESK.W/2-0.2,DESK.D/2-0.15]].forEach(([lx,lz])=>{
+    const l=new THREE.Mesh(legG,deskMat); l.position.set(lx,DESK.TOP/2,lz); g.add(l); });
+  const shelf=new THREE.Mesh(new THREE.BoxGeometry(DESK.W,0.09,0.95), deskMat);
+  shelf.position.set(0,DESK.SHELF,-0.62); g.add(shelf);
+  const pole=new THREE.BoxGeometry(0.09,DESK.SHELF-DESK.TOP,0.09);
+  [[-DESK.W/2+0.1,-0.62],[DESK.W/2-0.1,-0.62]].forEach(([px,pz])=>{
+    const p=new THREE.Mesh(pole,deskMat); p.position.set(px,(DESK.SHELF+DESK.TOP)/2,pz); g.add(p); });
+  g.add(makeChair(!!S.chair));
+  g.position.set(x,0,z); scene.add(g); return g;
+}
+/* procedural office / gaming chair (no chair NFT model exists yet — see repo TODO) */
+function makeChair(gaming){
+  const g=new THREE.Group(); g.name='chairG';
+  const dark=new THREE.MeshStandardMaterial({color:0x14101f,roughness:.6,metalness:.5});
+  const pad=new THREE.MeshStandardMaterial({color:gaming?0x1b1430:0x241f33,roughness:.75,metalness:.2});
+  const acc=new THREE.MeshStandardMaterial({color:0xd42a4e,roughness:.5,metalness:.3,emissive:0x550a18});
+  // 5-star base + casters + gas lift
+  for(let i=0;i<5;i++){ const a=i/5*Math.PI*2;
+    const sp=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.05,0.09),dark);
+    sp.position.set(Math.cos(a)*0.25,0.07,Math.sin(a)*0.25); sp.rotation.y=-a; g.add(sp);
+    const c=new THREE.Mesh(new THREE.SphereGeometry(0.055,8,8),dark);
+    c.position.set(Math.cos(a)*0.46,0.055,Math.sin(a)*0.46); g.add(c); }
+  const lift=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.06,0.85,10),dark);
+  lift.position.y=0.5; g.add(lift);
+  // seat (45cm high)
+  const seat=new THREE.Mesh(new THREE.BoxGeometry(0.72,0.12,0.68),pad); seat.position.y=1.01; g.add(seat);
+  if(gaming){ const sb1=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.14,0.66),acc); sb1.position.set(-0.36,1.03,0); g.add(sb1);
+    const sb2=sb1.clone(); sb2.position.x=0.36; g.add(sb2); }
+  // backrest
+  const bH=gaming?1.15:0.8;
+  const back=new THREE.Mesh(new THREE.BoxGeometry(0.7,bH,0.1),pad);
+  back.position.set(0,1.01+bH/2+0.02,0.34); back.rotation.x=0.1; g.add(back);
+  if(gaming){
+    const st=new THREE.Mesh(new THREE.BoxGeometry(0.16,bH*0.9,0.02),acc);
+    st.position.set(0,back.position.y,0.285); st.rotation.x=0.1; g.add(st);
+    const hr=new THREE.Mesh(new THREE.BoxGeometry(0.44,0.16,0.12),acc);
+    hr.position.set(0,1.01+bH+0.12,0.36); hr.rotation.x=0.1; g.add(hr);
+    const led=new THREE.Mesh(new THREE.BoxGeometry(0.72,0.03,0.03),
+      new THREE.MeshBasicMaterial({color:0xff2e5e}));
+    led.position.set(0,1.01+bH+0.02,0.31); led.rotation.x=0.1; g.add(led);
+  }
+  // armrests
+  [[-0.4],[0.4]].forEach(([ax])=>{
+    const post=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.28,0.06),dark);
+    post.position.set(ax,1.2,0.1); g.add(post);
+    const arm=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.05,0.4),gaming?acc:dark);
+    arm.position.set(ax,1.35,0.05); g.add(arm); });
+  g.position.set(0.55,0,1.55); g.rotation.y=Math.PI+0.15; // tucked at the keyboard side, facing the desk
+  return g;
+}
+function rebuildChairs(){ for(const k in deskAt){ const d=deskAt[k];
+  const old=d.children.find(c=>c.name==='chairG'); if(old) d.remove(old);
+  d.add(makeChair(!!S.chair)); } }
+const deskAt={}; // slotIndex -> desk
+/* shared animated terminal texture */
+const termC=cnv(256,160), termX=termC.getContext('2d');
+const termTex=ctex(termC);
+let termLines=[];
+function drawTerm(){
+  termX.fillStyle='#04120a'; termX.fillRect(0,0,256,160);
+  if(Math.random()<0.9){
+    const msgs=['accepted share '+(Math.random()*99|0)+'ms','gpu0 temp ok','hash '+(Math.random()*999|0)+' kH/s','watt draw nominal','> mining '+(S?CFG.nets[S.net].name.toLowerCase():'polygon'),'nonce 0x'+((Math.random()*0xffffff|0)).toString(16),'diff retarget ok','stratum keepalive'];
+    termLines.push(msgs[Math.random()*msgs.length|0]);
+    if(termLines.length>9) termLines.shift();
+  }
+  termX.font='700 13px monospace';
+  termLines.forEach((l,i)=>{ termX.fillStyle=i===termLines.length-1?'#7dffb0':'#2f9c5c'; termX.fillText(l,8,20+i*15); });
+  termTex.needsUpdate=true;
+}
+/* slot rings */
+const ringGeo = new THREE.RingGeometry(1.35,1.5,48);
+const rings=[]; // {mesh, state}
+function makeRing(i){
+  const m=new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({color:0x8247e5, transparent:true, opacity:0.0, side:THREE.DoubleSide}));
+  m.rotation.x=-Math.PI/2; m.position.set(SLOTS[i][0],0.02,SLOTS[i][1]+0.35); scene.add(m); return m;
+}
+/* ---------- GLB models ---------- */
+const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
+const PROTO = {}; // key -> {scene, box}
+const THUMB = {}; // itemId -> dataURL
+async function loadModels(progress){
+  const defs=[['pc','pc.glb'],['cpu','cpu.glb'],['tx120','gpu_tx120.glb'],['gp50','gpu_gp50.glb'],['board','pcboard.glb']];
+  const total=defs.length+1; let done=0;
+  for(const [k,f] of defs){
+    const g=await loader.loadAsync('/'+f);
+    PROTO[k]=g.scene; done++; progress&&progress(done/total);
+  }
+  // brighten PC materials (original PBR is very dark)
+  PROTO.pc.traverse(n=>{ if(n.isMesh&&n.material){ n.material.roughness=Math.min(0.85,n.material.roughness??0.8);
+    if(n.material.color) n.material.color.multiplyScalar(2.4); }});
+  // Gen2 bundle: one GLB, one scene per component (from the official repo)
+  const g2=await loader.loadAsync('/gen2.glb');
+  for(const id in ITEMS){ const it=ITEMS[id]; if(!it.scene) continue;
+    const sc=g2.scenes.find(s=>s.name===it.scene);
+    if(sc) PROTO[it.key]=sc;
+  }
+  progress&&progress(1);
+}
+function instOf(key, matBoost){
+  const src=PROTO[key]; const o=src.clone(true);
+  return o;
+}
+/* normalize: scale so height=h, ground at y=0, centered */
+function normalize(o, targetH){
+  const box=new THREE.Box3().setFromObject(o);
+  const size=new THREE.Vector3(); box.getSize(size);
+  const s=targetH/size.y; o.scale.setScalar(s);
+  const box2=new THREE.Box3().setFromObject(o);
+  const c=new THREE.Vector3(); box2.getCenter(c);
+  o.position.x-=c.x; o.position.z-=c.z; o.position.y-=box2.min.y;
+  return o;
+}
+/* normalize by max dimension (safe for long flat models like GPUs) */
+function normalizeFit(o, target){
+  const box=new THREE.Box3().setFromObject(o);
+  const size=new THREE.Vector3(); box.getSize(size);
+  const s=target/Math.max(size.x,size.y,size.z); o.scale.setScalar(s);
+  const box2=new THREE.Box3().setFromObject(o);
+  const c=new THREE.Vector3(); box2.getCenter(c);
+  o.position.x-=c.x; o.position.z-=c.z; o.position.y-=box2.min.y;
+  return o;
+}
+/* normalize by width (for flat items like keyboards/mice) */
+function normalizeW(o, targetW){
+  const box=new THREE.Box3().setFromObject(o);
+  const size=new THREE.Vector3(); box.getSize(size);
+  const s=targetW/size.x; o.scale.setScalar(s);
+  const box2=new THREE.Box3().setFromObject(o);
+  const c=new THREE.Vector3(); box2.getCenter(c);
+  o.position.x-=c.x; o.position.z-=c.z; o.position.y-=box2.min.y;
+  return o;
+}
+/* server tower (garage structure, back wall) */
+let towerVis=null;
+function setTowerOwned(own){
+  if(towerVis){ towerVis.visible=own; return; }
+  if(!own||!PROTO.tower) return;
+  towerVis=new THREE.Group();
+  const m=instOf('tower');
+  const box=new THREE.Box3().setFromObject(m); const size=new THREE.Vector3(); box.getSize(size);
+  const s=Math.min(2.8/size.y, 2.2/size.x, 2.2/size.z); m.scale.setScalar(s);
+  const box2=new THREE.Box3().setFromObject(m); const c=new THREE.Vector3(); box2.getCenter(c);
+  m.position.x-=c.x; m.position.z-=c.z; m.position.y-=box2.min.y;
+  towerVis.add(m);
+  const glow=new THREE.PointLight(0x2ee6d6, 26, 8); glow.position.set(0,2.2,1.2); towerVis.add(glow);
+  towerVis.position.set(6.6,0,-ROOM.D/2+0.9); towerVis.rotation.y=0.35;
+  scene.add(towerVis);
+}
+/* offscreen thumbnails of each model */
+function makeThumbs(){
+  const c=cnv(256,256);
+  const r2=new THREE.WebGLRenderer({canvas:c,antialias:true,preserveDrawingBuffer:true});
+  r2.setSize(256,256); r2.outputColorSpace=THREE.SRGBColorSpace;
+  r2.toneMapping=THREE.ACESFilmicToneMapping; r2.toneMappingExposure=1.5;
+  const tScene=new THREE.Scene(); tScene.background=new THREE.Color(0x14102b);
+  tScene.add(new THREE.HemisphereLight(0xffffff,0x444466,2.0));
+  const dl=new THREE.DirectionalLight(0xffffff,3.0); dl.position.set(2,3,4); tScene.add(dl);
+  const dl2=new THREE.DirectionalLight(0x8888ff,1.4); dl2.position.set(-3,1,-2); tScene.add(dl2);
+  const tc=new THREE.PerspectiveCamera(40,1,0.01,50);
+  const views={pc:[1.35,[1.9,1.15,2.4],[0,0.6,0]], cpu:[1,[1.15,0.85,1.45],[0,0.5,0]],
+    tx120:[1,[1.35,0.9,1.5],[0,0.5,0]], gp50:[1,[1.45,0.95,1.6],[0,0.5,0]]};
+  const ids={pc:1,cpu:3,tx120:4,gp50:5};
+  const g2keys={};
+  for(const id in ITEMS){ const it=ITEMS[id];
+    if(!PROTO[it.key]) continue;
+    if(!ids[it.key]){ ids[it.key]=it.id; g2keys[it.key]=1;
+      views[it.key]=[1,[1.15,1.5,1.5],[0,0.42,0]]; }
+  }
+  for(const k in views){
+    if(!PROTO[k]) continue;
+    const [h,cp,ct]=views[k];
+    const raw=instOf(k);
+    if(g2keys[k]&&ITEMS[ids[k]].flip) raw.rotation.x=Math.PI;
+    const inst=g2keys[k]?normalizeFit(raw,1.05):normalize(raw,h); tScene.add(inst);
+    if(g2keys[k]) inst.rotation.y=-0.55;
+    tc.position.set(...cp); tc.lookAt(...ct);
+    r2.toneMappingExposure=g2keys[k]?0.85:1.5;
+    r2.render(tScene,tc);
+    THUMB[ids[k]]=c.toDataURL('image/png');
+    tScene.remove(inst);
+  }
+  r2.dispose();
+  THUMB[2]='/badge.webp';
+}
+/* NFT card poster texture */
+function makeCardTex(item){
+  const c=cnv(512,700), x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,700); g.addColorStop(0,'#1c1642'); g.addColorStop(1,'#0d0b1e');
+  x.fillStyle=g; x.fillRect(0,0,512,700);
+  x.strokeStyle='rgba(130,71,229,.7)'; x.lineWidth=6; x.strokeRect(8,8,496,684);
+  x.textAlign='center';
+  x.fillStyle='#9a93c4'; x.font='700 22px Segoe UI'; x.fillText((item.brand||'MINING GAME').toUpperCase(),256,52);
+  x.fillStyle='#fff'; x.font='900 40px Segoe UI'; x.fillText(item.name,256,98);
+  const img=new Image();
+  const tex=ctex(c);
+  img.onload=()=>{ x.drawImage(img,66,130,380,380); drawTraits(); tex.needsUpdate=true; };
+  img.src=THUMB[item.id];
+  function drawTraits(){
+    x.textAlign='center'; let y=560;
+    const rows=[];
+    if(item.hash) rows.push(`⛏ HASHPOWER ${item.hash}`);
+    if(item.watt) rows.push(`⚡ WATT USAGE ${item.watt}`);
+    if(item.luck) rows.push(`🍀 LUCK +${item.luck}%  ·  EFF +${item.eff}%`);
+    rows.push(`STAKE WEIGHT ${item.sw}   ·   GEN ${item.gen}`);
+    x.font='700 26px Segoe UI';
+    rows.forEach(r=>{ x.fillStyle='#2ee6d6'; x.fillText(r,256,y); y+=42; });
+  }
+  drawTraits();
+  return tex;
+}
+function buildPosters(){
+  const ids=[1,3,4,5,2];
+  ids.forEach((id,i)=>{
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(2.0,2.73),
+      new THREE.MeshBasicMaterial({map:makeCardTex(ITEMS[id])}));
+    m.position.set(ROOM.W/2+0.9, 3.4, -6.2+i*3.1); m.rotation.y=-Math.PI/2;
+    posterGroup.add(m);
+  });
+}
+/* Genesis badge display (center back) */
+let badgeMesh=null, badgePedestal=null;
+function buildBadgeDisplay(){
+  badgePedestal=new THREE.Group();
+  const base=new THREE.Mesh(new THREE.CylinderGeometry(0.9,1.1,0.5,32),
+    new THREE.MeshStandardMaterial({color:0x241d47,roughness:.4,metalness:.7}));
+  base.position.y=0.25; badgePedestal.add(base);
+  const tex=new THREE.TextureLoader().load('/badge.webp'); tex.colorSpace=THREE.SRGBColorSpace;
+  badgeMesh=new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.05,0.09,48),
+    [new THREE.MeshStandardMaterial({color:0xffd23f,roughness:.25,metalness:.9}),
+     new THREE.MeshStandardMaterial({map:tex,roughness:.3,metalness:.4}),
+     new THREE.MeshStandardMaterial({map:tex,roughness:.3,metalness:.4})]);
+  badgeMesh.rotation.z=Math.PI/2; badgeMesh.rotation.y=Math.PI/2;
+  badgeMesh.position.y=2.2; badgePedestal.add(badgeMesh);
+  badgePedestal.position.set(0,0,-ROOM.D/2+1.4); scene.add(badgePedestal);
+  badgeSpot.target=badgeMesh; 
+  setBadgeOwned(false);
+}
+let badgeSign=null, badgeHolo=null;
+function makeBadgeSign(){
+  const c=cnv(512,128), x=c.getContext('2d');
+  x.fillStyle='#0d0b1e'; x.fillRect(0,0,512,128);
+  x.strokeStyle='rgba(255,210,63,.6)'; x.lineWidth=4; x.strokeRect(4,4,504,120);
+  x.textAlign='center'; x.fillStyle='#ffd23f'; x.font='900 44px Segoe UI';
+  x.fillText('GENESIS BADGE',256,56);
+  x.fillStyle='#9a93c4'; x.font='700 30px Segoe UI'; x.fillText('only 100 ever minted',256,100);
+  badgeSign=new THREE.Mesh(new THREE.PlaneGeometry(2.4,0.6), new THREE.MeshBasicMaterial({map:ctex(c),transparent:true}));
+  badgeSign.position.set(0,3.7,-ROOM.D/2+1.42); scene.add(badgeSign);
+}
+function setBadgeOwned(own){
+  if(!badgePedestal) return;
+  badgeMesh.visible=own;
+  if(!badgeSign) makeBadgeSign();
+  if(!badgeHolo){
+    badgeHolo=new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.05,0.09,48),
+      new THREE.MeshBasicMaterial({color:0xffd23f,wireframe:true,transparent:true,opacity:0.22}));
+    badgeHolo.rotation.z=Math.PI/2; badgeHolo.rotation.y=Math.PI/2;
+    badgeHolo.position.y=2.2; badgePedestal.add(badgeHolo);
+  }
+  badgeHolo.visible=!own;
+}
+
+/* ---------- rig visuals ---------- */
+const rigVis=[]; // idx -> {group, led, gpuMeshes, cpuMesh, pcMesh}
+function clearRigVis(i){ if(rigVis[i]){ scene.remove(rigVis[i].group); rigVis[i]=null; } }
+function buildRigVis(i){
+  clearRigVis(i);
+  const r=S.rigs[i]; if(!r) return;
+  const [sx,sz]=SLOTS[r.slot];
+  if(!deskAt[r.slot]) deskAt[r.slot]=makeDesk(sx,sz);
+  const g=new THREE.Group();
+  // PC on desk — real-life scale: ATX mid-tower ≈46cm on a 75cm-high, 1.9m desk (2.25 u/m)
+  const pc=normalize(instOf('pc'),1.03);
+  pc.position.x+= -1.35; pc.position.z+= 0.18; pc.position.y+=DESK.SURF;
+  pc.rotation.y=Math.PI*0.5+0.18;
+  g.add(pc);
+  // monitor — size selectable in 🔧 GARAGE (default 27", real diagonal ratios)
+  const [mw,mh]=MONSIZES[S.monSize]||MONSIZES[27];
+  const mon=new THREE.Group();
+  const scy=0.34+mh/2;
+  const scr=new THREE.Mesh(new THREE.PlaneGeometry(mw,mh), new THREE.MeshBasicMaterial({map:termTex}));
+  scr.position.y=scy; mon.add(scr);
+  const bez=new THREE.Mesh(new THREE.BoxGeometry(mw+0.08,mh+0.08,0.06),
+    new THREE.MeshStandardMaterial({color:0x0c0a1c,roughness:.4,metalness:.6}));
+  bez.position.set(0,scy,-0.035); mon.add(bez);
+  const stand=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.055,0.34,10),
+    new THREE.MeshStandardMaterial({color:0x1a1533,roughness:.5,metalness:.6}));
+  stand.position.y=0.18; mon.add(stand);
+  const foot=new THREE.Mesh(new THREE.BoxGeometry(Math.min(0.6,mw*0.4),0.03,0.3),
+    stand.material); foot.position.y=0.02; mon.add(foot);
+  mon.position.set(0.55,DESK.SURF,-0.35); mon.rotation.y=-0.12; g.add(mon);
+  // second monitor (LC23 peripheral) — left of the main screen
+  if(S.periph[23]&&PROTO.lc23){ const m2=normalize(instOf('lc23'),0.68);
+    m2.position.x+=-0.55; m2.position.z+=-0.55; m2.position.y+=DESK.SURF; m2.rotation.y=0.35; g.add(m2); }
+  // keyboard: RGB model if owned, else plain box
+  if(S.periph[18]&&PROTO.kb){ const kbm=normalizeW(instOf('kb'),0.82);
+    kbm.position.x+=0.55; kbm.position.z+=0.55; kbm.position.y+=DESK.SURF+0.02; kbm.rotation.y=-0.1; g.add(kbm); }
+  else{ const kb=new THREE.Mesh(new THREE.BoxGeometry(0.78,0.035,0.26),
+    new THREE.MeshStandardMaterial({color:0x241d47,roughness:.6,metalness:.4}));
+    kb.position.set(0.55,DESK.SURF+0.02,0.55); kb.rotation.y=-0.1; g.add(kb); }
+  // red mouse peripheral
+  if(S.periph[17]&&PROTO.mouse){ const mm=normalizeW(instOf('mouse'),0.16);
+    mm.position.x+=1.35; mm.position.z+=0.58; mm.position.y+=DESK.SURF+0.02; mm.rotation.y=-0.3; g.add(mm); }
+  // CPU + GPUs live INSIDE the case (see 🔧 WORKBENCH) unless an open-air frame is racked
+  let cpuM=null;
+  // Bit Hammer ASIC on the floor beside the desk (real ASIC ≈ 40cm long)
+  if(r.asic&&PROTO.asic){ const am=normalizeFit(instOf('asic'),0.95);
+    am.position.x+=2.6; am.position.z+=0.45; am.rotation.y=-0.9; g.add(am); }
+  const gpuMs=[];
+  if(r.frame&&PROTO.frame){
+    // open-air mining rig frame on the shelf (never larger than the desk), GPUs racked at real ratio
+    const fm=normalizeFit(instOf('frame'),1.9);
+    fm.position.x+=0; fm.position.z+=-0.62; fm.position.y+=DESK.SHELF+0.05; g.add(fm);
+    const gn=r.gpus.length, span=0.62, x0=-(gn-1)*span/2;
+    r.gpus.forEach((gid,k)=>{
+      const it=ITEMS[gid];
+      const raw=instOf(it.key); if(it.flip) raw.rotation.x=Math.PI;
+      const m=normalizeFit(raw,0.67); // 30cm GPU at 2.25u/m
+      m.position.x+= x0+k*span; m.position.z+= -0.62; m.position.y+=DESK.SHELF+0.25;
+      g.add(m); gpuMs.push(m);
+    });
+  } else if(r.gpus.length||r.cpu){
+    // closed case: soft glow through the vents scales with installed hardware
+    const glow=new THREE.PointLight(0x2ee6d6, 0.35+0.2*r.gpus.length, 2.2);
+    glow.position.set(-1.15,1.6,0.5); g.add(glow);
+  }
+  // status LED bar on desk front
+  const led=new THREE.Mesh(new THREE.BoxGeometry(DESK.W-0.2,0.07,0.07),
+    new THREE.MeshBasicMaterial({color:0x3dff8a}));
+  led.position.set(0,DESK.TOP+0.12,DESK.D/2+0.02); g.add(led);
+  g.position.set(sx,0,sz);
+  scene.add(g);
+  rigVis[i]={group:g,led,gpuMeshes:gpuMs,cpuMesh:cpuM,pcMesh:pc,slot:r.slot};
+}
+function rebuildAllRigs(){ for(let i=0;i<9;i++) clearRigVis(i); S.rigs.forEach((r,i)=>buildRigVis(i)); refreshRings(); }
+/* rings show free/occupied slots when shopping for PC */
+function refreshRings(){
+  for(let i=0;i<9;i++){ if(!rings[i]) rings[i]=makeRing(i);
+    rings[i].visible = i<slotCount();
+  }
+}
+/* ---------- particles ---------- */
+const PARTS=[];
+const partGeo=new THREE.SphereGeometry(0.045,6,6);
+const partMatGold=new THREE.MeshBasicMaterial({color:0xffd23f});
+const partMatPur=new THREE.MeshBasicMaterial({color:0xb47cff});
+const partMatCyan=new THREE.MeshBasicMaterial({color:0x2ee6d6});
+function burst(pos, n, mat, spd=2.6){
+  for(let i=0;i<n;i++){
+    const m=new THREE.Mesh(partGeo, mat);
+    m.position.copy(pos);
+    const a=Math.random()*Math.PI*2, e=Math.random()*Math.PI/2;
+    m.userData.v=new THREE.Vector3(Math.cos(a)*Math.cos(e),Math.sin(e)+0.6,Math.sin(a)*Math.cos(e)).multiplyScalar(spd*(0.5+Math.random()*0.8));
+    m.userData.life=1.2+Math.random()*0.5;
+    scene.add(m); PARTS.push(m);
+  }
+}
+function tickParts(dt){
+  for(let i=PARTS.length-1;i>=0;i--){ const p=PARTS[i];
+    p.userData.life-=dt; if(p.userData.life<=0){ scene.remove(p); PARTS.splice(i,1); continue; }
+    p.userData.v.y-=4.5*dt; p.position.addScaledVector(p.userData.v,dt);
+    if(p.position.y<0.03){ p.position.y=0.03; p.userData.v.y*=-0.4; p.userData.v.x*=0.7; p.userData.v.z*=0.7; }
+    const s=Math.min(1,p.userData.life); p.scale.setScalar(s);
+  }
+}
+/* floating DOM labels above rigs */
+let lastLabelT=0;
+function floatLabel(worldPos, text, color, force){
+  const tn=performance.now();
+  if(!force && tn-lastLabelT<700) return;
+  lastLabelT=tn;
+  const d=document.createElement('div'); d.className='f3d'; d.textContent=text;
+  if(color) d.style.color=color;
+  document.body.appendChild(d);
+  const p=worldPos.clone(); let t=0;
+  function up(){
+    t+=1/60; p.y+=0.014;
+    const v=p.clone().project(cam);
+    d.style.left=(v.x*0.5+0.5)*innerWidth-30+'px';
+    d.style.top=(-v.y*0.5+0.5)*innerHeight+'px';
+    d.style.opacity=String(1-t/1.6);
+    if(t<1.6) requestAnimationFrame(up); else d.remove();
+  }
+  up();
+}
+/* ---------- wall screen drawing ---------- */
+const hashHist=[]; const priceHist={pol:[],alt:[],wtx:[]};
+let lastBlocksFeed=[];
+function drawScreen(){
+  const x=scrX; x.fillStyle='#07051a'; x.fillRect(0,0,1024,512);
+  x.strokeStyle='rgba(46,230,214,.25)'; x.lineWidth=2; x.strokeRect(6,6,1012,500);
+  const net=CFG.nets[S.net];
+  x.textAlign='left';
+  x.fillStyle='#9a93c4'; x.font='700 30px monospace';
+  x.fillText('NETWORK', 40, 60);
+  x.fillStyle=S.net==='polygon'?'#a06bff':'#ffb020'; x.font='900 52px monospace';
+  x.fillText(net.name.toUpperCase(), 40, 116);
+  x.fillStyle='#9a93c4'; x.font='700 26px monospace';
+  x.fillText('DIFF '+difficulty().toFixed(2)+'x   REWARD '+net.reward+' '+net.sym, 40, 158);
+  // hashrate sparkline
+  x.fillStyle='#9a93c4'; x.font='700 26px monospace'; x.fillText('HASHRATE '+fmt(totHash())+' H', 40, 220);
+  x.strokeStyle='#2ee6d6'; x.lineWidth=3; x.beginPath();
+  const H=hashHist, n=H.length, maxH=Math.max(10,...H);
+  for(let i=0;i<n;i++){ const px=40+i*(500/Math.max(60,n)), py=330-90*(H[i]/maxH);
+    i?x.lineTo(px,py):x.moveTo(px,py); }
+  x.stroke();
+  // prices
+  x.font='700 26px monospace';
+  x.fillStyle='#a06bff'; x.fillText('POL '+S.price.pol.toFixed(2)+' ⚡', 620, 220);
+  x.fillStyle='#ffb020'; x.fillText('ALT '+S.price.alt.toFixed(2)+' ⚡', 620, 258);
+  ['pol','alt'].forEach((cn,ci)=>{
+    const Ph=priceHist[cn], pn=Ph.length; if(pn<2) return;
+    const mx=Math.max(...Ph), mn=Math.min(...Ph);
+    x.strokeStyle=cn==='pol'?'#a06bff':'#ffb020'; x.lineWidth=2.5; x.beginPath();
+    for(let i=0;i<pn;i++){ const px=620+i*(360/Math.max(50,pn)), py=330-60*((Ph[i]-mn)/Math.max(0.01,mx-mn));
+      i?x.lineTo(px,py):x.moveTo(px,py); }
+    x.stroke();
+  });
+  // block feed
+  x.fillStyle='#9a93c4'; x.font='700 24px monospace'; x.fillText('LATEST BLOCKS', 40, 390);
+  x.font='400 23px monospace';
+  lastBlocksFeed.slice(-3).reverse().forEach((b,i)=>{
+    x.fillStyle=b.lucky?'#ffd23f':'#e8e4ff';
+    x.fillText(b.txt, 40, 424+i*30);
+  });
+  scrTex.needsUpdate=true;
+}
+/* ================= WORKBENCH — open case, real-scale motherboard, drag-snap install ================= */
+/* bench scale: 6 units per meter. ATX board 305x244mm, GPU 300mm, CPU package 40mm. */
+const BM=6;
+let benchOpen=false, benchRi=0, benchInit=false;
+let bR=null, bScene=null, bCam=null, bBoardG=null, bMountG=null, bSlotG=null;
+let bSlots=[], bDrag=null, bSel=null, bT=0, bPuffs=[];
+const bRay=new THREE.Raycaster(), bPtr=new THREE.Vector2();
+const BOARD_TILT=0.98; // rad, test-bench tilt toward camera (component face up)
+function benchSetup(){
+  if(benchInit) return; benchInit=true;
+  bScene=new THREE.Scene();
+  bScene.fog=new THREE.Fog(0x07051a, 9, 20);
+  bCam=new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 60);
+  bCam.position.set(0, 3.1, 6.4); bCam.lookAt(0, 1.35, 0);
+  bR=new THREE.WebGLRenderer({antialias:true, alpha:true});
+  bR.setPixelRatio(Math.min(devicePixelRatio,2)); bR.setSize(innerWidth,innerHeight);
+  $('bench').insertBefore(bR.domElement, $('bench-top'));
+  bScene.add(new THREE.AmbientLight(0x8890c0, 0.55));
+  const key=new THREE.SpotLight(0xfff2d8, 90, 30, 0.7, 0.5); key.position.set(3,7,5); bScene.add(key);
+  const cyan=new THREE.PointLight(0x2ee6d6, 26, 12); cyan.position.set(-4,2.5,2.5); bScene.add(cyan);
+  const pur=new THREE.PointLight(0x8247e5, 30, 12); pur.position.set(4,1.6,-2); bScene.add(pur);
+  // platform
+  const plat=new THREE.Mesh(new THREE.CylinderGeometry(3.4,3.7,0.22,48),
+    new THREE.MeshStandardMaterial({color:0x17123a,roughness:.55,metalness:.6}));
+  plat.position.y=-0.11; bScene.add(plat);
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(3.42,0.03,8,64),
+    new THREE.MeshBasicMaterial({color:0x2ee6d6}));
+  rim.rotation.x=Math.PI/2; rim.position.y=0.02; bScene.add(rim);
+  // grid backdrop
+  const grid=new THREE.GridHelper(30,30,0x2a2160,0x1a1440); grid.position.y=-0.2; bScene.add(grid);
+  // tilted stand arms
+  const armM=new THREE.MeshStandardMaterial({color:0x241d47,roughness:.5,metalness:.7});
+  [[-0.95],[0.95]].forEach(([x])=>{
+    const a=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.14,1.9),armM);
+    a.position.set(x,0.62,0.22); a.rotation.x=BOARD_TILT; bScene.add(a);
+  });
+  // the REAL Mining Game PC Board NFT model (token #20 in the project files)
+  bBoardG=new THREE.Group();
+  const board=normalizeFit(instOf('board'), 2.05); // real PC Board NFT — long axis ≈ 305mm at bench scale
+  board.position.y-=0.02;
+  bBoardG.add(board);
+  bBoardG.rotation.x=BOARD_TILT;
+  bBoardG.position.set(0,1.06,0.28);
+  bScene.add(bBoardG);
+  bSlotG=new THREE.Group(); bBoardG.add(bSlotG);
+  bMountG=new THREE.Group(); bBoardG.add(bMountG);
+  window.__bench={ get board(){return bBoardG}, get scene(){return bScene}, get cam(){return bCam}, sync:benchSync };
+  addEventListener('resize',()=>{ if(!bR) return; bCam.aspect=innerWidth/innerHeight; bCam.updateProjectionMatrix(); bR.setSize(innerWidth,innerHeight); });
+  benchPointerWire();
+}
+/* board-local slot layout (board length axis = z, width = x, surface y≈0.29) */
+const SLOT_Y=0.32;
+function benchSlotDefs(r){
+  const defs=[];
+  defs.push({kind:'cpu', x:-0.28, z:-0.52, y:0.46, label:'CPU SOCKET', filled:!!r.cpu});
+  const cap=gpuCap(r);
+  for(let k=0;k<cap;k++)
+    defs.push({kind:'gpu', idx:k, x:0, z:0.12+k*0.26, label:'PCIe x16 · '+(k+1), filled:!!r.gpus[k]});
+  defs.push({kind:'asic', x:-2.6, z:0.4, floor:true, label:'FLOOR PAD', filled:!!r.asic});
+  defs.push({kind:'frame', x:2.6, z:0.4, floor:true, label:'RACK ZONE', filled:!!r.frame});
+  return defs;
+}
+function benchGpuMesh(gid, target){
+  const it=ITEMS[gid];
+  const raw=instOf(it.key); if(it.flip) raw.rotation.x=Math.PI;
+  const m=normalizeFit(raw, target);
+  const bb=new THREE.Box3().setFromObject(m); const sz=new THREE.Vector3(); bb.getSize(sz);
+  if(sz.z>sz.x){ const p=new THREE.Group(); p.add(m); m.rotation.y=Math.PI/2; return p; } // long axis → x
+  const p=new THREE.Group(); p.add(m); return p;
+}
+function benchCompMesh(kind, id){
+  if(kind==='gpu') return benchGpuMesh(id, 0.30*BM); // 300mm
+  if(kind==='cpu'){ const g=new THREE.Group(); g.add(normalizeFit(instOf(ITEMS[id].key), 0.62)); return g; } // cooler on 40mm socket
+  if(kind==='asic'){ const g=new THREE.Group(); g.add(normalizeFit(instOf('asic'), 1.5)); return g; }
+  if(kind==='frame'){ const g=new THREE.Group(); g.add(normalizeFit(instOf('frame'), 1.7)); return g; }
+  return new THREE.Group();
+}
+let bSceneBits=[];
+function benchSync(){
+  const r=S.rigs[benchRi]; if(!r) return;
+  while(bSlotG.children.length) bSlotG.remove(bSlotG.children[0]);
+  while(bMountG.children.length) bMountG.remove(bMountG.children[0]);
+  bSceneBits.forEach(o=>bScene.remove(o)); bSceneBits=[];
+  bSlots=[];
+  for(const d of benchSlotDefs(r)){
+    if(d.floor && d.filled) continue;
+    let marker;
+    if(d.kind==='cpu'){
+      marker=new THREE.Mesh(new THREE.RingGeometry(0.16,0.24,4), new THREE.MeshBasicMaterial({color:0xffd23f,transparent:true,opacity:.5,side:THREE.DoubleSide}));
+      marker.rotation.x=-Math.PI/2; marker.rotation.z=Math.PI/4;
+    } else if(d.kind==='gpu'){
+      marker=new THREE.Mesh(new THREE.PlaneGeometry(1.35,0.12), new THREE.MeshBasicMaterial({color:0x2ee6d6,transparent:true,opacity:.4,side:THREE.DoubleSide}));
+      marker.rotation.x=-Math.PI/2;
+    } else {
+      marker=new THREE.Mesh(new THREE.RingGeometry(0.55,0.62,32), new THREE.MeshBasicMaterial({color:d.kind==='asic'?0xff5a68:0xb47cff,transparent:true,opacity:.4,side:THREE.DoubleSide}));
+      marker.rotation.x=-Math.PI/2;
+    }
+    let world;
+    const my=d.y||SLOT_Y;
+    if(d.floor){ marker.position.set(d.x,0.02,d.z); bScene.add(marker); bSceneBits.push(marker); world=new THREE.Vector3(d.x,0.1,d.z); }
+    else { marker.position.set(d.x,my,d.z); bSlotG.add(marker); world=bBoardG.localToWorld(new THREE.Vector3(d.x,my,d.z)); }
+    // hit sphere for tap-to-install
+    const hit=new THREE.Mesh(new THREE.SphereGeometry(d.kind==='gpu'?0.55:0.62,8,8), new THREE.MeshBasicMaterial({visible:false}));
+    hit.position.copy(marker.position); if(d.floor){ bScene.add(hit); bSceneBits.push(hit); } else bSlotG.add(hit);
+    const slot={...d, marker, hit, world};
+    hit.userData.slot=slot;
+    if(d.filled){ marker.visible=false; hit.visible=false; }
+    bSlots.push(slot);
+  }
+  // mounted components
+  const r2=S.rigs[benchRi];
+  if(r2.cpu){ const m=benchCompMesh('cpu',r2.cpu); m.position.set(-0.28,0.42,-0.52); bMountG.add(m); }
+  r2.gpus.forEach((gid,k)=>{
+    const m=benchCompMesh('gpu',gid); m.position.set(0,SLOT_Y+0.06,0.12+k*0.26); bMountG.add(m);
+  });
+  if(r2.asic){ const m=benchCompMesh('asic',0); m.position.set(-2.6,0,0.4); m.rotation.y=0.7; bScene.add(m); bSceneBits.push(m); }
+  if(r2.frame){ const m=benchCompMesh('frame',0); m.position.set(2.75,0,-0.3); m.rotation.y=-0.55; bScene.add(m); bSceneBits.push(m); }
+  benchTray();
+}
+function benchCompat(slot,it){
+  if(slot.filled) return false;
+  if(slot.kind==='cpu') return it.comp==='Processor';
+  if(slot.kind==='gpu') return it.comp==='GPU';
+  if(slot.kind==='asic') return it.comp==='ASIC';
+  if(slot.kind==='frame') return it.comp==='Frame';
+  return false;
+}
+function benchTray(){
+  const t=$('bench-tray'); if(!t) return;
+  const r=S.rigs[benchRi];
+  const rows=[];
+  for(const id of INV_IDS){
+    const n=S.inv[id]||0; if(n<=0) continue;
+    const it=ITEMS[id];
+    if(!['Processor','GPU','ASIC','Frame'].includes(it.comp)) continue;
+    rows.push(`<div class="traypart ${bSel===id?'drag':''}" data-id="${id}">
+      <img src="${THUMB[id]||''}" draggable="false"><b>${it.name}</b><small>${it.comp} · ${it.hash} H</small><span class="n">×${n} in inventory</span></div>`);
+  }
+  t.innerHTML=rows.length?rows.join(''):`<div class="traypart" style="cursor:default;min-width:260px"><b>inventory empty</b><small>hit 🛒 BUY COMPONENTS — GPUs &amp; CPUs are sold separately</small></div>`;
+  t.querySelectorAll('.traypart[data-id]').forEach(el=>{
+    el.addEventListener('pointerdown',e=>{ e.preventDefault(); benchDragStart(+el.dataset.id, e); });
+  });
+  const sub=$('bench-sub');
+  if(sub&&r) sub.textContent=`side panel off · ${r.cpu?'1':'0'}/1 CPU · ${r.gpus.length}/${gpuCap(r)} GPU slots · components at real-life scale`;
+}
+/* ---------- drag & snap ---------- */
+function benchRayAt(e){
+  const rc=bR.domElement.getBoundingClientRect();
+  bPtr.x=((e.clientX-rc.left)/rc.width)*2-1; bPtr.y=-((e.clientY-rc.top)/rc.height)*2+1;
+  bRay.setFromCamera(bPtr,bCam);
+}
+const bDragPlane=new THREE.Plane();
+function benchDragStart(id,e){
+  const it=ITEMS[id];
+  const kind=it.comp==='Processor'?'cpu':it.comp==='GPU'?'gpu':it.comp==='ASIC'?'asic':'frame';
+  const ghost=benchCompMesh(kind,id);
+  ghost.traverse(n=>{ if(n.isMesh&&n.material){ n.material=n.material.clone(); n.material.transparent=true; n.material.opacity=.75; } });
+  bScene.add(ghost);
+  bDrag={id,it,kind,ghost,snap:null,moved:false,sx:e.clientX,sy:e.clientY};
+  bDragPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0,0.42,1).normalize(), new THREE.Vector3(0,1.5,0.6));
+  SFX.click();
+  benchDragMove(e);
+}
+function benchDragMove(e){
+  if(!bDrag) return;
+  if(Math.abs(e.clientX-bDrag.sx)+Math.abs(e.clientY-bDrag.sy)>7) bDrag.moved=true;
+  benchRayAt(e);
+  const p=new THREE.Vector3();
+  bRay.ray.intersectPlane(bDragPlane,p)||p.set(0,1.5,1);
+  // screen-space snap: nearest compatible slot to the pointer
+  const asp=bCam.aspect;
+  let best=null,bd=1e9;
+  for(const s of bSlots){
+    if(!benchCompat(s,bDrag.it)) continue;
+    const w=s.floor?s.world.clone():bBoardG.localToWorld(new THREE.Vector3(s.x,s.y||SLOT_Y,s.z));
+    const ndc=w.clone().project(bCam);
+    const d=Math.hypot((ndc.x-bPtr.x)*asp,(ndc.y-bPtr.y));
+    if(d<bd){bd=d;best={s,w};}
+  }
+  if(best&&bd<0.33){
+    bDrag.snap=best.s;
+    bDrag.ghost.position.lerp(best.w,0.55);
+    if(bDrag.kind==='gpu'||bDrag.kind==='cpu') bDrag.ghost.rotation.x=BOARD_TILT; else bDrag.ghost.rotation.x=0;
+  } else {
+    bDrag.snap=null;
+    bDrag.ghost.position.copy(p);
+    bDrag.ghost.rotation.x=BOARD_TILT*0.4;
+  }
+}
+function benchDragEnd(){
+  if(!bDrag) return;
+  const d=bDrag; bDrag=null;
+  bScene.remove(d.ghost);
+  if(d.snap){ benchInstall(d.snap,d.id); }
+  else if(!d.moved){ bSel=(bSel===d.id?null:d.id); benchTray(); } // tap = arm for tap-on-slot
+}
+function benchInstall(slot,id){
+  const before=S.rigs[benchRi].gpus.length + (S.rigs[benchRi].cpu?1:0);
+  installPart(benchRi,id);
+  const after=S.rigs[benchRi].gpus.length + (S.rigs[benchRi].cpu?1:0) + (S.rigs[benchRi].asic?1:0) + (S.rigs[benchRi].frame?1:0);
+  bSel=null;
+  benchSync();
+  // snap pop on the mount point
+  const w=slot.floor?slot.world:bBoardG.localToWorld(new THREE.Vector3(slot.x,SLOT_Y,slot.z));
+  for(let i=0;i<10;i++){
+    const m=new THREE.Mesh(partGeo, partMatCyan.clone());
+    m.position.copy(w); m.userData.v=new THREE.Vector3((Math.random()-0.5)*2,(Math.random())*2,(Math.random()-0.5)*2);
+    m.userData.life=0.8; bScene.add(m); bPuffs.push(m);
+  }
+}
+function benchPointerWire(){
+  const el=$('bench');
+  el.addEventListener('pointermove',benchDragMove);
+  el.addEventListener('pointerup',benchDragEnd);
+  bR.domElement.addEventListener('pointerdown',e=>{
+    if(bDrag||!bSel) return;
+    benchRayAt(e);
+    const hits=bRay.intersectObjects(bSlots.filter(s=>!s.filled).map(s=>s.hit),true);
+    if(hits.length){
+      const slot=hits[0].object.userData.slot;
+      if(benchCompat(slot,ITEMS[bSel])) benchInstall(slot,bSel);
+      else { SFX.err(); }
+    }
+  });
+}
+/* ---------- open/close/loop ---------- */
+function openBench(ri){
+  if(!S.rigs[ri]) return;
+  benchRi=ri; benchSetup();
+  $('bench-rig').textContent=ri+1;
+  $('bench').classList.add('open');
+  benchOpen=true; bSel=null;
+  benchSync();
+  SFX.install();
+}
+function closeBench(){ benchOpen=false; $('bench').classList.remove('open'); bSel=null; if(bDrag){ bScene.remove(bDrag.ghost); bDrag=null; } }
+function benchLoop(dt){
+  if(!benchOpen||!bR) return;
+  bT+=dt;
+  const pulse=0.35+0.35*Math.sin(bT*4);
+  for(const s of bSlots){
+    if(s.filled||!s.marker.visible) continue;
+    const active=(bDrag&&benchCompat(s,bDrag.it))||(bSel&&benchCompat(s,ITEMS[bSel]));
+    s.marker.material.opacity=active?0.45+pulse*0.5:(bDrag||bSel?0.08:0.3+pulse*0.18);
+    if(bDrag&&bDrag.snap===s) s.marker.material.opacity=1;
+  }
+  for(let i=bPuffs.length-1;i>=0;i--){ const m=bPuffs[i];
+    m.userData.life-=dt; m.position.addScaledVector(m.userData.v,dt*2); m.material.opacity=m.userData.life;
+    m.material.transparent=true;
+    if(m.userData.life<=0){ bScene.remove(m); bPuffs.splice(i,1); } }
+  bBoardG.rotation.z=Math.sin(bT*0.5)*0.012;
+  bCam.position.x=Math.sin(bT*0.22)*0.25; bCam.lookAt(0,1.35,0);
+  bR.render(bScene,bCam);
+}
+
+/* ================= SIMULATION ================= */
+let noWatt=false;
+function simTick(dt){ // dt seconds (fixed 0.1)
+  const nowT=performance.now()/1000;
+  // prices random walk (every tick, small)
+  for(const nk of Object.keys(CFG.nets)){
+    const n=CFG.nets[nk], cn=n.coin;
+    const p=S.price[cn];
+    const drift=(n.p0-p)*0.0015;
+    S.price[cn]=clamp(p+p*(Math.random()-0.5)*n.vol*Math.sqrt(dt)*2+drift*dt*10, n.pmin, n.pmax);
+  }
+  // temperature
+  const tt=tempTarget();
+  S.temp += (tt-S.temp)*Math.min(1,dt*0.25);
+  // overclock stability: crashed rigs cool down & reboot timers tick; hot OC rigs may crash
+  S.rigs.forEach((r,ri)=>{
+    if(r.crashT>0){ r.crashT-=dt; if(r.crashT<=0){ r.crashT=0; toast(`🖥 Rig ${ri+1} auto-rebooted`,'cyan'); renderHud(); } return; }
+    if(r.on && r.wear<100 && rigHash(r)>0){
+      const o=r.oc||{c:0,m:0};
+      let wpm=0.05 + (o.c+o.m)*0.09 + (S.temp>80?0.5:0) + (S.temp>95?1.6:0); // % per minute
+      r.wear=Math.min(100, r.wear + wpm*dt/60);
+      if(r.wear>=100){ r.wear=100; SFX.alarm();
+        toast(`🔥 RIG ${ri+1} BROKE DOWN — 100% wear. Repair it in the rig panel`,'red',8000);
+        const pos=new THREE.Vector3(SLOTS[r.slot][0],2.0,SLOTS[r.slot][1]);
+        burst(pos,30,partMatGold,3); floatLabel(pos,'🔥 BROKEN','#ff6b74',true);
+        renderHud();
+      }
+    }
+    const risk=ocRiskPerMin(r);
+    if(risk>0 && Math.random()<risk*dt/60){
+      r.crashT=45; SFX.alarm();
+      toast(`💥 RIG ${ri+1} CRASHED — overclock unstable at ${Math.round(S.temp)}°C. Log into its OS to reboot`,'red',7000);
+      const pos=new THREE.Vector3(SLOTS[r.slot][0],2.0,SLOTS[r.slot][1]);
+      burst(pos,26,partMatCyan,3); floatLabel(pos,'💥 CRASH','#ff6b74',true);
+      if(OS.open&&OS.rig===ri) osRefresh();
+    }
+  });
+  // stake income (always on)
+  const stakeIn=totSWStake()*CFG.stakePerSW*stakeMult()*dt;
+  S.watt+=stakeIn; S.lifeWatt+=stakeIn;
+  // mining
+  const draw=totWatt();
+  const net=CFG.nets[S.net];
+  const P=curPool();
+  const hostFree=P&&P.mine; // mining on own hosted pool = free power
+  const need=hostFree?0:draw*CFG.consumePerWatt*effMult()*dt;
+  noWatt = S.watt<need;
+  if(!noWatt && S.rigs.length){
+    S.watt-=need;
+    if(need>0){ S.burned+=need*(1-CFG.hostBurnCut); } // 1% of burn goes to pool host, rest → 0x000…dEaD
+    const hf=heatFactor(), pf=powerFactor();
+    const spd=P?P.speed:1, fee=P?P.fee:0;
+    const lam=totHash()*net.lam*hf*pf*luckMult()/difficulty()*spd*(S.altHybrid&&S.net==='alt'?0.5:1);
+    if(Math.random()<lam*dt){
+      // share / block found!
+      const lucky=Math.random()<CFG.luckyChance*luckMult();
+      const amt=(net.reward/spd)*(1-fee)*(lucky?CFG.luckyMult:1)*(0.85+Math.random()*0.3);
+      poolCredit(net.coin, amt, P); S.blocks++; S.blocksNet[net.coin]++; S.shares++;
+      if(lucky) S.lucky++;
+      const ri=Math.floor(Math.random()*S.rigs.length);
+      const rv=rigVis[ri];
+      if(rv){
+        const pos=new THREE.Vector3(SLOTS[S.rigs[ri].slot][0],2.2,SLOTS[S.rigs[ri].slot][1]);
+        burst(pos, lucky?46:16, lucky?partMatGold:(S.net==='polygon'?partMatPur:partMatGold), lucky?4:2.6);
+        floatLabel(pos, `+${amt.toFixed(2)} ${net.sym}${lucky?' ✨LUCKY':''}`, lucky?'#ffd23f':(S.net==='polygon'?'#c9a6ff':'#ffce7a'), lucky);
+      }
+      lastBlocksFeed.push({txt:`#${S.blocks} +${amt.toFixed(2)} ${net.sym}${lucky?' LUCKY x5':''}`, lucky});
+      if(lastBlocksFeed.length>8) lastBlocksFeed.shift();
+      lucky?SFX.lucky():SFX.block();
+      if(lucky) toast(`✨ LUCKY BLOCK! +${amt.toFixed(2)} ${net.sym} (x${CFG.luckyMult})`,'gold');
+      renderHud();
+    }
+  }
+  poolTick(dt);
+  // hum follows draw
+  if(AU.humG) AU.humG.gain.value=(S.muted?0:Math.min(0.5,0.05+draw*0.004))*(noWatt?0.3:1);
+}
+/* market */
+function sellCoin(cn, amt){
+  amt = amt===undefined ? S[cn] : Math.min(amt, S[cn]);
+  if(amt<=0.001){ SFX.err(); return false; }
+  const val=amt*S.price[cn];
+  S[cn]-=amt; S.watt+=val; S.lifeWatt+=val; S.sold[cn]+=val;
+  SFX.sell(); toast(`Sold ${fmt(amt)} ${cn.toUpperCase()} → +${fmt(val)} ⚡WATT`,'grn');
+  renderHud(); save(); return true;
+}
+/* overclock + reboot (Mining Game OS) */
+function setOC(ri,c,m){
+  const r=S.rigs[ri]; if(!r) return;
+  r.oc={c:clamp(c,0,5), m:clamp(m,0,5)};
+  SFX.install(); renderHud(); save();
+}
+function rebootRig(ri){
+  const r=S.rigs[ri]; if(!r||r.crashT<=0) return;
+  r.crashT=0; SFX.swap();
+  toast(`🖥 Rig ${ri+1} rebooted — hashing resumed`,'grn');
+  renderHud(); save();
+}
+/* offline earnings */
+function applyOffline(){
+  const el=(now()-S.lastSeen)/1000;
+  if(el<60) return;
+  const capped=Math.min(el, CFG.offlineCapH*3600);
+  const stakeIn=totSWStake()*CFG.stakePerSW*stakeMult()*capped*CFG.offlineEff;
+  // mining estimate: expected blocks × reward, limited by watt budget
+  const draw=totWatt()*CFG.consumePerWatt*effMult();
+  const sec=Math.min(capped, draw>0 ? S.watt/draw : capped);
+  const net=CFG.nets[S.net];
+  const lam=totHash()*net.lam*powerFactor()*luckMult()/difficulty();
+  const blocks=Math.floor(lam*sec*CFG.offlineEff);
+  const coins=blocks*net.reward;
+  S.watt+=stakeIn; S.lifeWatt+=stakeIn; S.watt-=Math.min(S.watt,draw*sec);
+  S[net.coin]+=coins; S.blocks+=blocks; S.blocksNet[net.coin]+=blocks;
+  const hrs=(capped/3600).toFixed(1);
+  setTimeout(()=>toast(`⏰ While you were away ${hrs}h: +${fmt(stakeIn)} ⚡ staked, ${blocks} blocks (+${fmt(coins)} ${net.sym})`,'cyan',9000),1200);
+}
+/* ---------- actions ---------- */
+function mintPC(free){
+  if(S.pcCount>0 && S.rigs.length>=slotCount()){ SFX.err(); toast('No free rack space — buy a Rack Expansion in 🔧 GARAGE','red'); return false; }
+  const price=free?0:pcPrice();
+  if(S.watt<price){ SFX.err(); toast('Not enough WATT','red'); return false; }
+  S.watt-=price;
+  const used=new Set(S.rigs.map(r=>r.slot));
+  let slot=-1; for(let i=0;i<slotCount();i++) if(!used.has(i)){slot=i;break;}
+  S.rigs.push({slot,cpu:0,gpus:[],asic:0,frame:0,oc:{c:0,m:0},crashT:0,on:1,wear:0}); S.pcCount++;
+  buildRigVis(S.rigs.length-1);
+  burst(new THREE.Vector3(SLOTS[slot][0],1.8,SLOTS[slot][1]),30,partMatCyan,3);
+  SFX.mint(); toast(free?'🖥 Gaming PC minted — FREE':'🖥 Gaming PC minted for '+fmt(price)+' ⚡','grn');
+  renderHud(); save(); return true;
+}
+function costIn(cur,wattPrice){ return cur==='pol'?wattPrice/S.price.pol : cur==='alt'?wattPrice/S.price.alt : wattPrice; }
+function curBal(cur){ return cur==='pol'?S.pol : cur==='alt'?S.alt : S.watt; }
+function curSym(cur){ return cur==='pol'?'POL' : cur==='alt'?'ALT' : '⚡WATT'; }
+function curPay(cur,amt){ if(cur==='pol') S.pol-=amt; else if(cur==='alt') S.alt-=amt; else S.watt-=amt; }
+function buyItem(id){
+  const it=ITEMS[id];
+  if(id===1){ if(mintPC(S.pcCount===0)) renderShop(); return; }
+  if(it.gen2 && S.gen<2){ SFX.err(); toast('🔒 Gen2 hardware — reach GENERATION 2 in 🔧 GARAGE to unlock','red'); return; }
+  if(id===2 && S.badge){ SFX.err(); return; }
+  if(it.comp==='Peripheral' && S.periph[id]){ SFX.err(); return; }
+  if(id===19 && S.tower){ SFX.err(); return; }
+  const left=it.supply-S.bought[id];
+  if(left<=0){ SFX.err(); toast('Sold out!','red'); return; }
+  const cur=S.payCur||'watt', cost=costIn(cur,it.price);
+  if(curBal(cur)<cost){ SFX.err(); toast(`Not enough ${curSym(cur)}${cur==='watt'?' — mine more blocks':' — mine or switch currency in the shop'}`,'red'); return; }
+  curPay(cur,cost); S.bought[id]++;
+  txFlow(it, cost, cur);
+  if(id===2){ S.badge=1; setBadgeOwned(true);
+    burst(new THREE.Vector3(0,2.4,-ROOM.D/2+1.4),60,partMatGold,4);
+    toast('🏅 GENESIS BADGE acquired! +10% luck · +10% efficiency','gold');
+  } else if(it.comp==='Peripheral'){ S.periph[id]=1; rebuildAllRigs();
+    toast(`🖱 ${it.name} — +2% luck on every desk${periphCount()===3?' · FULL BATTLESTATION SET +3%':''}`, periphCount()===3?'gold':'grn');
+  } else if(id===19){ S.tower=1; setTowerOwned(true);
+    burst(new THREE.Vector3(5.4,2.2,-ROOM.D/2+1.9),40,partMatCyan,3.5);
+    toast('🗼 SERVER TOWER online — +40 stake weight · +20% stake income','gold');
+  } else { S.inv[id]++; toast(`${it.name} added to inventory — open a rig to install`,'grn'); }
+  SFX.buy(); renderHud(); renderShop(); save();
+}
+function installPart(ri,id){
+  const r=S.rigs[ri]; const it=ITEMS[id];
+  if(S.inv[id]<=0){ SFX.err(); return; }
+  if(it.comp==='Processor'){ if(r.cpu){SFX.err();return;} r.cpu=id; }
+  else if(it.comp==='ASIC'){ if(r.asic){SFX.err();return;} r.asic=id; }
+  else if(it.comp==='Frame'){ if(r.frame){SFX.err();return;} r.frame=1; }
+  else { if(r.gpus.length>=gpuCap(r)){SFX.err();toast(r.frame?'GPU slots full':'GPU slots full — install a Mining Rig Frame for 4 slots','red');return;} r.gpus.push(id); }
+  S.inv[id]--;
+  SFX.install(); buildRigVis(ri);
+  burst(new THREE.Vector3(SLOTS[r.slot][0],2.0,SLOTS[r.slot][1]),14,partMatCyan,2);
+  renderHud(); renderRigPanel(); save();
+}
+function removePart(ri,id,gk){
+  const r=S.rigs[ri]; const it=ITEMS[id];
+  if(it&&it.comp==='Processor'){ if(r.cpu!==id) return; r.cpu=0; S.inv[id]++; }
+  else if(it&&it.comp==='ASIC'){ if(r.asic!==id) return; r.asic=0; S.inv[id]++; }
+  else if(it&&it.comp==='Frame'){ if(!r.frame) return;
+    if(r.gpus.length>2){ SFX.err(); toast('Remove GPUs first — frame holds slots 3 & 4','red'); return; }
+    r.frame=0; S.inv[14]++; }
+  else { const ix=gk!==undefined?gk:r.gpus.indexOf(id); if(ix<0) return; r.gpus.splice(ix,1); S.inv[id]++; }
+  SFX.click(); buildRigVis(ri); renderHud(); renderRigPanel(); save();
+}
+function switchNet(){
+  const t=now(); if(t-S.netSwitchT<8000){ toast('Network sync in progress…','red'); return; }
+  S.netSwitchT=t;
+  S.net=S.net==='polygon'?'alt':S.net==='alt'?'wattx':'polygon';
+  SFX.swap();
+  const n=CFG.nets[S.net];
+  toast(`🔗 Switched to ${n.name}${n.sim?' (testnet sim — mainnet soon™)':''} — reward ${n.reward} ${n.sym}/block`, S.net==='alt'?'gold':'cyan');
+  renderHud(); save();
+}
+function buyUpgrade(k){
+  const lv=S.upg[k]; const arr=CFG.upPrice[k];
+  if(lv>=arr.length){ SFX.err(); return; }
+  const p=arr[lv];
+  if(S.watt<p){ SFX.err(); toast('Not enough WATT','red'); return; }
+  S.watt-=p; S.upg[k]++;
+  SFX.buy();
+  const names={power:'⚡ Power grid upgraded',cooling:'❄ Cooling upgraded',rack:'🗄 Rack expansion built — 3 new slots'};
+  toast(names[k]+` (Lv ${S.upg[k]})`,'grn');
+  if(k==='rack') refreshRings();
+  renderHud(); renderUpg(); save();
+}
+function gen2(){
+  if(S.lifeWatt<CFG.gen2Req){ SFX.err(); return; }
+  const kept={badge:S.badge, periph:S.periph, gen:S.gen+1, muted:S.muted, created:S.created, monSize:S.monSize, chair:S.chair};
+  const ns=freshState(); Object.assign(ns,kept);
+  ns.tut=99; S=ns; setBadgeOwned(!!S.badge); setTowerOwned(false);
+  rebuildAllRigs(); mintPC(true);
+  SFX.gen2();
+  toast(`🚀 GENERATION ${S.gen}! Permanent ×${Math.pow(CFG.gen2Mult,S.gen-1).toFixed(1)} hashpower`,'gold',8000);
+  if(S.gen===2) setTimeout(()=>toast('🔓 GEN2 HARDWARE UNLOCKED — TX190 · GP720 · GPX880 · XXL270 · Bit Hammer ASIC in the 🛒 SHOP','gold',9000),1500);
+  closeModal('m-upg'); renderHud(); save();
+}
+/* ================= WEB3 — real wallet + deployed Mining Game contracts ================= */
+/* Drop-in config: when Mining Game V2 / WATT V2 deploy (same seed, all chains) paste the
+   addresses into nftV2/wattV2 below. When WATTxchain launches, fill chainId+rpc. */
+const WEB3CFG={
+  chains:{
+    polygon:{ key:'polygon', net:'polygon', chainId:137, hex:'0x89', name:'Polygon', rpc:'https://polygon-rpc.com', sym:'POL', dec:18, explorer:'https://polygonscan.com',
+      nft:'0x970a8b10147e3459d3cbf56329b76ac18d329728', watt:'0xE960d5076cd3169C343Ee287A2c3380A222e5839', staking:'0xcbfcA68D10B2ec60a0FB2Bc58F7F0Bfd32CD5275',
+      nftV2:null, wattV2:null },
+    alt:{ key:'alt', net:'alt', chainId:2330, hex:'0x91a', name:'Altcoinchain', rpc:'https://rpc.altcoinchain.org', sym:'ALT', dec:18, explorer:'https://explorer.altcoinchain.org',
+      nft:'0xf9670e5D46834561813CA79854B3d7147BBbFfb2', watt:'0x6645143e49B3a15d8F205658903a55E520444698', staking:'0xe463045318393095F11ed39f1a98332aBCc1A7b1',
+      nftV2:null, wattV2:null },
+    wattx:{ key:'wattx', net:null, chainId:null, hex:null, name:'WATTxchain', rpc:null, sym:'WATT', dec:18, explorer:null,
+      nft:null, watt:null, staking:null, nftV2:null, wattV2:null, prelaunch:true },
+  },
+  sel:{ bal1155:'0x00fdd58e', balErc20:'0x70a08231', freemint:'0xaf2de086', rates:'0xdd418ae2', rewards:'0xe8a31bdc' },
+  ids:[1,2,3,4,5], // minted V1 token ids
+};
+const W3={ addr:null, chainId:null, chain:null, native:null, watt:null, rewards:null, nfts:{}, rates:{}, busy:false, err:null };
+const w3Eth=()=>window.ethereum;
+const w3Has=()=>!!window.ethereum;
+const w3Short=a=>a?a.slice(0,6)+'…'+a.slice(-4):'';
+const encU=n=>BigInt(n).toString(16).padStart(64,'0');
+const encA=a=>a.replace(/^0x/,'').toLowerCase().padStart(64,'0');
+function fromWei(hx,dp=3){ try{ if(!hx||hx==='0x') return 0; const w=BigInt(hx); return Number(w/10n**12n)/1e6; }catch(e){ return 0; } }
+async function w3Req(method,params){ return w3Eth().request({method,params}); }
+async function w3CallRaw(to,data){ return w3Req('eth_call',[{to,data},'latest']); }
+function w3ChainByHexId(id){ const n=typeof id==='string'?parseInt(id,16):id;
+  for(const k in WEB3CFG.chains){ if(WEB3CFG.chains[k].chainId===n) return WEB3CFG.chains[k]; } return null; }
+
+async function w3Connect(){
+  if(!w3Has()){ openModal('m-web3'); renderWallet(); return; }
+  if(W3.busy) return; W3.busy=true; renderWallet();
+  try{
+    const accts=await w3Req('eth_requestAccounts',[]);
+    W3.addr=accts[0]||null; W3.err=null;
+    W3.chainId=parseInt(await w3Req('eth_chainId',[]),16);
+    W3.chain=w3ChainByHexId(W3.chainId);
+    if(!w3Connect._wired){ w3Connect._wired=1;
+      w3Eth().on?.('accountsChanged',a=>{ W3.addr=a[0]||null; w3Refresh(); });
+      w3Eth().on?.('chainChanged',c=>{ W3.chainId=parseInt(c,16); W3.chain=w3ChainByHexId(W3.chainId); w3Refresh(); });
+    }
+    SFX.buy(); toast('🦊 Wallet connected: '+w3Short(W3.addr),'grn');
+    if(W3.chain&&W3.chain.net){ S.net=W3.chain.net; toast('🔗 Mining network synced to wallet chain: '+W3.chain.name,'cyan'); }
+    await w3Refresh();
+  }catch(e){ W3.err=e&&e.message||'connection rejected'; SFX.err(); }
+  W3.busy=false; renderWallet(); renderHud(); save();
+}
+async function w3Switch(key){
+  const c=WEB3CFG.chains[key];
+  if(c.prelaunch){ SFX.err(); toast('🔌 WATTxchain is pre-launch — no chainID / RPC yet. It slots in the moment the chain goes live.','gold'); return; }
+  if(!w3Has()||!W3.addr) return;
+  try{ await w3Req('wallet_switchEthereumChain',[{chainId:c.hex}]); }
+  catch(e){
+    if(e&&(e.code===4902||(''+e.message).includes('Unrecognized'))){
+      try{ await w3Req('wallet_addEthereumChain',[{chainId:c.hex,chainName:c.name,rpcUrls:[c.rpc],
+        nativeCurrency:{name:c.sym,symbol:c.sym,decimals:18},blockExplorerUrls:c.explorer?[c.explorer]:[]}]); }
+      catch(e2){ W3.err='could not add '+c.name; renderWallet(); }
+    }
+  }
+}
+async function w3Refresh(){
+  if(!W3.addr){ renderWallet(); return; }
+  const c=W3.chain;
+  W3.native=W3.watt=W3.rewards=null; W3.nfts={}; W3.rates={};
+  renderWallet();
+  if(!c){ return; } // unsupported chain
+  try{
+    const jobs=[];
+    jobs.push(w3Req('eth_getBalance',[W3.addr,'latest']).then(h=>W3.native=fromWei(h)));
+    if(c.watt) jobs.push(w3CallRaw(c.watt, WEB3CFG.sel.balErc20+encA(W3.addr)).then(h=>W3.watt=fromWei(h)));
+    if(c.staking) jobs.push(w3CallRaw(c.staking, WEB3CFG.sel.rewards+encA(W3.addr)).then(h=>W3.rewards=fromWei(h)).catch(()=>{}));
+    if(c.nft) for(const id of WEB3CFG.ids){
+      jobs.push(w3CallRaw(c.nft, WEB3CFG.sel.bal1155+encA(W3.addr)+encU(id)).then(h=>{ W3.nfts[id]=h&&h!=='0x'?Number(BigInt(h)):0; }));
+      jobs.push(w3CallRaw(c.nft, WEB3CFG.sel.rates+encU(id)).then(h=>{ W3.rates[id]=fromWei(h,6); }).catch(()=>{}));
+    }
+    await Promise.allSettled(jobs);
+    w3GrantOwned();
+  }catch(e){ W3.err=(''+(e&&e.message||e)).slice(0,120); }
+  renderWallet();
+}
+/* Owned on-chain NFTs unlock their in-game twins (once per wallet+chain+id) */
+function w3GrantOwned(){
+  if(!W3.addr||!W3.chain) return;
+  let granted=[];
+  for(const id of WEB3CFG.ids){
+    const n=W3.nfts[id]||0; if(n<=0) continue;
+    const key=W3.chain.key+':'+W3.addr.toLowerCase()+':'+id;
+    if(S.w3claim[key]) continue;
+    S.w3claim[key]=1;
+    if(id===1){ if(S.rigs.length<slotCount()) mintPC(true); }
+    else if(id===2){ if(!S.badge){ S.badge=1; setBadgeOwned(true); } }
+    else { S.inv[id]=(S.inv[id]||0)+Math.min(n,4); }
+    granted.push(ITEMS[id]?ITEMS[id].name:('#'+id));
+  }
+  if(granted.length){ SFX.gen2(); toast('⛓ On-chain NFTs verified → unlocked in-game: '+granted.join(', '),'gold',9000); renderHud(); save(); rebuildAllRigs&&rebuildAllRigs(); }
+}
+/* Real transaction: freemint(1,1) on the deployed ERC-1155 */
+async function w3Freemint(){
+  const c=W3.chain;
+  if(!c||!c.nft||!W3.addr){ SFX.err(); toast('Connect wallet on Polygon or Altcoinchain first','red'); return; }
+  try{
+    const data=WEB3CFG.sel.freemint+encU(1)+encU(1);
+    const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.nft,data}]);
+    toast('⛓ REAL freemint(1,1) sent on '+c.name+': '+w3Short(tx),'gold',9000);
+    setTimeout(w3Refresh, 8000);
+  }catch(e){ SFX.err(); toast('tx rejected: '+(''+(e&&e.message||e)).slice(0,80),'red'); }
+}
+/* ---------- wallet modal ---------- */
+function renderWallet(){
+  const b=$('b-wallet');
+  if(b) b.innerHTML=W3.addr?('🦊 '+w3Short(W3.addr)):'🦊 WALLET';
+  const m=$('w3-body'); if(!m||!$('m-web3').classList.contains('open')) return;
+  const c=W3.chain;
+  const chainPills=Object.values(WEB3CFG.chains).map(ch=>{
+    const on=c&&c.key===ch.key;
+    return `<button class="w3chip ${on?'on':''} ${ch.prelaunch?'pre':''}" data-chain="${ch.key}">${ch.key==='polygon'?'🟣':ch.key==='alt'?'🟠':'🔌'} ${ch.name}${ch.prelaunch?' <small>PRE-LAUNCH</small>':''}</button>`;
+  }).join('');
+  if(!w3Has()){
+    m.innerHTML=`<div class="w3note">No browser wallet detected. Install <b>MetaMask</b> (or any EIP-1193 wallet) and reload — the game connects to the real Mining Game contracts on Polygon & Altcoinchain. The full game works without one; on-chain sync is a bonus layer.</div>`;
+    return;
+  }
+  if(!W3.addr){
+    m.innerHTML=`<div class="w3note">Connect to sync your real Mining Game NFTs — owned components unlock in-game, balances show live, and you can free-mint the Gaming PC on-chain.</div>
+      <button class="hbtn gold" id="w3-connect" style="width:100%">${W3.busy?'CONNECTING…':'🦊 CONNECT WALLET'}</button>
+      ${W3.err?`<div class="w3err">${W3.err}</div>`:''}`;
+    $('w3-connect')?.addEventListener('click',w3Connect);
+    return;
+  }
+  const v=(x,f)=>x===null?'<span class="w3dim">…</span>':f;
+  m.innerHTML=`
+    <div class="w3addr">${W3.addr} ${c?`· <b style="color:var(--grn)">${c.name}</b>`:'· <b style="color:var(--red)">unsupported chain ('+W3.chainId+')</b>'}</div>
+    <div class="w3chips">${chainPills}</div>
+    ${c?`<div class="stats2" style="margin:10px 0">
+      <div class="st2"><small>${c.sym} (native)</small><b>${v(W3.native,fmt(W3.native))}</b></div>
+      <div class="st2"><small>WATT (on-chain)</small><b style="color:var(--gold)">${v(W3.watt,fmt(W3.watt))}</b></div>
+      <div class="st2"><small>STAKING REWARDS</small><b style="color:var(--cyan)">${v(W3.rewards,fmt(W3.rewards)+' ⚡')}</b></div>
+      <div class="st2"><small>CONTRACT</small><b style="font-size:10px">${w3Short(c.nft)}</b></div>
+    </div>
+    <div class="w3sec">YOUR MINING GAME NFTs (ERC-1155)</div>
+    <div class="w3nfts">${WEB3CFG.ids.map(id=>{
+      const n=W3.nfts[id], it=ITEMS[id];
+      return `<div class="w3nft ${n>0?'own':''}"><b>${n===undefined?'…':n}×</b> ${it?it.name:'#'+id}${W3.rates[id]?`<small>rate ${W3.rates[id]}</small>`:''}</div>`;
+    }).join('')}</div>
+    <button class="hbtn accent" id="w3-mint" style="width:100%;margin-top:8px">⛓ FREE MINT GAMING PC — REAL TX (gas only)</button>
+    <div class="w3sec" style="margin-top:12px">MINING GAME V2 · WATT V2</div>
+    <div class="w3note">V2 contracts (Gen2 components: TX190, XL190, GP720, GPX880, XXL270, Bit Hammer, Rig Frame, Server Tower, peripherals) are <b>pending deployment</b> from the deployer wallet across all chains. Gen2 purchases run simulated until the addresses drop into the config. WATTxchain joins at launch.</div>`
+    :`<div class="w3note">Switch to Polygon or Altcoinchain to read your Mining Game NFTs.</div><div class="w3chips">${chainPills}</div>`}
+    ${W3.err?`<div class="w3err">${W3.err}</div>`:''}`;
+  m.querySelectorAll('.w3chip').forEach(el=>el.onclick=()=>w3Switch(el.dataset.chain));
+  $('w3-mint')?.addEventListener('click',w3Freemint);
+}
+/* ---------- contract-call style purchase feedback ---------- */
+function txFlow(it, cost, cur){
+  const el=$('m-tx'); if(!el) return;
+  const real=!!(W3.addr&&W3.chain), v2=!!it.gen2;
+  const hash='0x'+Array.from({length:16},()=>'0123456789abcdef'[Math.random()*16|0]).join('')+'…';
+  el.innerHTML=`<div class="txbox">
+    <div class="txh">${v2?'MiningGameV2.purchase':'MiningGame.mint'}(id: ${it.id||''}${it.id?', ':''}amount: 1)</div>
+    <div class="txr"><span>item</span><b>${it.name}</b></div>
+    <div class="txr"><span>cost</span><b>${fmt(cost)} ${curSym(cur)}</b></div>
+    <div class="txr"><span>from</span><b>${real?w3Short(W3.addr):'in-game balance'}</b></div>
+    <div class="txr"><span>chain</span><b>${real?W3.chain.name:CFG.nets[S.net].name}</b></div>
+    <div class="txr"><span>status</span><b class="txst">signing…</b></div>
+    <div class="txtag">${v2?'SIMULATED — V2 contract pending deployment':'SIMULATED PURCHASE · real NFT sync via 🦊 WALLET'}</div>
+  </div>`;
+  el.classList.add('show');
+  const st=el.querySelector('.txst');
+  setTimeout(()=>{ if(st) st.textContent='pending… '+hash; },350);
+  setTimeout(()=>{ if(st){ st.textContent='✓ confirmed'; st.style.color='var(--grn)'; } SFX.swap(); },900);
+  clearTimeout(txFlow._t);
+  txFlow._t=setTimeout(()=>el.classList.remove('show'),2300);
+}
+
+/* ================= POOLS · HOSTING · VALIDATORS ================= */
+const POOLS={
+ pol:[
+  {id:'polyhash', name:'PolyHash',       fee:0.005, speed:3.2, blurb:'mega-pool · tiny fee · steady drip'},
+  {id:'maticwks', name:'MaticWorks',     fee:0.02,  speed:2.2, blurb:'mid-size EU pool'},
+  {id:'nucash',   name:'nucash-mining',  fee:0.10,  speed:1.7, official:true, blurb:'official Mining Game pool · fees fund WATT buyback'},
+  {id:'solo',     name:'SOLO — own node',fee:0,     speed:1,   solo:true, blurb:'full reward, chunky luck-based payouts'},
+ ],
+ alt:[
+  {id:'altpool',  name:'AltPool.pro',    fee:0.01,  speed:2.8, blurb:'biggest ALT pool'},
+  {id:'chainhub', name:'ChainHub',       fee:0.03,  speed:2.0, blurb:'community pool since block 1'},
+  {id:'nucash',   name:'nucash-mining',  fee:0.10,  speed:1.7, official:true, blurb:'official Mining Game pool · fees fund WATT buyback'},
+  {id:'solo',     name:'SOLO — own node',fee:0,     speed:1,   solo:true, blurb:'full reward, chunky luck-based payouts'},
+ ],
+ wtx:[
+  {id:'genesis',  name:'Genesis Pool',   fee:0.0,   speed:2.4, blurb:'testnet bootstrap pool · zero fee'},
+  {id:'nucash',   name:'nucash-mining',  fee:0.10,  speed:1.7, official:true, blurb:'official Mining Game pool'},
+  {id:'solo',     name:'SOLO — own node',fee:0,     speed:1,   solo:true, blurb:'full reward, chunky luck-based payouts'},
+ ],
+};
+function netKey(coin){ return coin==='pol'?'polygon':coin==='alt'?'alt':'wattx'; }
+function poolFor(coin,id){
+  if(id==='mine') return S.myPools[coin]?{id:'mine',name:S.myPools[coin].name,fee:0,speed:1.35,mine:true}:null;
+  const p=(POOLS[coin]||[]).find(p=>p.id===id);
+  return (p&&!p.solo)?p:null; // solo → null (raw protocol mining)
+}
+function curPool(){ const c=CFG.nets[S.net].coin; return poolFor(c,S.pool[c]); }
+function poolCredit(coin,amt,P){
+  if(!P){ S[coin]+=amt; return; } // solo & hostless: direct credit
+  S.pend[coin]+=amt;
+  const th=S.payThresh*CFG.nets[netKey(coin)].reward;
+  if(S.pend[coin]>=th){
+    const pay=S.pend[coin]; S.pend[coin]=0; S[coin]+=pay;
+    toast(`🏦 Pool payout — +${fmt(pay)} ${coin.toUpperCase()} from ${P.name}`,'grn');
+  }
+}
+/* per-tick: ALT hybrid countdown, validator income, hosted-pool economy */
+function poolTick(dt){
+  S.altH+=CFG.altBlockRate*dt;
+  if(!S.altHybrid && S.altH>=CFG.altHybridBlock){
+    S.altHybrid=1; SFX.gen2();
+    toast('⛓ ALTCOINCHAIN BLOCK 7,000,000 — HYBRID PoW/PoS IS LIVE! Rewards now split 1/1 miners : stakers. Lock 32 ALT per validator node in 🏊 POOL HUB','gold',13000);
+    renderHud(); if($('m-pool').classList.contains('open')) renderPoolHub();
+  }
+  if(S.altHybrid && S.altNodes>0){
+    const share=S.altLocked/(S.altLocked+CFG.altNetStake);
+    const earn=CFG.altBlockRate*(CFG.nets.alt.reward/2)*share*dt;
+    S.alt+=earn; S.valEarn+=earn;
+  }
+  for(const c in S.myPools){
+    const m=S.myPools[c];
+    const cap=Math.max(300, 3000*(1-m.fee*6));       // low fee attracts NPC hashrate
+    m.npc=(m.npc||0)+(cap-(m.npc||0))*Math.min(1,dt*0.0025);
+    const n=CFG.nets[netKey(c)];
+    const coinIn=m.npc*n.lam/difficulty()*n.reward*m.fee*dt;   // fee cut of NPC blocks
+    S[c]+=coinIn; m.earnC=(m.earnC||0)+coinIn; S.poolEarnC[c]+=coinIn;
+    const burn=m.npc*0.5*CFG.consumePerWatt*dt;                // NPC fleet electricity
+    const wIn=burn*CFG.hostBurnCut;                            // host keeps 1% of the burn
+    S.watt+=wIn; S.lifeWatt+=wIn; m.earnW=(m.earnW||0)+wIn; S.poolEarnW+=wIn;
+  }
+}
+/* ---------- actions ---------- */
+function joinPool(coin,id){
+  S.pool[coin]=id; SFX.swap();
+  const P=poolFor(coin,id);
+  toast(P?`🏊 Connected to ${P.name} — fee ${(P.fee*100).toFixed(1)}%, smooth payouts x${P.speed}`:'⛏ SOLO mining — full block reward, pure Poisson luck', P&&P.official?'gold':'cyan');
+  renderPoolHub(); renderHud(); save();
+}
+function hostPool(c,feePct){
+  if(S.myPools[c]){ toast('Already hosting a pool on this chain','red'); return; }
+  const fee=clamp(feePct,0,12)/100;
+  if(S.watt<CFG.poolHostWatt || S[c]<CFG.poolHostCoin){
+    SFX.err(); toast(`Hosting locks ${fmtInt(CFG.poolHostWatt)} ⚡WATT + ${fmtInt(CFG.poolHostCoin)} ${c.toUpperCase()}`,'red'); return;
+  }
+  S.watt-=CFG.poolHostWatt; S[c]-=CFG.poolHostCoin;
+  S.myPools[c]={name:'my-'+c+'.pool.watt', fee, npc:0, earnW:0, earnC:0, lockW:CFG.poolHostWatt, lockC:CFG.poolHostCoin, t:now()};
+  S.pool[c]='mine'; SFX.mint();
+  toast(`🏊 POOL LAUNCHED on ${CFG.nets[netKey(c)].name} — fee ${(fee*100).toFixed(1)}% · you now mine POWER-FREE + earn 1% of all WATT burned here`,'gold',10000);
+  renderPoolHub(); renderHud(); save();
+}
+function closePool(c){
+  const m=S.myPools[c]; if(!m) return;
+  S.watt+=m.lockW; S[c]+=m.lockC; delete S.myPools[c];
+  if(S.pool[c]==='mine') S.pool[c]=POOLS[c][0].id;
+  SFX.click(); toast(`Pool closed — ${fmtInt(m.lockW)} ⚡ + ${fmtInt(m.lockC)} ${c.toUpperCase()} unlocked`,'cyan');
+  renderPoolHub(); renderHud(); save();
+}
+function buyValidator(){
+  if(!S.altHybrid){ SFX.err(); toast('Validators unlock at ALT block 7,000,000','red'); return; }
+  if(S.alt<CFG.valNodeAlt){ SFX.err(); toast('Need 32 ALT free to lock','red'); return; }
+  S.alt-=CFG.valNodeAlt; S.altLocked+=CFG.valNodeAlt; S.altNodes++;
+  SFX.mint(); toast(`🛰 Validator node #${S.altNodes} online — 32 ALT staked, earning the PoS half of every ALT block`,'gold');
+  renderPoolHub(); renderHud(); save();
+}
+function exitValidators(){
+  if(!S.altNodes) return;
+  S.alt+=S.altLocked;
+  toast(`🛰 ${S.altNodes} validator${S.altNodes>1?'s':''} exited — ${fmt(S.altLocked)} ALT unlocked`,'cyan');
+  S.altLocked=0; S.altNodes=0; SFX.click(); renderPoolHub(); renderHud(); save();
+}
+function repairRig(ri){
+  const r=S.rigs[ri]; if(!r||r.wear<1){ SFX.err(); return; }
+  const c=repairCost(r);
+  if(S.watt<c){ SFX.err(); toast('Repair costs '+fmt(c)+' ⚡WATT','red'); return; }
+  S.watt-=c; r.wear=0; r.crashT=0;
+  SFX.install(); toast(`🔧 Rig ${ri+1} repaired for ${fmt(c)} ⚡ — thermal paste, new fans, dust-free`,'grn');
+  renderHud(); renderRigPanel(); save();
+}
+function togglePower(ri){
+  const r=S.rigs[ri]; if(!r) return;
+  r.on=r.on?0:1; SFX.swap();
+  toast(r.on?`🔌 Rig ${ri+1} ON — hashing (stake weight drops to 25%)`
+            :`🔋 Rig ${ri+1} OFF — zero power draw, FULL stake weight earns ⚡`, r.on?'cyan':'gold');
+  renderHud(); renderRigPanel(); save();
+}
+/* ---------- Pool Hub UI ---------- */
+function renderPoolHub(){
+  const coin=CFG.nets[S.net].coin, sym=CFG.nets[S.net].sym, mine=S.myPools[coin];
+  const rows=POOLS[coin].map(p=>{
+    const sel=S.pool[coin]===p.id;
+    return `<div class="prow ${sel?'sel':''}${p.official?' off':''}">
+      <div class="pi"><b>${p.official?'⭐ ':''}${p.name}</b><small>${p.blurb}</small></div>
+      <div class="pf">${p.solo?'—':(p.fee*100).toFixed(1)+'%'}<small>fee</small></div>
+      <div class="pf">x${p.speed}<small>payout freq</small></div>
+      <button class="hbtn ${sel?'':'accent'}" data-join="${p.id}" ${sel?'disabled':''}>${sel?'CONNECTED':'JOIN'}</button></div>`;
+  }).join('');
+  const mineRow = mine?`<div class="prow sel host">
+      <div class="pi"><b>🏊 ${mine.name}</b><small>YOUR pool · fee ${(mine.fee*100).toFixed(1)}% · NPC hashrate ${fmtInt(mine.npc||0)} H</small></div>
+      <div class="pf">+${fmt(mine.earnC||0)}<small>${sym} earned</small></div>
+      <div class="pf">+${fmt(mine.earnW||0)}<small>⚡ from burn</small></div>
+      ${S.pool[coin]==='mine'?'<button class="hbtn" disabled>CONNECTED</button>':`<button class="hbtn accent" data-join="mine">JOIN</button>`}
+      <button class="hbtn" data-closepool="1" style="color:var(--red)">CLOSE</button></div>`
+    :`<div class="hostbox"><b>🏗 HOST YOUR OWN POOL on ${CFG.nets[S.net].name}</b>
+      <small>Lock ${fmtInt(CFG.poolHostWatt)} ⚡WATT + ${fmtInt(CFG.poolHostCoin)} ${sym}. You mine <b>power-free</b>, keep 1% of all WATT burned in the pool, and take your fee % of every NPC block. Lower fee → more NPC miners join.</small>
+      <div class="rowbtns" style="margin-top:8px">FEE <input id="hostfee" type="range" min="0" max="12" value="3" step="0.5" style="flex:1"> <b id="hostfeev">3.0%</b>
+      <button class="hbtn gold" id="hostgo">LAUNCH POOL</button></div></div>`;
+  const alt=`<div class="valbox"><b>⛓ ALTCOINCHAIN HYBRID PoS ${S.altHybrid?'<span style="color:var(--grn)">— LIVE</span>':''}</b>
+      <small>height <b>${fmtInt(S.altH)}</b> / 7.00M ${S.altHybrid?'· reward split 1/1 miners : stakers':'· hybrid fork at block 7,000,000'}</small>
+      ${S.altHybrid?`<div class="rowbtns" style="margin-top:8px">
+        <span>🛰 nodes: <b>${S.altNodes}</b> · locked <b>${fmt(S.altLocked)} ALT</b> · earned <b>${fmt(S.valEarn)} ALT</b></span>
+        <button class="hbtn gold" id="valbuy">+ NODE (32 ALT)</button>
+        ${S.altNodes?'<button class="hbtn" id="valexit">EXIT ALL</button>':''}</div>`
+      :`<div class="prog"><i style="width:${Math.min(100,(S.altH/CFG.altHybridBlock)*100).toFixed(2)}%"></i></div>`}</div>`;
+  $('poolbody').innerHTML=`
+    <p style="color:var(--dim);font-size:11px;margin:2px 0 10px">Network: <b style="color:var(--txt)">${CFG.nets[S.net].name}</b> (switch on the HUD pill) · pending payout <b>${fmt(S.pend[coin])} ${sym}</b> · threshold ${S.payThresh}× reward
+    <button class="hbtn" id="thresh" style="padding:2px 8px;font-size:10px">TH ${S.payThresh}×</button></p>
+    ${rows}${mineRow}${alt}
+    <p style="color:var(--dim);font-size:10.5px;margin-top:10px;line-height:1.6">Pools smooth income: higher payout-frequency pools pay smaller amounts more often (same expected value minus fee). WATT spent mining is <b>burned</b> — 1% of every burn goes to the pool host. Total burned so far: <b>${fmt(S.burned)} ⚡</b></p>`;
+  $('poolbody').querySelectorAll('[data-join]').forEach(b=>b.onclick=()=>joinPool(coin,b.dataset.join));
+  const cp=$('poolbody').querySelector('[data-closepool]'); if(cp) cp.onclick=()=>closePool(coin);
+  const hf=$('hostfee'); if(hf){ hf.oninput=()=>$('hostfeev').textContent=(+hf.value).toFixed(1)+'%';
+    $('hostgo').onclick=()=>hostPool(coin,+hf.value); }
+  const vb=$('valbuy'); if(vb) vb.onclick=buyValidator;
+  const ve=$('valexit'); if(ve) ve.onclick=exitValidators;
+  const th=$('thresh'); if(th) th.onclick=()=>{ S.payThresh=S.payThresh===3?10:S.payThresh===10?1:3; SFX.click(); renderPoolHub(); save(); };
+}
+function openPoolHub(){ openModal('m-pool'); renderPoolHub(); }
+$('b-pool').onclick=openPoolHub;
+$('coin-pool').onclick=openPoolHub;
+$('sell-wtx').onclick=()=>sellCoin('wtx');
+
+/* ================= UI ================= */
+function toast(txt, cls='', dur=4200){
+  const f=$('feed'); const d=document.createElement('div');
+  d.className='msg '+cls; d.innerHTML=txt;
+  f.appendChild(d);
+  while(f.children.length>5) f.firstChild.remove();
+  setTimeout(()=>{ d.style.transition='opacity .5s'; d.style.opacity='0'; setTimeout(()=>d.remove(),500); },dur);
+}
+function renderHud(){
+  $('v-watt').textContent=fmt(S.watt);
+  $('v-hash').textContent=fmt(totHash());
+  const draw=Math.round(totWatt()), cap=powerCap();
+  $('v-pow').textContent=`${draw}/${cap}`;
+  $('v-pow').style.color=draw>cap?'var(--red)':'';
+  const tp=$('s-temp'); tp.classList.toggle('hot',S.temp>=85&&S.temp<100); tp.classList.toggle('crit',S.temp>=100);
+  $('v-temp').textContent=Math.round(S.temp)+'°';
+  $('v-blk').textContent=fmtInt(S.blocks);
+  $('v-pol').textContent=fmt(S.pol); $('v-alt').textContent=fmt(S.alt);
+  $('v-wtx').textContent=fmt(S.wtx);
+  const pp=$('p-pol'), pa=$('p-alt'), pw=$('p-wtx');
+  pp.textContent='@'+S.price.pol.toFixed(1); pa.textContent='@'+S.price.alt.toFixed(1); pw.textContent='@'+S.price.wtx.toFixed(2);
+  pp.className='pr '+(S.price.pol>=CFG.nets.polygon.p0?'up':'dn');
+  pa.className='pr '+(S.price.alt>=CFG.nets.alt.p0?'up':'dn');
+  pw.className='pr '+(S.price.wtx>=CFG.nets.wattx.p0?'up':'dn');
+  const coin=CFG.nets[S.net].coin, P=curPool();
+  $('v-pool').textContent=P?(P.mine?'🏗 '+P.name:P.name):'SOLO';
+  $('p-pend').textContent=S.pend[coin]>0.005?('pend '+fmt(S.pend[coin])+' '+CFG.nets[S.net].sym):'';
+  const n=$('net'); n.classList.toggle('alt',S.net==='alt'); n.classList.toggle('wtx',S.net==='wattx');
+  $('netname').textContent=CFG.nets[S.net].name;
+  $('netdiff').textContent='diff '+difficulty().toFixed(1)+'x';
+  $('vig').style.opacity=S.temp>=85?String(Math.min(1,(S.temp-85)/20)):(noWatt?'0.5':'0');
+}
+/* shop */
+function ownedOf(id){
+  const it=ITEMS[id];
+  if(id===1) return S.pcCount;
+  if(id===2) return S.badge;
+  if(it.comp==='Peripheral') return S.periph[id];
+  if(id===19) return S.tower;
+  let n=S.inv[id]||0;
+  S.rigs.forEach(r=>{ if(r.cpu===id) n++; if(r.asic===id) n++; if(id===14&&r.frame) n++; n+=r.gpus.filter(g=>g===id).length; });
+  return n;
+}
+function shopCard(el,id,locked){
+  const it=ITEMS[id];
+  const c=document.createElement('div'); c.className='card'+(locked?' locked':'');
+  const left=id===1?'∞':String(it.supply-S.bought[id]);
+  const price=id===1?(S.pcCount===0?0:pcPrice()):it.price;
+  const owned=ownedOf(id);
+  let traits=`<span class="tr">GEN ${it.gen}</span>${it.sw?`<span class="tr">SW ${it.sw}</span>`:''}`;
+  if(it.hash) traits+=`<span class="tr">⛏ ${it.hash} HASH</span>`;
+  if(it.watt) traits+=`<span class="tr">⚡ ${it.watt} WATT</span>`;
+  if(it.luck) traits+=`<span class="tr gold">🍀 +${it.luck}% LUCK${it.eff?` · EFF +${it.eff}%`:''}</span>`;
+  if(id===14) traits+=`<span class="tr gold">+2 GPU SLOTS</span>`;
+  if(id===19) traits+=`<span class="tr gold">+20% STAKE</span>`;
+  const soldOut=id!==1&&it.supply-S.bought[id]<=0;
+  const unique=(id===2&&S.badge)||(it.comp==='Peripheral'&&S.periph[id])||(id===19&&S.tower);
+  const dis=locked||unique||soldOut;
+  c.innerHTML=`${id===2?'<span class="tag">1 OF 100</span>':''}${it.gen2?'<span class="tag g2">GEN 2</span>':''}
+    <div class="thumb"><img src="${THUMB[id]||''}" alt=""></div>
+    <div><div class="brand">${it.brand||'THE MINING GAME'} · ERC-1155 #${id}</div><h3>${it.name}</h3></div>
+    <div class="traits">${traits}</div>
+    <div class="sup">supply left: ${left} · owned: ${owned}</div>
+    <button class="buy ${unique?'own':''}" data-buy="${id}" ${dis?'disabled':''}>
+      ${locked?'🔒 REACH GEN 2':unique?'OWNED ✓':soldOut?'SOLD OUT':price===0?'FREE MINT':`BUY · <span class="pricetag">${fmt(costIn(S.payCur||'watt',price))} ${curSym(S.payCur||'watt')}</span>`}
+    </button>`;
+  el.appendChild(c);
+}
+function renderShop(){
+  const el=$('shopcards'); el.innerHTML='';
+  const head=t=>{ const h=document.createElement('div'); h.className='shead'; h.innerHTML=t; el.appendChild(h); };
+  head('⛏ GEN 1 · THE ORIGINAL COLLECTION');
+  [1,3,4,5,14,2].forEach(id=>shopCard(el,id,false));
+  head('🖱 BATTLESTATION · permanent luck, survives prestige');
+  [17,18,23].forEach(id=>shopCard(el,id,false));
+  const locked=S.gen<2;
+  head(`🚀 GEN 2 HARDWARE ${locked?'· <span style="color:var(--red)">locked — reach GENERATION 2 in 🔧 GARAGE</span>':'· unlocked'}`);
+  [8,9,10,12,11,13,19].forEach(id=>shopCard(el,id,locked));
+  el.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>buyItem(+b.dataset.buy));
+  document.querySelectorAll('#paybar .paybtn').forEach(b=>{
+    b.classList.toggle('on',(S.payCur||'watt')===b.dataset.cur);
+    b.onclick=()=>{ S.payCur=b.dataset.cur; SFX.click(); save(); renderShop(); };
+  });
+}
+/* rig panel */
+let selRig=-1;
+function renderRigPanel(){
+  const p=$('rigp');
+  if(selRig<0||!S.rigs[selRig]){ p.classList.remove('open'); return; }
+  const r=S.rigs[selRig];
+  p.classList.add('open');
+  const hf=heatFactor(), pf=powerFactor();
+  const eff=Math.round(hf*pf*100);
+  let rows='';
+  // CPU slot
+  const cpusHave=CPU_IDS.filter(id=>S.inv[id]>0);
+  rows+=r.cpu?slotRow(r.cpu,'✓ installed',`data-rm="${r.cpu}"`,'REMOVE')
+    :cpusHave.length?cpusHave.map(id=>slotRowEmpty(`Processor slot — ${ITEMS[id].name} ×${S.inv[id]}`,`data-in="${id}"`,'INSTALL ⚙')).join('')
+    :slotRowEmpty('Processor slot — buy a CPU in shop','','');
+  // GPU slots
+  const cap=gpuCap(r), gpusHave=GPU_IDS.filter(id=>S.inv[id]>0);
+  for(let k=0;k<cap;k++){
+    if(r.gpus[k]) rows+=slotRow(r.gpus[k],'✓ installed',`data-rmg="${k}"`,'REMOVE');
+    else if(gpusHave.length) { rows+=gpusHave.map(id=>slotRowEmpty(`GPU slot ${k+1} — ${ITEMS[id].name} ×${S.inv[id]}`,`data-ing="${id}"`,'INSTALL ⚙')).join(''); break; }
+    else { rows+=slotRowEmpty(`GPU slot ${k+1} — buy a GPU in shop`,'',''); }
+  }
+  // frame slot
+  rows+=r.frame?slotRow(14,'✓ installed · 4 GPU slots',`data-rm="14"`,'REMOVE')
+    :S.inv[14]>0?slotRowEmpty(`Rig frame — unlocks GPU slots 3 & 4`,`data-in="14"`,'INSTALL ⚙')
+    :slotRowEmpty('Rig frame slot — 2 extra GPU slots (shop)','','');
+  // ASIC slot (gen2)
+  rows+=r.asic?slotRow(r.asic,'✓ installed',`data-rm="${r.asic}"`,'REMOVE')
+    :S.inv[13]>0?slotRowEmpty('ASIC slot — Bit Hammer ×'+S.inv[13],`data-in="13"`,'INSTALL ⚙')
+    :S.gen>=2?slotRowEmpty('ASIC slot — buy a Bit Hammer in shop','','')
+    :slotRowEmpty('ASIC slot — 🔒 unlocks at GEN 2','','');
+  const ocOn=r.oc&&(r.oc.c+r.oc.m)>0, crashed=r.crashT>0, broken=r.wear>=100;
+  const wearCol=r.wear>=100?'var(--red)':r.wear>=60?'#ffae42':r.wear>=30?'var(--gold)':'var(--grn)';
+  p.innerHTML=`<h2>🖥 Gaming PC — Rig ${selRig+1} ${broken?'<span style="color:var(--red);font-size:12px">🔥 BROKEN</span>':crashed?'<span style="color:var(--red);font-size:12px">💥 CRASHED</span>':!r.on?'<span style="color:var(--gold);font-size:12px">🔋 STAKING</span>':ocOn?'<span style="color:var(--cyan);font-size:12px">🎛 OC +'+Math.round((ocHashMult(r)-1)*100)+'%</span>':''}</h2>
+    <div class="sub">Minga Basic PC · Gen ${S.gen} ${S.gen>1?`(×${Math.pow(CFG.gen2Mult,S.gen-1).toFixed(1)} bonus)`:''}</div>
+    ${rows}
+    <div class="stats2">
+      <div class="st2"><small>HASHPOWER</small><b style="color:var(--cyan)">${Math.round(rigHash(r))}</b></div>
+      <div class="st2"><small>WATT DRAW</small><b style="color:var(--gold)">${Math.round(rigWatt(r))}</b></div>
+      <div class="st2"><small>STAKE WEIGHT</small><b>${rigSW(r)}${r.on?' <small style="color:var(--dim)">(25% while on)</small>':''}</b></div>
+      <div class="st2"><small>RIG EFFICIENCY</small><b style="color:${eff>=100?'var(--grn)':eff>=60?'#ffae42':'var(--red)'}">${eff}%</b></div>
+    </div>
+    <div class="wearrow"><small>WEAR</small><div class="wearbar"><i style="width:${r.wear.toFixed(1)}%;background:${wearCol}"></i></div><b style="color:${wearCol}">${r.wear.toFixed(0)}%</b>
+      ${r.wear>=1?`<button class="hbtn" id="rp-fix">🔧 REPAIR ${fmt(repairCost(r))} ⚡</button>`:''}</div>
+    <div class="rowbtns"><button class="hbtn ${r.on?'':'gold'}" id="rp-pwr">${r.on?'🔋 POWER OFF — stake mode':'🔌 POWER ON — mine'}</button><button class="hbtn gold" id="rp-bench">🔧 OPEN CASE — WORKBENCH</button></div>
+    <div class="rowbtns"><button class="hbtn accent" id="rp-os">💻 LOG IN — RIG OS</button><button class="hbtn gold" id="rp-shop">🛒 SHOP</button><button class="hbtn" id="rp-close">CLOSE</button></div>`;
+  p.querySelectorAll('[data-in]').forEach(b=>b.onclick=()=>installPart(selRig,+b.dataset.in));
+  p.querySelectorAll('[data-ing]').forEach(b=>b.onclick=()=>installPart(selRig,+b.dataset.ing));
+  p.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>removePart(selRig,+b.dataset.rm));
+  p.querySelectorAll('[data-rmg]').forEach(b=>b.onclick=()=>removePart(selRig,r.gpus[+b.dataset.rmg],+b.dataset.rmg));
+  $('rp-shop').onclick=()=>{ openModal('m-shop'); renderShop(); };
+  $('rp-pwr').onclick=()=>togglePower(selRig);
+  const fx=$('rp-fix'); if(fx) fx.onclick=()=>repairRig(selRig);
+  $('rp-bench').onclick=()=>openBench(selRig);
+  $('rp-os').onclick=()=>openOS(selRig);
+  $('rp-close').onclick=()=>{ selRig=-1; renderRigPanel(); };
+  if(!S.osHint){ S.osHint=1; save();
+    setTimeout(()=>toast('💻 NEW: hit <b>LOG IN — RIG OS</b> to boot your rig\'s Mining Game OS — overclock it in TuneX, swap coins on SwapinDEX','cyan',9000),400); }
+}
+function slotRow(id,sub,attr,btn){
+  const it=ITEMS[id];
+  const st=it.hash||it.watt?` · ⛏${it.hash} ⚡${it.watt}`:` · SW ${it.sw}`;
+  return `<div class="slotrow"><div class="ic"><img src="${THUMB[id]||''}"></div>
+    <div class="nm">${it.name}<small>${sub}${st}</small></div>
+    ${btn?`<button ${attr}>${btn}</button>`:''}</div>`;
+}
+function slotRowEmpty(label,attr,btn){
+  return `<div class="slotrow empty"><div class="ic">▢</div>
+    <div class="nm">${label}</div>${btn?`<button ${attr}>${btn}</button>`:''}</div>`;
+}
+/* upgrades */
+function renderUpg(){
+  const defs=[
+    ['power','🔌','Power Grid',`Capacity ${powerCap()}W. Rigs beyond capacity mine slower.`,CFG.upPrice.power],
+    ['cooling','❄️','Cooling',`Ambient ${Math.round(tempTarget())}°C target. Heat above 85° throttles hashpower.`,CFG.upPrice.cooling],
+    ['rack','🗄️','Rack Expansion',`${slotCount()} rig slots. Each expansion adds 3.`,CFG.upPrice.rack],
+  ];
+  $('upgrows').innerHTML=defs.map(([k,ic,nm,ds,arr])=>{
+    const lv=S.upg[k], max=arr.length, p=arr[lv];
+    return `<div class="uprow"><div class="uic">${ic}</div>
+      <div class="ubody"><h3>${nm} <small style="color:var(--dim)">Lv ${lv}/${max}</small></h3><p>${ds}</p>
+      <div class="pips">${Array.from({length:max},(_,i)=>`<span class="pip ${i<lv?'on':''}"></span>`).join('')}</div></div>
+      <button class="ubuy" data-up="${k}" ${lv>=max||S.watt<p?'disabled':''}>${lv>=max?'MAX':fmt(p)+' ⚡'}</button></div>`;
+  }).join('');
+  document.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>buyUpgrade(b.dataset.up));
+  // battlestation comfort: monitor size + gaming chair
+  $('upgrows').insertAdjacentHTML('beforeend',`
+    <div class="uprow"><div class="uic">🖥️</div>
+      <div class="ubody"><h3>Monitor Size <small style="color:var(--dim)">${S.monSize}&Prime; ${S.monSize>=38?(S.monSize>=49?'32:9 super-ultrawide':'21:9 ultrawide'):'16:9'}</small></h3>
+      <p>Real diagonal ratios on every desk. Pick your battlestation screen.</p>
+      <div class="pips" style="gap:6px">${Object.keys(MONSIZES).map(sz=>`<button class="paybtn ${+sz===S.monSize?'on':''}" data-mon="${sz}" style="padding:3px 9px;font-size:11px">${sz}&Prime;</button>`).join('')}</div></div></div>
+    <div class="uprow"><div class="uic">${S.chair?'🏎️':'🪑'}</div>
+      <div class="ubody"><h3>Gaming Chair <small style="color:var(--dim)">${S.chair?'owned':'Lv 0/1'}</small></h3>
+      <p>${S.chair?'Racing-style chair with RGB trim on every desk — +3% luck comfort bonus.':'Upgrade every desk chair to a racing-style gaming chair. Sim comfort: +3% luck.'}</p></div>
+      <button class="ubuy" data-chair="1" ${S.chair||S.watt<CFG.chairPrice?'disabled':''}>${S.chair?'OWNED ✓':fmt(CFG.chairPrice)+' ⚡'}</button></div>`);
+  document.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{
+    S.monSize=+b.dataset.mon; SFX.click(); rebuildAllRigs(); renderUpg(); save();
+    toast(`🖥 Monitors swapped to ${S.monSize}&Prime; on every desk`,'cyan'); });
+  const chb=document.querySelector('[data-chair]');
+  if(chb) chb.onclick=()=>{ if(S.chair||S.watt<CFG.chairPrice){SFX.err();return;}
+    S.watt-=CFG.chairPrice; S.chair=1; rebuildChairs(); SFX.buy();
+    toast('🏎️ GAMING CHAIRS rolled in — +3% luck comfort bonus','gold'); renderUpg(); renderHud(); save(); };
+  const ok=S.lifeWatt>=CFG.gen2Req;
+  $('gen2box').innerHTML=`<div class="big">🚀 <b>GENERATION ${S.gen+1}</b><br>
+    <small style="color:var(--dim)">Reset your garage (Genesis Badge & Battlestation stay) for a permanent ×${CFG.gen2Mult} hashpower multiplier${S.gen===1?` — and unlock the <b style="color:var(--gold)">GEN 2 hardware shop</b>: TX190 · GP720 · GPX880 · XXL270 · Bit Hammer ASIC · Server Tower`:''}.<br>
+    Requires ${fmt(CFG.gen2Req)} ⚡ lifetime earnings — you have ${fmt(S.lifeWatt)}.</small></div>
+    <button class="ubuy" id="b-gen2" ${ok?'':'disabled'} style="background:${ok?'linear-gradient(90deg,#ffd23f,#ff8d2e)':''};color:${ok?'#000':''}">LAUNCH GEN ${S.gen+1}</button>`;
+  $('b-gen2').onclick=gen2;
+}
+/* stats */
+function renderStats(){
+  const days=((now()-S.created)/864e5);
+  const rows=[
+    ['NET WORTH',fmt(netWorth())+' ⚡'],['LIFETIME EARNED',fmt(S.lifeWatt)+' ⚡'],
+    ['⚡ BURNED MINING',fmt(S.burned)],['POOL HOST EARNED',fmt(S.poolEarnW)+' ⚡'],
+    ['ALT VALIDATORS',S.altNodes+' ('+fmt(S.valEarn)+' ALT)'],['WTX MINED',fmt(S.blocksNet.wtx)+' blk'],
+    ['BLOCKS MINED',fmtInt(S.blocks)],['LUCKY BLOCKS',fmtInt(S.lucky)],
+    ['POL BLOCKS',fmtInt(S.blocksNet.pol)],['ALT BLOCKS',fmtInt(S.blocksNet.alt)],
+    ['TOTAL HASH',fmt(totHash())+' H'],['STAKE WEIGHT',fmtInt(totSW())],
+    ['GENERATION',S.gen],['RIGS',S.rigs.length],
+    ['COINS SOLD',fmt(S.sold.pol+S.sold.alt)+' ⚡'],['DAYS MINING',days.toFixed(1)],
+  ];
+  $('statsgrid').innerHTML=rows.map(([a,b])=>`<div class="st2"><small>${a}</small><b>${b}</b></div>`).join('');
+}
+/* modals */
+function openModal(id){ $(id).classList.add('open'); SFX.click(); }
+function closeModal(id){ $(id).classList.remove('open'); }
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('pointerdown',e=>{ if(e.target===m) closeModal(m.id); }));
+/* tutorial */
+const TUTS=[
+  {t:'Your <b>Gaming PC</b> is mining! It converts <b>⚡WATT</b> (electricity) into blocks. Watch the WATT counter — mining drains it, <b>stake weight</b> regenerates it.',x:'46%',y:'52%'},
+  {t:'<b>Click your PC</b> on the desk to open the rig panel. That is where you install CPUs and GPUs.',x:'46%',y:'40%'},
+  {t:'Earned enough? Open the <b>🛒 SHOP</b> and buy the <b>Kirtex XL1 Processor</b> — a real Mining Game NFT with hashpower 10.',x:'58%',y:'12%'},
+  {t:'Coins from blocks are sold in the wallet strip (top-left). <b>ALT is volatile</b> — sell when the price runs hot. Good luck, miner! ⛏',x:'25%',y:'25%'},
+];
+function showTut(){
+  if(S.tut>=TUTS.length){ $('tut').style.display='none'; return; }
+  const t=TUTS[S.tut], el=$('tut');
+  el.style.display='block'; el.style.left=t.x; el.style.top=t.y;
+  el.innerHTML=t.t+`<br><button class="tbtn">${S.tut===TUTS.length-1?'START MINING ⛏':'NEXT ›'}</button>`;
+  el.querySelector('.tbtn').onclick=()=>{ S.tut++; save(); SFX.click(); showTut(); };
+}
+/* share */
+function shareX(){
+  const txt=`I'm running ${S.rigs.length} rig${S.rigs.length>1?'s':''} at ${fmt(totHash())} hash in The Mining Game: WATT Tycoon ⛏⚡ ${fmtInt(S.blocks)} blocks mined on Polygon + Altcoinchain. Beat my garage:`;
+  open('https://x.com/intent/post?text='+encodeURIComponent(txt+' https://mining-game.games.bu.app/'),'_blank');
+}
+
+/* ================= MINING GAME OS (in-rig operating system) =================
+   Inspired by the real MiningGameOS front-end:
+   https://nucash-mining.github.io/MiningGameOS/  */
+const OS = { open:false, rig:0, stage:'off', wins:{}, z:10, iv:null, addr:null };
+const OS_CHAINS = {
+  wattx:  {name:'WATTxchain',  id:2337, net:'wattx'},
+  polygon:{name:'Polygon',     id:137,  net:'polygon'},
+  alt:    {name:'Altcoinchain',id:2330, net:'alt'},
+};
+const OS_PLUG = `<svg width="__S__" height="__S__" viewBox="0 0 64 64" class="os-plug"><circle cx="32" cy="32" r="26" fill="none" stroke="#ffd23f" stroke-width="4"/><rect x="23" y="21" width="18" height="15" rx="3" fill="none" stroke="#ffd23f" stroke-width="4"/><line x1="27" y1="13" x2="27" y2="22" stroke="#ffd23f" stroke-width="4"/><line x1="37" y1="13" x2="37" y2="22" stroke="#ffd23f" stroke-width="4"/><line x1="32" y1="36" x2="32" y2="48" stroke="#ffd23f" stroke-width="4"/></svg>`;
+const osPlug=s=>OS_PLUG.replaceAll('__S__',s);
+function osEl(html){ const d=document.createElement('div'); d.innerHTML=html; return d.firstElementChild; }
+
+function openOS(ri){
+  OS.open=true; OS.rig=clamp(ri||0,0,Math.max(0,S.rigs.length-1)); OS.stage='boot'; OS.wins={};
+  const os=$('os'); os.classList.add('open'); os.innerHTML='<div class="os-crt"></div><div id="os-boot"></div>';
+  selRig=-1; renderRigPanel();
+  SFX.swap();
+  osBoot();
+}
+function closeOS(){
+  OS.open=false; OS.stage='off';
+  clearInterval(OS.iv); OS.iv=null;
+  $('os').classList.remove('open'); $('os').innerHTML='';
+  SFX.click(); save();
+}
+/* ---------- boot sequence ---------- */
+function osBoot(){
+  const b=$('os-boot'); const r=S.rigs[OS.rig];
+  const lines=[
+    ['WATTxOS BIOS v2.3.7 — Minga Microsystems',0],
+    ['CPU : '+(r&&r.cpu?ITEMS[r.cpu].name:'Minga stock')+'  ..  <span class="dim">OK</span>',140],
+    ['MEM : 16384MB DDR5  ..  <span class="dim">OK</span>',120],
+    ...(r?r.gpus.map((g,i)=>[`GPU${i} : ${ITEMS[g].name}  ..  <span class="dim">OK</span>`,110]):[]),
+    ...(r&&r.asic?[['ASIC : Bit Hammer  ..  <span class="dim">OK</span>',110]]:[]),
+    ['NET : syncing WATTxchain  block #'+fmtInt(S.blocks+184000)+'  ..  <span class="dim">OK</span>',260],
+    ['MOUNT /dev/rig'+(OS.rig+1)+'  ..  <span class="dim">OK</span>',160],
+    ['starting miner daemon  ..  <span class="dim">OK</span>',200],
+    ['',80],
+    ['Mining Game OS — decentralized rig login',120],
+  ];
+  let i=0;
+  const myId=OS.bootId=(OS.bootId||0)+1, t0=performance.now();
+  (function next(){
+    if(!OS.open||OS.stage!=='boot'||OS.bootId!==myId) return;
+    if(performance.now()-t0>3800){ while(i<lines.length){ b.innerHTML+=lines[i++][0]+'\n'; } } // throttled tab: fast-forward
+    if(i>=lines.length){ setTimeout(osLogin,320); return; }
+    b.innerHTML+=lines[i][0]+'\n';
+    tone&&tone(880+i*40,880+i*40,0.015,'square',0.03);
+    setTimeout(next,lines[i][1]||120); i++;
+  })();
+}
+/* ---------- login (chain select, mirrors the real MiningGameOS) ---------- */
+function osLogin(){
+  OS.stage='login';
+  const os=$('os');
+  os.insertAdjacentHTML('beforeend',`
+  <div id="os-login">
+    <div class="os-lbox">
+      <div class="os-lhead">${osPlug(16)}&nbsp;<b>Mining Game OS</b><span style="color:#666">· Login — Rig ${OS.rig+1}</span></div>
+      <div class="os-lbody">
+        <label>SELECT A CHAIN TO CONTINUE</label>
+        <select class="os-sel" id="os-chain">
+          <option value="wattx">🔌 WATTxchain</option>
+          <option value="polygon" ${S.net==='polygon'?'selected':''}>🟣 Polygon</option>
+          <option value="alt" ${S.net==='alt'?'selected':''}>🟠 Altcoinchain</option>
+        </select>
+        ${osPlug(72)}
+        <div class="os-chain" id="os-cname">WATTxchain</div>
+        <div class="os-cid" id="os-ccid">Chain ID: 2337</div>
+        <button class="os-btn1" id="os-connect">Connect Wallet &amp; Login</button>
+        <button class="os-btn2" id="os-guest">Continue without wallet</button>
+      </div>
+    </div>
+  </div>`);
+  const sel=$('os-chain');
+  const upd=()=>{ const c=OS_CHAINS[sel.value]; $('os-cname').textContent=c.name; $('os-ccid').textContent='Chain ID: '+c.id; };
+  sel.onchange=()=>{ SFX.click(); upd(); }; upd();
+  const login=async(wallet)=>{
+    const c=OS_CHAINS[sel.value];
+    if(c.net && c.net!==S.net){ S.net=c.net; toast(`🔗 OS switched mining network to ${CFG.nets[S.net].name}`, c.net==='alt'?'gold':'cyan'); }
+    if(wallet){
+      if(w3Has()){ if(!W3.addr) await w3Connect(); OS.addr=W3.addr?w3Short(W3.addr):null; }
+      if(!OS.addr){ if(!S.osAddr) S.osAddr='0x'+Array.from({length:8},()=>'0123456789abcdef'[Math.random()*16|0]).join('')+'…'+Array.from({length:4},()=>'0123456789abcdef'[Math.random()*16|0]).join(''); OS.addr=S.osAddr; }
+    }
+    else OS.addr=null;
+    SFX.buy(); $('os-login').remove(); osDesktop();
+  };
+  $('os-connect').onclick=()=>login(true);
+  $('os-guest').onclick=()=>login(false);
+}
+/* ---------- desktop ---------- */
+function osDesktop(){
+  OS.stage='desk';
+  const os=$('os'); $('os-boot')?.remove();
+  os.insertAdjacentHTML('beforeend',`
+  <div id="os-desk">
+    <div class="os-pat"></div>
+    <div id="os-wall">
+      <img src="${THUMB[1]||''}" alt="">
+      <div class="mg1">MINING GAME</div>
+      <div class="mg2">RIG ${OS.rig+1} · ${OS.addr?OS.addr:'GUEST SESSION'}</div>
+    </div>
+    <div id="os-icons"></div>
+  </div>
+  <div id="os-bar">
+    <div class="plug" id="os-power" title="Log out">${osPlug(18)}</div>
+    <div id="os-tasks" style="display:flex;gap:6px"></div>
+    <div id="os-clock"><span class="dot"></span><div><b id="os-time"></b><small id="os-net2"></small></div>
+      <button class="os-task" id="os-exit" style="margin-left:6px">⏻ EXIT OS</button></div>
+  </div>`);
+  const APPS=[
+    ['miner','⛏','Miner',osAppMiner],
+    ['tunex','🎛','TuneX OC',osAppTunex],
+    ['dex','⇄','SwapinDEX',osAppDex],
+    ['wallet','👛','Wallet',osAppWallet],
+    ['web','🌐','Browser',osAppWeb],
+  ];
+  const ic=$('os-icons');
+  APPS.forEach(([k,g,nm,fn])=>{
+    const d=osEl(`<div class="os-ic" data-app="${k}"><div class="g">${g}</div><span>${nm}</span></div>`);
+    d.onclick=()=>{ SFX.click(); osOpenWin(k,g,nm,fn); };
+    ic.appendChild(d);
+  });
+  $('os-power').onclick=closeOS;
+  $('os-exit').onclick=closeOS;
+  osTick();
+  clearInterval(OS.iv); OS.iv=setInterval(osTick,600);
+  osOpenWin('miner','⛏','Miner',osAppMiner); // auto-open the miner terminal
+}
+/* ---------- window manager ---------- */
+function osOpenWin(k,icon,title,fill){
+  if(OS.wins[k]){ osFocus(k); return; }
+  const n=Object.keys(OS.wins).length;
+  const w=osEl(`<div class="oswin" style="left:${Math.min(innerWidth-340,120+n*44)}px;top:${Math.min(innerHeight-300,46+n*36)}px;width:min(400px,94vw)">
+    <div class="whead"><span class="wic">${icon}</span><b>${title}</b><button class="wx">✕</button></div>
+    <div class="wbody"></div></div>`);
+  $('os-desk').appendChild(w);
+  OS.wins[k]={el:w, fill, k};
+  w.querySelector('.wx').onclick=e=>{ e.stopPropagation(); osCloseWin(k); };
+  w.addEventListener('pointerdown',()=>osFocus(k));
+  // drag
+  const head=w.querySelector('.whead');
+  head.addEventListener('pointerdown',e=>{
+    if(e.target.classList.contains('wx')) return;
+    const ox=e.clientX-w.offsetLeft, oy=e.clientY-w.offsetTop;
+    const mv=ev=>{ w.style.left=clamp(ev.clientX-ox,-100,innerWidth-80)+'px'; w.style.top=clamp(ev.clientY-oy,0,innerHeight-90)+'px'; };
+    const up=()=>{ removeEventListener('pointermove',mv); removeEventListener('pointerup',up); };
+    addEventListener('pointermove',mv); addEventListener('pointerup',up);
+  });
+  osFocus(k); fill(w.querySelector('.wbody'));
+  osTaskbar();
+}
+function osCloseWin(k){ const W=OS.wins[k]; if(!W) return; W.el.remove(); delete OS.wins[k]; SFX.click(); osTaskbar(); }
+function osFocus(k){
+  for(const j in OS.wins) OS.wins[j].el.classList.remove('focus');
+  const W=OS.wins[k]; if(!W) return;
+  W.el.classList.add('focus'); W.el.style.zIndex=++OS.z;
+  osTaskbar();
+}
+function osTaskbar(){
+  const t=$('os-tasks'); if(!t) return;
+  t.innerHTML='';
+  for(const k in OS.wins){
+    const W=OS.wins[k];
+    const b=osEl(`<button class="os-task ${W.el.classList.contains('focus')?'on':''}">${W.el.querySelector('.wic').textContent} ${W.el.querySelector('.whead b').textContent}</button>`);
+    b.onclick=()=>osFocus(k);
+    t.appendChild(b);
+  }
+}
+/* ---------- live refresh ---------- */
+function osTick(){
+  if(!OS.open||OS.stage!=='desk') return;
+  const d=new Date();
+  const el=$('os-time'); if(el) el.textContent=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const n2=$('os-net2'); if(n2) n2.textContent=CFG.nets[S.net].name+' · diff '+difficulty().toFixed(1)+'x';
+  osRefresh();
+}
+function osRefresh(){
+  for(const k in OS.wins){ const f=OS.wins[k]; if(f.refresh) f.refresh(); }
+}
+/* ---------- app: Miner terminal ---------- */
+function osAppMiner(body){
+  const r=()=>S.rigs[OS.rig];
+  body.innerHTML=`<div class="os-term" id="osm-log"></div>
+    <div class="os-kv">
+      <div><small>HASHRATE</small><b id="osm-hash">0</b></div>
+      <div><small>WATT DRAW</small><b id="osm-watt">0</b></div>
+      <div><small>RIG TEMP</small><b id="osm-temp">0°</b></div>
+      <div><small>STATUS</small><b id="osm-st">OK</b></div>
+    </div>
+    <button class="os-abtn" id="osm-boot">⟳ REBOOT RIG</button>`;
+  const log=body.querySelector('#osm-log');
+  let ln=0;
+  const W=OS.wins.miner;
+  W.refresh=()=>{
+    const rg=r(); if(!rg) return;
+    body.querySelector('#osm-hash').textContent=fmt(rigHash(rg)*Math.pow(CFG.gen2Mult,S.gen-1))+' H';
+    body.querySelector('#osm-watt').textContent=fmt(rigWatt(rg))+' W';
+    body.querySelector('#osm-temp').textContent=Math.round(S.temp)+'°C';
+    const st=body.querySelector('#osm-st');
+    const crashed=rg.crashT>0;
+    st.textContent=crashed?'CRASHED '+Math.ceil(rg.crashT)+'s':noWatt?'NO WATT':'MINING';
+    st.style.color=crashed?'#ff6b74':noWatt?'#ffae42':'#3dff8a';
+    const bb=body.querySelector('#osm-boot');
+    bb.disabled=!crashed; bb.classList.toggle('warn',crashed);
+    if(ln++%2===0){
+      const msgs=crashed?['<span class="bad">kernel panic: gpu hang detected</span>','<span class="bad">miner daemon dead — reboot required</span>']
+        :noWatt?['<span class="warn">power rail sag — WATT reserve empty</span>']
+        :['accepted share ('+(Math.random()*90+8|0)+'ms)','<span class="hl">job #'+(Math.random()*9999|0)+' from stratum+tcp://'+((curPool()||{id:'solo'}).id)+'.'+CFG.nets[S.net].coin+'.pool.watt:3333</span>','gpu clocks '+(1800+r().oc.c*120)+'/'+(9000+r().oc.m*400)+' MHz','difficulty '+difficulty().toFixed(2)+'x · luck '+Math.round((luckMult()-1)*100)+'%'];
+      log.innerHTML+=msgs[Math.random()*msgs.length|0]+'<br>';
+      while(log.children.length>60) log.removeChild(log.firstChild);
+      log.scrollTop=log.scrollHeight;
+    }
+  };
+  body.querySelector('#osm-boot').onclick=()=>{ rebootRig(OS.rig); osRefresh(); };
+  W.refresh();
+}
+/* ---------- app: TuneX overclock ---------- */
+function osAppTunex(body){
+  const rg=S.rigs[OS.rig]; if(!rg){ body.textContent='no rig'; return; }
+  body.innerHTML=`
+    <div style="font-size:11px;color:#8a8a90;margin-bottom:4px">TuneX™ performance tuning — Rig ${OS.rig+1}</div>
+    <div class="os-row"><label>CORE CLOCK</label><input type="range" min="0" max="5" step="1" id="oc-c" value="${rg.oc.c}"><span class="val" id="oc-cv">+${rg.oc.c}</span></div>
+    <div class="os-row"><label>MEM CLOCK</label><input type="range" min="0" max="5" step="1" id="oc-m" value="${rg.oc.m}"><span class="val" id="oc-mv">+${rg.oc.m}</span></div>
+    <div class="os-kv">
+      <div><small>HASHPOWER</small><b id="oc-h">+0%</b></div>
+      <div><small>POWER DRAW</small><b id="oc-w">+0%</b></div>
+      <div><small>CRASH RISK</small><b id="oc-r">0%/min</b></div>
+      <div><small>RIG TEMP</small><b id="oc-t">0°</b></div>
+    </div>
+    <div class="os-note">Push clocks for free hashpower — but heat is the enemy. Above <b style="color:#ffae42">85°C</b> risk ×4, above <b class="risk">100°C</b> risk ×12. A crashed rig hashes nothing for 45s. Buy ❄ Cooling in the garage to tame it.</div>
+    <button class="os-abtn" id="oc-apply">APPLY TUNE</button>`;
+  const cs=body.querySelector('#oc-c'), ms=body.querySelector('#oc-m');
+  const prev=()=>{
+    const c=+cs.value, m=+ms.value;
+    body.querySelector('#oc-cv').textContent='+'+c; body.querySelector('#oc-mv').textContent='+'+m;
+    body.querySelector('#oc-h').textContent='+'+Math.round(c*5+m*2)+'%';
+    body.querySelector('#oc-w').textContent='+'+Math.round(c*7+m*3)+'%';
+    const fake={oc:{c,m}};
+    const risk=ocRiskPerMin(fake)*100;
+    const rEl=body.querySelector('#oc-r');
+    rEl.textContent=risk.toFixed(1)+'%/min';
+    rEl.style.color=risk>4?'#ff6b74':risk>1?'#ffae42':'#3dff8a';
+  };
+  cs.oninput=ms.oninput=()=>{ SFX.click(); prev(); };
+  const W=OS.wins.tunex;
+  W.refresh=()=>{ const t=body.querySelector('#oc-t'); if(t){ t.textContent=Math.round(S.temp)+'°C'; t.style.color=S.temp>=100?'#ff6b74':S.temp>=85?'#ffae42':'#3dff8a'; } prev(); };
+  body.querySelector('#oc-apply').onclick=()=>{
+    setOC(OS.rig,+cs.value,+ms.value);
+    toast(`🎛 Rig ${OS.rig+1} tuned: +${Math.round(+cs.value*5+ +ms.value*2)}% hash, +${Math.round(+cs.value*7+ +ms.value*3)}% draw`,'cyan');
+    osRefresh();
+  };
+  prev();
+}
+/* ---------- app: SwapinDEX ---------- */
+function osAppDex(body){
+  body.innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="font-size:18px">⇄</span><b>SwapinDEX</b>
+      <span style="font-size:10px;color:#8a8a90">on-rig decentralized exchange</span></div>
+    <label style="font-size:10px;color:#8a8a90;letter-spacing:.1em">SELL</label>
+    <div style="display:flex;gap:6px;margin:6px 0 10px">
+      <select class="os-sel" id="dx-coin" style="width:110px;margin:0">
+        <option value="pol">🟣 POL</option><option value="alt">🟠 ALT</option><option value="wtx">🟡 WTX</option>
+      </select>
+      <input class="os-in" id="dx-amt" type="number" min="0" step="any" placeholder="amount">
+      <button class="os-task" id="dx-max" style="padding:5px 10px">MAX</button>
+    </div>
+    <div class="os-kv">
+      <div><small>BALANCE</small><b id="dx-bal">0</b></div>
+      <div><small>RATE</small><b id="dx-rate">0 ⚡</b></div>
+      <div><small>YOU RECEIVE</small><b id="dx-out">0 ⚡</b></div>
+      <div><small>POOL FEE</small><b style="color:#3dff8a">0%</b></div>
+    </div>
+    <button class="os-abtn" id="dx-swap">SWAP → ⚡WATT</button>
+    <div class="os-note" id="dx-hint">ALT is volatile — watch the rate and time your swaps.</div>`;
+  const coin=body.querySelector('#dx-coin'), amt=body.querySelector('#dx-amt');
+  const upd=()=>{
+    const cn=coin.value, p=S.price[cn];
+    body.querySelector('#dx-bal').textContent=fmt(S[cn])+' '+cn.toUpperCase();
+    body.querySelector('#dx-rate').textContent=p.toFixed(2)+' ⚡';
+    const a=parseFloat(amt.value)||0;
+    body.querySelector('#dx-out').textContent=fmt(a*p)+' ⚡';
+  };
+  coin.onchange=()=>{ SFX.click(); amt.value=''; upd(); };
+  amt.oninput=upd;
+  body.querySelector('#dx-max').onclick=()=>{ amt.value=S[coin.value].toFixed(3); upd(); };
+  body.querySelector('#dx-swap').onclick=()=>{
+    const a=parseFloat(amt.value)||0;
+    if(sellCoin(coin.value,a)){ amt.value=''; }
+    upd();
+  };
+  OS.wins.dex.refresh=upd; upd();
+}
+/* ---------- app: Wallet ---------- */
+function osAppWallet(body){
+  const W=OS.wins.wallet;
+  W.refresh=()=>{
+    body.innerHTML=`
+      <div style="font-size:10px;color:#8a8a90;margin-bottom:8px">${OS.addr?('CONNECTED · '+OS.addr):'GUEST — connect wallet at next login for an address'}</div>
+      <div class="os-kv">
+        <div><small>⚡ WATT</small><b>${fmt(S.watt)}</b></div>
+        <div><small>NET WORTH</small><b>${fmt(netWorth())} ⚡</b></div>
+        <div><small>🟣 POL</small><b>${fmt(S.pol)} <span style="color:#77777d;font-size:10px">@${S.price.pol.toFixed(1)}</span></b></div>
+        <div><small>🟠 ALT</small><b>${fmt(S.alt)} <span style="color:#77777d;font-size:10px">@${S.price.alt.toFixed(1)}</span></b></div>
+        <div><small>BLOCKS MINED</small><b>${fmtInt(S.blocks)}</b></div>
+        <div><small>LUCKY BLOCKS</small><b>${fmtInt(S.lucky)}</b></div>
+      </div>
+      <div style="font-size:10px;color:#8a8a90;margin:10px 0 5px;letter-spacing:.1em">RECENT BLOCKS</div>
+      <div class="os-term" style="height:96px">${lastBlocksFeed.slice(-6).reverse().map(b=>`<div class="${b.lucky?'hl':''}">${b.txt}</div>`).join('')||'<span style="color:#3f7a55">no blocks yet — keep mining</span>'}</div>`;
+  };
+  W.refresh();
+}
+/* ---------- app: Browser ---------- */
+function osAppWeb(body){
+  body.innerHTML=`
+    <div class="os-url"><span class="lock">🔒</span> https://nucash-mining.github.io/MiningGameOS/</div>
+    <div style="text-align:center;padding:8px 4px 4px">
+      ${osPlug(56)}
+      <div style="color:#ffd23f;font-weight:800;margin:8px 0 3px">Mining Game OS</div>
+      <div style="font-size:11px;color:#8a8a90;line-height:1.6;max-width:290px;margin:0 auto">
+        You are inside the in-game replica. The real decentralized OS front-end
+        runs in your browser — log into your actual rig with a wallet on WATTxchain.</div>
+      <button class="os-abtn" id="web-go" style="max-width:240px">OPEN REAL MiningGameOS ↗</button>
+      <div class="os-note">also: <span style="color:#ffd23f">mining.game</span> collection · Polygon &amp; Altcoinchain</div>
+    </div>`;
+  body.querySelector('#web-go').onclick=()=>{ SFX.click(); open('https://nucash-mining.github.io/MiningGameOS/','_blank'); };
+}
+
+/* ================= INPUT ================= */
+const ray=new THREE.Raycaster(), mouse=new THREE.Vector2();
+let hoverRig=-1, pdown=null;
+function rigHitboxes(){
+  const out=[];
+  rigVis.forEach((rv,i)=>{ if(!rv) return;
+    if(!rv.hit){ const m=new THREE.Mesh(new THREE.BoxGeometry(4.4,3.6,2.5),
+      new THREE.MeshBasicMaterial({visible:false}));
+      m.position.set(SLOTS[rv.slot][0],1.8,SLOTS[rv.slot][1]); m.userData.rig=i;
+      scene.add(m); rv.hit=m; }
+    out.push(rv.hit);
+  });
+  return out;
+}
+function pick(e){
+  const r=canvas.getBoundingClientRect();
+  mouse.x=((e.clientX-r.left)/r.width)*2-1; mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+  ray.setFromCamera(mouse,cam);
+  const hits=ray.intersectObjects(rigHitboxes(),false);
+  return hits.length?hits[0].object.userData.rig:-1;
+}
+canvas.addEventListener('pointermove',e=>{
+  if(TRAILER) return;
+  const h=pick(e);
+  if(h!==hoverRig){ hoverRig=h; canvas.style.cursor=h>=0?'pointer':'default'; }
+});
+canvas.addEventListener('pointerdown',e=>{ pdown=[e.clientX,e.clientY]; });
+canvas.addEventListener('pointerup',e=>{
+  if(TRAILER||!pdown) return;
+  const dx=e.clientX-pdown[0], dy=e.clientY-pdown[1]; pdown=null;
+  if(dx*dx+dy*dy>36) return;
+  const h=pick(e);
+  if(h>=0){ selRig=h; SFX.click(); renderRigPanel(); if(S.tut===1){S.tut=2;save();showTut();} }
+  else { selRig=-1; renderRigPanel(); }
+});
+/* buttons */
+$('b-shop').onclick=()=>{ openModal('m-shop'); renderShop(); if(S.tut===2){S.tut=3;save();showTut();} };
+$('b-upg').onclick=()=>{ openModal('m-upg'); renderUpg(); };
+$('b-stats').onclick=()=>{ openModal('m-stats'); renderStats(); };
+$('b-mute').onclick=()=>setMuted(!S.muted);
+$('net').onclick=switchNet;
+$('sell-pol').onclick=()=>sellCoin('pol');
+$('sell-alt').onclick=()=>sellCoin('alt');
+$('b-share').onclick=shareX;
+$('b-reset').onclick=()=>{ if(confirm('Wipe your entire garage and start over?')){ localStorage.removeItem(SAVEKEY); location.reload(); } };
+$('b-wallet').onclick=()=>{ openModal('m-web3'); renderWallet(); if(w3Has()&&!W3.addr) w3Connect(); };
+$('bench-close').onclick=()=>closeBench();
+$('bench-shop').onclick=()=>{ openModal('m-shop'); renderShop(); };
+addEventListener('keydown',e=>{
+  if(e.target.matches('input,textarea,select')) return;
+  if(e.key==='Escape'){ if(OS.open){ closeOS(); return; } if(benchOpen){ closeBench(); return; } selRig=-1; renderRigPanel(); ['m-shop','m-upg','m-stats','m-web3'].forEach(closeModal); }
+  if(OS.open) return;
+  if(e.key==='s'||e.key==='S'){ openModal('m-shop'); renderShop(); }
+  if(e.key==='n'||e.key==='N') switchNet();
+  if(e.key==='o'||e.key==='O'){ if(S&&S.rigs.length) openOS(selRig>=0?selRig:0); }
+  if(e.key==='b'||e.key==='B'){ if(benchOpen) closeBench(); else if(S&&S.rigs.length) openBench(selRig>=0?selRig:0); }
+  if(e.key==='w'||e.key==='W'){ openModal('m-web3'); renderWallet(); }
+});
+/* ================= MAIN LOOP ================= */
+let last=0, acc=0, uiT=0, scrT=0, histT=0, running=false;
+const SIMDT=0.1;
+function frame(t){
+  requestAnimationFrame(frame);
+  if(!running) { last=t; return; }
+  if(document.hidden){ last=t; return; }
+  let dt=(t-last)/1000; last=t;
+  if(dt>0.5) dt=0.5;
+  acc+=dt;
+  while(acc>=SIMDT){ simTick(SIMDT); acc-=SIMDT; }
+  // visuals
+  controls.update();
+  tickParts(dt);
+  if(badgeMesh&&badgeMesh.visible) badgeMesh.rotation.y+=dt*0.9;
+  if(badgeHolo&&badgeHolo.visible) badgeHolo.rotation.y+=dt*0.5;
+  // led colors + gentle gpu hover
+  const ledc=noWatt?0xff4d5e:(heatFactor()<1||powerFactor()<1)?0xffae42:0x3dff8a;
+  rigVis.forEach(rv=>{ if(rv){ rv.led.material.color.setHex(ledc);
+    rv.led.material.opacity=1; }});
+  // rings pulse
+  const pt=t/1000;
+  rings.forEach((rg,i)=>{ if(!rg||!rg.visible) return;
+    const occupied=S&&S.rigs.some(r=>r.slot===i);
+    const isHover=S&&S.rigs[hoverRig]&&S.rigs[hoverRig].slot===i;
+    const isSel=S&&S.rigs[selRig]&&S.rigs[selRig].slot===i;
+    rg.material.color.setHex(isSel?0x2ee6d6:isHover?0xb47cff:occupied?0x8247e5:0x3a3168);
+    rg.material.opacity=isSel?0.9:isHover?0.75:occupied?(0.3+0.15*Math.sin(pt*2+i)):0.22;
+  });
+  uiT+=dt; if(uiT>0.3){ uiT=0; if(S) renderHud(); }
+  scrT+=dt; if(scrT>0.55){ scrT=0; if(S){ drawScreen(); drawTerm(); } }
+  histT+=dt; if(histT>1){ histT=0; if(S){
+    hashHist.push(totHash()); if(hashHist.length>60) hashHist.shift();
+    priceHist.pol.push(S.price.pol); if(priceHist.pol.length>50) priceHist.pol.shift();
+    priceHist.alt.push(S.price.alt); if(priceHist.alt.length>50) priceHist.alt.shift();
+    priceHist.wtx.push(S.price.wtx); if(priceHist.wtx.length>50) priceHist.wtx.shift();
+  }}
+  if(benchOpen){ benchLoop(dt); return; }
+  renderer.render(scene,cam);
+}
+requestAnimationFrame(frame);
+setInterval(()=>{ if(running&&S) save(); },10000);
+addEventListener('beforeunload',()=>save());
+/* ================= INIT ================= */
+async function init(){
+  const note=$('loadnote');
+  try{
+    await loadModels(p=>{ note.textContent=`loading 3D hardware… ${Math.round(p*100)}%`; });
+  }catch(e){ note.textContent='model load failed — check connection & refresh'; console.error(e); return; }
+  makeThumbs(); buildPosters(); buildBadgeDisplay();
+  const saved=load();
+  if(saved){ S=saved;
+    $('mintbtn').textContent='⛏ RESUME MINING';
+    note.textContent=`welcome back — ${saved.rigs.length} rig(s) · ${fmt(saved.watt)} ⚡WATT`;
+  } else note.textContent='ready';
+  $('mintbtn').onclick=()=>{
+    $('splash').style.display='none';
+    if(!S){ S=freshState(); }
+    auInit(); setMuted(S.muted);
+    setBadgeOwned(!!S.badge); setTowerOwned(!!S.tower);
+    if(S.rigs.length===0){ mintPC(true); S.tut=0; showTut(); }
+    else { rebuildAllRigs(); applyOffline(); showTut(); }
+    refreshRings(); renderHud(); drawScreen(); save();
+    running=true;
+    if(TRAILER) startTrailerScript();
+  };
+  if(TRAILER){ $('splash').style.display='none'; trailerSetup(); }
+  window.MG={ get S(){return S;}, tick:s=>{for(let i=0;i<s*10;i++)simTick(SIMDT);renderHud();},
+    give:w=>{S.watt+=w;renderHud();}, save, mintPC, buyItem, installPart, forceBlock, cam, controls, scene, THREE,
+    openOS, closeOS, setOC, rebootRig, openBench, closeBench, W3, WEB3CFG, w3Connect, w3Refresh,
+    joinPool, hostPool, closePool, buyValidator, exitValidators, repairRig, togglePower, openPoolHub, switchNet, POOLS,
+    state:()=>JSON.parse(JSON.stringify(S)) };
+}
+function forceBlock(lucky=false){
+  const net=CFG.nets[S.net];
+  const amt=net.reward*(lucky?CFG.luckyMult:1);
+  S[net.coin]+=amt; S.blocks++; S.blocksNet[net.coin]++;
+  const ri=Math.floor(Math.random()*Math.max(1,S.rigs.length));
+  if(S.rigs[ri]){ const pos=new THREE.Vector3(SLOTS[S.rigs[ri].slot][0],2.2,SLOTS[S.rigs[ri].slot][1]);
+    burst(pos,lucky?46:16,lucky?partMatGold:partMatPur,lucky?4:2.6);
+    floatLabel(pos,`+${amt.toFixed(2)} ${net.sym}${lucky?' ✨LUCKY':''}`,lucky?'#ffd23f':'#c9a6ff'); }
+  lastBlocksFeed.push({txt:`#${S.blocks} +${amt.toFixed(2)} ${net.sym}${lucky?' LUCKY x5':''}`,lucky});
+  lucky?SFX.lucky():SFX.block();
+  renderHud();
+}
+init();
+
+/* ================= TRAILER MODE (?trailer=1) ================= */
+let trailerFrame=null, comp=null, compX=null;
+function trailerSetup(){
+  document.getElementById('hud').style.display='none';
+  document.getElementById('wallet').style.display='none';
+  document.getElementById('feed').style.display='none';
+  comp=cnv(1280,720); compX=comp.getContext('2d');
+  comp.id='compcanvas'; window.__comp=comp;
+  window.__trailerReady=true;
+  canvas.addEventListener('pointerdown',function once(){
+    canvas.removeEventListener('pointerdown',once);
+    auInit();
+    window.__rec=window.recordTrailer();
+  });
+}
+function easeIO(x){ return x<0?0:x>1?1:x*x*(3-2*x); }
+function lerpV(a,b,t){ return a.map((v,i)=>v+(b[i]-v)*t); }
+const TKEYS=[ // [tStart,tEnd, camFrom,camTo, tgtFrom,tgtTo]
+  [0,   6.0, [15,9,16],[11,6.5,12],   [0,1,-1],[0,1.2,-1]],
+  [6.0, 12.5,[11,6.5,12],[-10,4.5,9], [0,1.2,-1],[0,1.4,-1.5]],
+  [12.5,18.5,[-3.2,2.6,2.6],[-6.4,2.2,1.6],[-4.6,1.5,-1.4],[-4.6,1.6,-1.2]],
+  [18.5,24.5,[6,3.2,4],[8.5,4.6,7.5], [0,1.4,-3],[0,1.2,-2]],
+  [24.5,29.5,[2.4,2.6,-4.2],[-2.2,2.4,-4.6],[0,2.2,-6.6],[0,2.2,-6.6]],
+  [29.5,36.5,[12,7.5,13],[14,9,16],   [0,1.4,-1],[0,1,-1]],
+];
+const TCARDS=[
+  {a:0.6,b:5.2, big:'THE MINING GAME', small:'WATT TYCOON — a 3D crypto-mining simulator'},
+  {a:6.5,b:12,  big:'', small:'Built from the REAL Mining Game NFT collection — Polygon & Altcoinchain', low:true},
+  {a:13,b:18.2, big:'', small:'Bolt in real CPU & GPU NFTs — every trait is on-chain', low:true},
+  {a:19,b:24.2, big:'', small:'⚡ WATT is electricity. Blocks are money. Heat is the enemy.', low:true},
+  {a:25,b:29.3, big:'', small:'Claim the Genesis Badge — only 100 ever minted', low:true},
+  {a:30,b:36.5, big:'PLAY FREE', small:'mining-game.games.bu.app'},
+];
+let trailT0=0, trailEvents=[];
+function startTrailerScript(){
+  // demo garage
+  S=freshState(); S.tut=99; S.watt=99999;
+  mintPC(true); mintPC(false); S.watt=99999; mintPC(false); S.watt=99999;
+  S.upg.rack=1; S.upg.power=3; S.upg.cooling=2;
+  S.inv={3:3,4:2,5:2};
+  installPart(0,3); installPart(0,4); installPart(0,5);
+  installPart(1,3); installPart(1,4);
+  S.badge=1; setBadgeOwned(true);
+  S.watt=12840; S.pol=42.7; S.alt=13.2; S.blocks=317;
+  selRig=-1; renderRigPanel(); $('tut').style.display='none';
+  running=true;
+  trailT0=performance.now();
+  trailEvents=[
+    [13.5,()=>installPart(2,3)],[15.2,()=>installPart(2,4)],[16.8,()=>installPart(2,5)],
+    [19.5,()=>forceBlock(false)],[21,()=>forceBlock(false)],[22.5,()=>forceBlock(true)],
+    [26,()=>{S.net='alt';renderHud();}],
+    [31,()=>forceBlock(false)],[33,()=>forceBlock(true)],
+  ];
+  trailerFrame=(t)=>{
+    for(const ev of trailEvents){ if(ev&&t>=ev[0]){ ev[1](); trailEvents[trailEvents.indexOf(ev)]=null; } }
+    // camera
+    for(const k of TKEYS){ if(t>=k[0]&&t<=k[1]){
+      const f=easeIO((t-k[0])/(k[1]-k[0]));
+      const cp=lerpV(k[2],k[3],f), tg=lerpV(k[4],k[5],f);
+      cam.position.set(...cp); controls.target.set(...tg);
+    }}
+    // composite
+    compX.fillStyle='#000'; compX.fillRect(0,0,1280,720);
+    compX.drawImage(renderer.domElement,0,0,1280,720);
+    // fake HUD
+    compX.font='700 22px monospace'; compX.textAlign='left';
+    compX.fillStyle='rgba(13,11,30,.75)'; compX.fillRect(20,16,690,44);
+    compX.fillStyle='#ffd23f'; compX.fillText('⚡ '+fmt(S.watt),36,46);
+    compX.fillStyle='#2ee6d6'; compX.fillText('⛏ '+fmt(totHash())+' H',210,46);
+    compX.fillStyle='#b7a6ff'; compX.fillText('🧱 '+S.blocks+' BLOCKS',400,46);
+    compX.fillStyle=S.net==='alt'?'#ffb020':'#a06bff'; compX.fillText(CFG.nets[S.net].name.toUpperCase(),590,46);
+    // cards
+    compX.textAlign='center';
+    for(const c of TCARDS){
+      if(t<c.a||t>c.b) continue;
+      const fin=Math.min(1,(t-c.a)/0.5), fout=Math.min(1,(c.b-t)/0.5);
+      const al=Math.min(fin,fout);
+      compX.globalAlpha=al;
+      if(c.big){
+        compX.fillStyle='rgba(5,3,15,.55)'; compX.fillRect(0,240,1280,240);
+        const g=compX.createLinearGradient(0,300,0,400); g.addColorStop(0,'#ffd23f'); g.addColorStop(1,'#ff8d2e');
+        compX.fillStyle=g; compX.font='900 86px Segoe UI,Arial';
+        compX.fillText(c.big,640,372);
+        compX.fillStyle='#2ee6d6'; compX.font='700 30px Segoe UI,Arial';
+        compX.fillText(c.small,640,432);
+      } else {
+        compX.fillStyle='rgba(5,3,15,.68)'; compX.fillRect(0,620,1280,64);
+        compX.fillStyle='#e8e4ff'; compX.font='700 30px Segoe UI,Arial';
+        compX.fillText(c.small,640,662);
+      }
+      compX.globalAlpha=1;
+    }
+    // fade in/out
+    if(t<1){ compX.fillStyle=`rgba(0,0,0,${1-t})`; compX.fillRect(0,0,1280,720); }
+    if(t>35.5){ compX.fillStyle=`rgba(0,0,0,${Math.min(1,(t-35.5))})`; compX.fillRect(0,0,1280,720); }
+  };
+}
+window.recordTrailer=async function(){
+  const stream=comp.captureStream(30);
+  if(AU.dest) AU.dest.stream.getAudioTracks().forEach(tr=>stream.addTrack(tr));
+  const mime=MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')?'video/mp4;codecs=avc1':'video/mp4';
+  const rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:6_000_000});
+  const chunks=[];
+  rec.ondataavailable=e=>chunks.push(e.data);
+  const done=new Promise(res=>rec.onstop=res);
+  rec.start();
+  startTrailerScript();
+  await new Promise(r=>setTimeout(r,37000));
+  rec.stop(); await done;
+  const blob=new Blob(chunks,{type:'video/mp4'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='mining-game_trailer.mp4'; document.body.appendChild(a); a.click();
+  return blob.size;
+};
+
+/* offline trailer rendering (virtual clock) */
+let __vt=0;
+window.__offlineStart=function(){
+  running=false; startTrailerScript(); running=false; __vt=0;
+  $('tut').style.display='none';
+  return 'ok';
+};
+window.__offstep=function(dt,quality){
+  __vt+=dt;
+  for(const ev of trailEvents){ if(ev&&__vt>=ev[0]){ try{ev[1]();}catch(e){} trailEvents[trailEvents.indexOf(ev)]=null; } }
+  tickParts(dt);
+  if(badgeMesh&&badgeMesh.visible) badgeMesh.rotation.y+=dt*0.9;
+  if(badgeHolo&&badgeHolo.visible) badgeHolo.rotation.y+=dt*0.5;
+  if(Math.floor(__vt*2)!==Math.floor((__vt-dt)*2)){ drawScreen(); drawTerm(); }
+  controls.update();
+  renderer.render(scene,cam);
+  trailerFrame(__vt);
+  return comp.toDataURL('image/jpeg',quality||0.82);
+};
+window.__recAudioStart=async function(){
+  auInit();
+  const rec=new MediaRecorder(AU.dest.stream,{mimeType:'audio/webm'});
+  const chunks=[]; rec.ondataavailable=e=>chunks.push(e.data);
+  window.__audDone=new Promise(res=>rec.onstop=async()=>{
+    const b=new Blob(chunks,{type:'audio/webm'});
+    const buf=await b.arrayBuffer();
+    let s=''; const u=new Uint8Array(buf);
+    for(let i=0;i<u.length;i+=32768) s+=String.fromCharCode.apply(null,u.subarray(i,i+32768));
+    res(btoa(s));
+  });
+  rec.start();
+  window.__audRec=rec;
+  running=true; startTrailerScript();
+  return 'recording';
+};
+window.__recAudioStop=async function(){ window.__audRec.stop(); return await window.__audDone; };
+</script>
+</body>
+</html>

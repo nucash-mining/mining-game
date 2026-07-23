@@ -1,0 +1,330 @@
+
+/* ================= MINING GAME OS (in-rig operating system) =================
+   Inspired by the real MiningGameOS front-end:
+   https://nucash-mining.github.io/MiningGameOS/  */
+const OS = { open:false, rig:0, stage:'off', wins:{}, z:10, iv:null, addr:null };
+const OS_CHAINS = {
+  wattx:  {name:'WATTxchain',  id:2337, net:'wattx'},
+  polygon:{name:'Polygon',     id:137,  net:'polygon'},
+  alt:    {name:'Altcoinchain',id:2330, net:'alt'},
+};
+const OS_PLUG = `<svg width="__S__" height="__S__" viewBox="0 0 64 64" class="os-plug"><circle cx="32" cy="32" r="26" fill="none" stroke="#ffd23f" stroke-width="4"/><rect x="23" y="21" width="18" height="15" rx="3" fill="none" stroke="#ffd23f" stroke-width="4"/><line x1="27" y1="13" x2="27" y2="22" stroke="#ffd23f" stroke-width="4"/><line x1="37" y1="13" x2="37" y2="22" stroke="#ffd23f" stroke-width="4"/><line x1="32" y1="36" x2="32" y2="48" stroke="#ffd23f" stroke-width="4"/></svg>`;
+const osPlug=s=>OS_PLUG.replaceAll('__S__',s);
+function osEl(html){ const d=document.createElement('div'); d.innerHTML=html; return d.firstElementChild; }
+
+function openOS(ri){
+  OS.open=true; OS.rig=clamp(ri||0,0,Math.max(0,S.rigs.length-1)); OS.stage='boot'; OS.wins={};
+  const os=$('os'); os.classList.add('open'); os.innerHTML='<div class="os-crt"></div><div id="os-boot"></div>';
+  selRig=-1; renderRigPanel();
+  SFX.swap();
+  osBoot();
+}
+function closeOS(){
+  OS.open=false; OS.stage='off';
+  clearInterval(OS.iv); OS.iv=null;
+  $('os').classList.remove('open'); $('os').innerHTML='';
+  SFX.click(); save();
+}
+/* ---------- boot sequence ---------- */
+function osBoot(){
+  const b=$('os-boot'); const r=S.rigs[OS.rig];
+  const lines=[
+    ['WATTxOS BIOS v2.3.7 — Minga Microsystems',0],
+    ['CPU : '+(r&&r.cpu?ITEMS[r.cpu].name:'Minga stock')+'  ..  <span class="dim">OK</span>',140],
+    ['MEM : 16384MB DDR5  ..  <span class="dim">OK</span>',120],
+    ...(r?r.gpus.map((g,i)=>[`GPU${i} : ${ITEMS[g].name}  ..  <span class="dim">OK</span>`,110]):[]),
+    ...(r&&r.asic?[['ASIC : Bit Hammer  ..  <span class="dim">OK</span>',110]]:[]),
+    ['NET : syncing WATTxchain  block #'+fmtInt(S.blocks+184000)+'  ..  <span class="dim">OK</span>',260],
+    ['MOUNT /dev/rig'+(OS.rig+1)+'  ..  <span class="dim">OK</span>',160],
+    ['starting miner daemon  ..  <span class="dim">OK</span>',200],
+    ['',80],
+    ['Mining Game OS — decentralized rig login',120],
+  ];
+  let i=0;
+  const myId=OS.bootId=(OS.bootId||0)+1, t0=performance.now();
+  (function next(){
+    if(!OS.open||OS.stage!=='boot'||OS.bootId!==myId) return;
+    if(performance.now()-t0>3800){ while(i<lines.length){ b.innerHTML+=lines[i++][0]+'\n'; } } // throttled tab: fast-forward
+    if(i>=lines.length){ setTimeout(osLogin,320); return; }
+    b.innerHTML+=lines[i][0]+'\n';
+    tone&&tone(880+i*40,880+i*40,0.015,'square',0.03);
+    setTimeout(next,lines[i][1]||120); i++;
+  })();
+}
+/* ---------- login (chain select, mirrors the real MiningGameOS) ---------- */
+function osLogin(){
+  OS.stage='login';
+  const os=$('os');
+  os.insertAdjacentHTML('beforeend',`
+  <div id="os-login">
+    <div class="os-lbox">
+      <div class="os-lhead">${osPlug(16)}&nbsp;<b>Mining Game OS</b><span style="color:#666">· Login — Rig ${OS.rig+1}</span></div>
+      <div class="os-lbody">
+        <label>SELECT A CHAIN TO CONTINUE</label>
+        <select class="os-sel" id="os-chain">
+          <option value="wattx">🔌 WATTxchain</option>
+          <option value="polygon" ${S.net==='polygon'?'selected':''}>🟣 Polygon</option>
+          <option value="alt" ${S.net==='alt'?'selected':''}>🟠 Altcoinchain</option>
+        </select>
+        ${osPlug(72)}
+        <div class="os-chain" id="os-cname">WATTxchain</div>
+        <div class="os-cid" id="os-ccid">Chain ID: 2337</div>
+        <button class="os-btn1" id="os-connect">Connect Wallet &amp; Login</button>
+        <button class="os-btn2" id="os-guest">Continue without wallet</button>
+      </div>
+    </div>
+  </div>`);
+  const sel=$('os-chain');
+  const upd=()=>{ const c=OS_CHAINS[sel.value]; $('os-cname').textContent=c.name; $('os-ccid').textContent='Chain ID: '+c.id; };
+  sel.onchange=()=>{ SFX.click(); upd(); }; upd();
+  const login=async(wallet)=>{
+    const c=OS_CHAINS[sel.value];
+    if(c.net && c.net!==S.net){ S.net=c.net; toast(`🔗 OS switched mining network to ${CFG.nets[S.net].name}`, c.net==='alt'?'gold':'cyan'); }
+    if(wallet){
+      if(w3Has()){ if(!W3.addr) await w3Connect(); OS.addr=W3.addr?w3Short(W3.addr):null; }
+      if(!OS.addr){ if(!S.osAddr) S.osAddr='0x'+Array.from({length:8},()=>'0123456789abcdef'[Math.random()*16|0]).join('')+'…'+Array.from({length:4},()=>'0123456789abcdef'[Math.random()*16|0]).join(''); OS.addr=S.osAddr; }
+    }
+    else OS.addr=null;
+    SFX.buy(); $('os-login').remove(); osDesktop();
+  };
+  $('os-connect').onclick=()=>login(true);
+  $('os-guest').onclick=()=>login(false);
+}
+/* ---------- desktop ---------- */
+function osDesktop(){
+  OS.stage='desk';
+  const os=$('os'); $('os-boot')?.remove();
+  os.insertAdjacentHTML('beforeend',`
+  <div id="os-desk">
+    <div class="os-pat"></div>
+    <div id="os-wall">
+      <img src="${THUMB[1]||''}" alt="">
+      <div class="mg1">MINING GAME</div>
+      <div class="mg2">RIG ${OS.rig+1} · ${OS.addr?OS.addr:'GUEST SESSION'}</div>
+    </div>
+    <div id="os-icons"></div>
+  </div>
+  <div id="os-bar">
+    <div class="plug" id="os-power" title="Log out">${osPlug(18)}</div>
+    <div id="os-tasks" style="display:flex;gap:6px"></div>
+    <div id="os-clock"><span class="dot"></span><div><b id="os-time"></b><small id="os-net2"></small></div>
+      <button class="os-task" id="os-exit" style="margin-left:6px">⏻ EXIT OS</button></div>
+  </div>`);
+  const APPS=[
+    ['miner','⛏','Miner',osAppMiner],
+    ['tunex','🎛','TuneX OC',osAppTunex],
+    ['dex','⇄','SwapinDEX',osAppDex],
+    ['wallet','👛','Wallet',osAppWallet],
+    ['web','🌐','Browser',osAppWeb],
+  ];
+  const ic=$('os-icons');
+  APPS.forEach(([k,g,nm,fn])=>{
+    const d=osEl(`<div class="os-ic" data-app="${k}"><div class="g">${g}</div><span>${nm}</span></div>`);
+    d.onclick=()=>{ SFX.click(); osOpenWin(k,g,nm,fn); };
+    ic.appendChild(d);
+  });
+  $('os-power').onclick=closeOS;
+  $('os-exit').onclick=closeOS;
+  osTick();
+  clearInterval(OS.iv); OS.iv=setInterval(osTick,600);
+  osOpenWin('miner','⛏','Miner',osAppMiner); // auto-open the miner terminal
+}
+/* ---------- window manager ---------- */
+function osOpenWin(k,icon,title,fill){
+  if(OS.wins[k]){ osFocus(k); return; }
+  const n=Object.keys(OS.wins).length;
+  const w=osEl(`<div class="oswin" style="left:${Math.min(innerWidth-340,120+n*44)}px;top:${Math.min(innerHeight-300,46+n*36)}px;width:min(400px,94vw)">
+    <div class="whead"><span class="wic">${icon}</span><b>${title}</b><button class="wx">✕</button></div>
+    <div class="wbody"></div></div>`);
+  $('os-desk').appendChild(w);
+  OS.wins[k]={el:w, fill, k};
+  w.querySelector('.wx').onclick=e=>{ e.stopPropagation(); osCloseWin(k); };
+  w.addEventListener('pointerdown',()=>osFocus(k));
+  // drag
+  const head=w.querySelector('.whead');
+  head.addEventListener('pointerdown',e=>{
+    if(e.target.classList.contains('wx')) return;
+    const ox=e.clientX-w.offsetLeft, oy=e.clientY-w.offsetTop;
+    const mv=ev=>{ w.style.left=clamp(ev.clientX-ox,-100,innerWidth-80)+'px'; w.style.top=clamp(ev.clientY-oy,0,innerHeight-90)+'px'; };
+    const up=()=>{ removeEventListener('pointermove',mv); removeEventListener('pointerup',up); };
+    addEventListener('pointermove',mv); addEventListener('pointerup',up);
+  });
+  osFocus(k); fill(w.querySelector('.wbody'));
+  osTaskbar();
+}
+function osCloseWin(k){ const W=OS.wins[k]; if(!W) return; W.el.remove(); delete OS.wins[k]; SFX.click(); osTaskbar(); }
+function osFocus(k){
+  for(const j in OS.wins) OS.wins[j].el.classList.remove('focus');
+  const W=OS.wins[k]; if(!W) return;
+  W.el.classList.add('focus'); W.el.style.zIndex=++OS.z;
+  osTaskbar();
+}
+function osTaskbar(){
+  const t=$('os-tasks'); if(!t) return;
+  t.innerHTML='';
+  for(const k in OS.wins){
+    const W=OS.wins[k];
+    const b=osEl(`<button class="os-task ${W.el.classList.contains('focus')?'on':''}">${W.el.querySelector('.wic').textContent} ${W.el.querySelector('.whead b').textContent}</button>`);
+    b.onclick=()=>osFocus(k);
+    t.appendChild(b);
+  }
+}
+/* ---------- live refresh ---------- */
+function osTick(){
+  if(!OS.open||OS.stage!=='desk') return;
+  const d=new Date();
+  const el=$('os-time'); if(el) el.textContent=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const n2=$('os-net2'); if(n2) n2.textContent=CFG.nets[S.net].name+' · diff '+difficulty().toFixed(1)+'x';
+  osRefresh();
+}
+function osRefresh(){
+  for(const k in OS.wins){ const f=OS.wins[k]; if(f.refresh) f.refresh(); }
+}
+/* ---------- app: Miner terminal ---------- */
+function osAppMiner(body){
+  const r=()=>S.rigs[OS.rig];
+  body.innerHTML=`<div class="os-term" id="osm-log"></div>
+    <div class="os-kv">
+      <div><small>HASHRATE</small><b id="osm-hash">0</b></div>
+      <div><small>WATT DRAW</small><b id="osm-watt">0</b></div>
+      <div><small>RIG TEMP</small><b id="osm-temp">0°</b></div>
+      <div><small>STATUS</small><b id="osm-st">OK</b></div>
+    </div>
+    <button class="os-abtn" id="osm-boot">⟳ REBOOT RIG</button>`;
+  const log=body.querySelector('#osm-log');
+  let ln=0;
+  const W=OS.wins.miner;
+  W.refresh=()=>{
+    const rg=r(); if(!rg) return;
+    body.querySelector('#osm-hash').textContent=fmt(rigHash(rg)*Math.pow(CFG.gen2Mult,S.gen-1))+' H';
+    body.querySelector('#osm-watt').textContent=fmt(rigWatt(rg))+' W';
+    body.querySelector('#osm-temp').textContent=Math.round(S.temp)+'°C';
+    const st=body.querySelector('#osm-st');
+    const crashed=rg.crashT>0;
+    st.textContent=crashed?'CRASHED '+Math.ceil(rg.crashT)+'s':noWatt?'NO WATT':'MINING';
+    st.style.color=crashed?'#ff6b74':noWatt?'#ffae42':'#3dff8a';
+    const bb=body.querySelector('#osm-boot');
+    bb.disabled=!crashed; bb.classList.toggle('warn',crashed);
+    if(ln++%2===0){
+      const msgs=crashed?['<span class="bad">kernel panic: gpu hang detected</span>','<span class="bad">miner daemon dead — reboot required</span>']
+        :noWatt?['<span class="warn">power rail sag — WATT reserve empty</span>']
+        :['accepted share ('+(Math.random()*90+8|0)+'ms)','<span class="hl">job #'+(Math.random()*9999|0)+' from stratum+tcp://'+((curPool()||{id:'solo'}).id)+'.'+CFG.nets[S.net].coin+'.pool.watt:3333</span>','gpu clocks '+(1800+r().oc.c*120)+'/'+(9000+r().oc.m*400)+' MHz','difficulty '+difficulty().toFixed(2)+'x · luck '+Math.round((luckMult()-1)*100)+'%'];
+      log.innerHTML+=msgs[Math.random()*msgs.length|0]+'<br>';
+      while(log.children.length>60) log.removeChild(log.firstChild);
+      log.scrollTop=log.scrollHeight;
+    }
+  };
+  body.querySelector('#osm-boot').onclick=()=>{ rebootRig(OS.rig); osRefresh(); };
+  W.refresh();
+}
+/* ---------- app: TuneX overclock ---------- */
+function osAppTunex(body){
+  const rg=S.rigs[OS.rig]; if(!rg){ body.textContent='no rig'; return; }
+  body.innerHTML=`
+    <div style="font-size:11px;color:#8a8a90;margin-bottom:4px">TuneX™ performance tuning — Rig ${OS.rig+1}</div>
+    <div class="os-row"><label>CORE CLOCK</label><input type="range" min="0" max="5" step="1" id="oc-c" value="${rg.oc.c}"><span class="val" id="oc-cv">+${rg.oc.c}</span></div>
+    <div class="os-row"><label>MEM CLOCK</label><input type="range" min="0" max="5" step="1" id="oc-m" value="${rg.oc.m}"><span class="val" id="oc-mv">+${rg.oc.m}</span></div>
+    <div class="os-kv">
+      <div><small>HASHPOWER</small><b id="oc-h">+0%</b></div>
+      <div><small>POWER DRAW</small><b id="oc-w">+0%</b></div>
+      <div><small>CRASH RISK</small><b id="oc-r">0%/min</b></div>
+      <div><small>RIG TEMP</small><b id="oc-t">0°</b></div>
+    </div>
+    <div class="os-note">Push clocks for free hashpower — but heat is the enemy. Above <b style="color:#ffae42">85°C</b> risk ×4, above <b class="risk">100°C</b> risk ×12. A crashed rig hashes nothing for 45s. Buy ❄ Cooling in the garage to tame it.</div>
+    <button class="os-abtn" id="oc-apply">APPLY TUNE</button>`;
+  const cs=body.querySelector('#oc-c'), ms=body.querySelector('#oc-m');
+  const prev=()=>{
+    const c=+cs.value, m=+ms.value;
+    body.querySelector('#oc-cv').textContent='+'+c; body.querySelector('#oc-mv').textContent='+'+m;
+    body.querySelector('#oc-h').textContent='+'+Math.round(c*5+m*2)+'%';
+    body.querySelector('#oc-w').textContent='+'+Math.round(c*7+m*3)+'%';
+    const fake={oc:{c,m}};
+    const risk=ocRiskPerMin(fake)*100;
+    const rEl=body.querySelector('#oc-r');
+    rEl.textContent=risk.toFixed(1)+'%/min';
+    rEl.style.color=risk>4?'#ff6b74':risk>1?'#ffae42':'#3dff8a';
+  };
+  cs.oninput=ms.oninput=()=>{ SFX.click(); prev(); };
+  const W=OS.wins.tunex;
+  W.refresh=()=>{ const t=body.querySelector('#oc-t'); if(t){ t.textContent=Math.round(S.temp)+'°C'; t.style.color=S.temp>=100?'#ff6b74':S.temp>=85?'#ffae42':'#3dff8a'; } prev(); };
+  body.querySelector('#oc-apply').onclick=()=>{
+    setOC(OS.rig,+cs.value,+ms.value);
+    toast(`🎛 Rig ${OS.rig+1} tuned: +${Math.round(+cs.value*5+ +ms.value*2)}% hash, +${Math.round(+cs.value*7+ +ms.value*3)}% draw`,'cyan');
+    osRefresh();
+  };
+  prev();
+}
+/* ---------- app: SwapinDEX ---------- */
+function osAppDex(body){
+  body.innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="font-size:18px">⇄</span><b>SwapinDEX</b>
+      <span style="font-size:10px;color:#8a8a90">on-rig decentralized exchange</span></div>
+    <label style="font-size:10px;color:#8a8a90;letter-spacing:.1em">SELL</label>
+    <div style="display:flex;gap:6px;margin:6px 0 10px">
+      <select class="os-sel" id="dx-coin" style="width:110px;margin:0">
+        <option value="pol">🟣 POL</option><option value="alt">🟠 ALT</option><option value="wtx">🟡 WTX</option>
+      </select>
+      <input class="os-in" id="dx-amt" type="number" min="0" step="any" placeholder="amount">
+      <button class="os-task" id="dx-max" style="padding:5px 10px">MAX</button>
+    </div>
+    <div class="os-kv">
+      <div><small>BALANCE</small><b id="dx-bal">0</b></div>
+      <div><small>RATE</small><b id="dx-rate">0 ⚡</b></div>
+      <div><small>YOU RECEIVE</small><b id="dx-out">0 ⚡</b></div>
+      <div><small>POOL FEE</small><b style="color:#3dff8a">0%</b></div>
+    </div>
+    <button class="os-abtn" id="dx-swap">SWAP → ⚡WATT</button>
+    <div class="os-note" id="dx-hint">ALT is volatile — watch the rate and time your swaps.</div>`;
+  const coin=body.querySelector('#dx-coin'), amt=body.querySelector('#dx-amt');
+  const upd=()=>{
+    const cn=coin.value, p=S.price[cn];
+    body.querySelector('#dx-bal').textContent=fmt(S[cn])+' '+cn.toUpperCase();
+    body.querySelector('#dx-rate').textContent=p.toFixed(2)+' ⚡';
+    const a=parseFloat(amt.value)||0;
+    body.querySelector('#dx-out').textContent=fmt(a*p)+' ⚡';
+  };
+  coin.onchange=()=>{ SFX.click(); amt.value=''; upd(); };
+  amt.oninput=upd;
+  body.querySelector('#dx-max').onclick=()=>{ amt.value=S[coin.value].toFixed(3); upd(); };
+  body.querySelector('#dx-swap').onclick=()=>{
+    const a=parseFloat(amt.value)||0;
+    if(sellCoin(coin.value,a)){ amt.value=''; }
+    upd();
+  };
+  OS.wins.dex.refresh=upd; upd();
+}
+/* ---------- app: Wallet ---------- */
+function osAppWallet(body){
+  const W=OS.wins.wallet;
+  W.refresh=()=>{
+    body.innerHTML=`
+      <div style="font-size:10px;color:#8a8a90;margin-bottom:8px">${OS.addr?('CONNECTED · '+OS.addr):'GUEST — connect wallet at next login for an address'}</div>
+      <div class="os-kv">
+        <div><small>⚡ WATT</small><b>${fmt(S.watt)}</b></div>
+        <div><small>NET WORTH</small><b>${fmt(netWorth())} ⚡</b></div>
+        <div><small>🟣 POL</small><b>${fmt(S.pol)} <span style="color:#77777d;font-size:10px">@${S.price.pol.toFixed(1)}</span></b></div>
+        <div><small>🟠 ALT</small><b>${fmt(S.alt)} <span style="color:#77777d;font-size:10px">@${S.price.alt.toFixed(1)}</span></b></div>
+        <div><small>BLOCKS MINED</small><b>${fmtInt(S.blocks)}</b></div>
+        <div><small>LUCKY BLOCKS</small><b>${fmtInt(S.lucky)}</b></div>
+      </div>
+      <div style="font-size:10px;color:#8a8a90;margin:10px 0 5px;letter-spacing:.1em">RECENT BLOCKS</div>
+      <div class="os-term" style="height:96px">${lastBlocksFeed.slice(-6).reverse().map(b=>`<div class="${b.lucky?'hl':''}">${b.txt}</div>`).join('')||'<span style="color:#3f7a55">no blocks yet — keep mining</span>'}</div>`;
+  };
+  W.refresh();
+}
+/* ---------- app: Browser ---------- */
+function osAppWeb(body){
+  body.innerHTML=`
+    <div class="os-url"><span class="lock">🔒</span> https://nucash-mining.github.io/MiningGameOS/</div>
+    <div style="text-align:center;padding:8px 4px 4px">
+      ${osPlug(56)}
+      <div style="color:#ffd23f;font-weight:800;margin:8px 0 3px">Mining Game OS</div>
+      <div style="font-size:11px;color:#8a8a90;line-height:1.6;max-width:290px;margin:0 auto">
+        You are inside the in-game replica. The real decentralized OS front-end
+        runs in your browser — log into your actual rig with a wallet on WATTxchain.</div>
+      <button class="os-abtn" id="web-go" style="max-width:240px">OPEN REAL MiningGameOS ↗</button>
+      <div class="os-note">also: <span style="color:#ffd23f">mining.game</span> collection · Polygon &amp; Altcoinchain</div>
+    </div>`;
+  body.querySelector('#web-go').onclick=()=>{ SFX.click(); open('https://nucash-mining.github.io/MiningGameOS/','_blank'); };
+}

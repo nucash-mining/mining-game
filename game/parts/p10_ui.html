@@ -1,0 +1,233 @@
+
+/* ================= UI ================= */
+function toast(txt, cls='', dur=4200){
+  const f=$('feed'); const d=document.createElement('div');
+  d.className='msg '+cls; d.innerHTML=txt;
+  f.appendChild(d);
+  while(f.children.length>5) f.firstChild.remove();
+  setTimeout(()=>{ d.style.transition='opacity .5s'; d.style.opacity='0'; setTimeout(()=>d.remove(),500); },dur);
+}
+function renderHud(){
+  $('v-watt').textContent=fmt(S.watt);
+  $('v-hash').textContent=fmt(totHash());
+  const draw=Math.round(totWatt()), cap=powerCap();
+  $('v-pow').textContent=`${draw}/${cap}`;
+  $('v-pow').style.color=draw>cap?'var(--red)':'';
+  const tp=$('s-temp'); tp.classList.toggle('hot',S.temp>=85&&S.temp<100); tp.classList.toggle('crit',S.temp>=100);
+  $('v-temp').textContent=Math.round(S.temp)+'°';
+  $('v-blk').textContent=fmtInt(S.blocks);
+  $('v-pol').textContent=fmt(S.pol); $('v-alt').textContent=fmt(S.alt);
+  $('v-wtx').textContent=fmt(S.wtx);
+  const pp=$('p-pol'), pa=$('p-alt'), pw=$('p-wtx');
+  pp.textContent='@'+S.price.pol.toFixed(1); pa.textContent='@'+S.price.alt.toFixed(1); pw.textContent='@'+S.price.wtx.toFixed(2);
+  pp.className='pr '+(S.price.pol>=CFG.nets.polygon.p0?'up':'dn');
+  pa.className='pr '+(S.price.alt>=CFG.nets.alt.p0?'up':'dn');
+  pw.className='pr '+(S.price.wtx>=CFG.nets.wattx.p0?'up':'dn');
+  const coin=CFG.nets[S.net].coin, P=curPool();
+  $('v-pool').textContent=P?(P.mine?'🏗 '+P.name:P.name):'SOLO';
+  $('p-pend').textContent=S.pend[coin]>0.005?('pend '+fmt(S.pend[coin])+' '+CFG.nets[S.net].sym):'';
+  const n=$('net'); n.classList.toggle('alt',S.net==='alt'); n.classList.toggle('wtx',S.net==='wattx');
+  $('netname').textContent=CFG.nets[S.net].name;
+  $('netdiff').textContent='diff '+difficulty().toFixed(1)+'x';
+  $('vig').style.opacity=S.temp>=85?String(Math.min(1,(S.temp-85)/20)):(noWatt?'0.5':'0');
+}
+/* shop */
+function ownedOf(id){
+  const it=ITEMS[id];
+  if(id===1) return S.pcCount;
+  if(id===2) return S.badge;
+  if(it.comp==='Peripheral') return S.periph[id];
+  if(id===19) return S.tower;
+  let n=S.inv[id]||0;
+  S.rigs.forEach(r=>{ if(r.cpu===id) n++; if(r.asic===id) n++; if(id===14&&r.frame) n++; n+=r.gpus.filter(g=>g===id).length; });
+  return n;
+}
+function shopCard(el,id,locked){
+  const it=ITEMS[id];
+  const c=document.createElement('div'); c.className='card'+(locked?' locked':'');
+  const left=id===1?'∞':String(it.supply-S.bought[id]);
+  const price=id===1?(S.pcCount===0?0:pcPrice()):it.price;
+  const owned=ownedOf(id);
+  let traits=`<span class="tr">GEN ${it.gen}</span>${it.sw?`<span class="tr">SW ${it.sw}</span>`:''}`;
+  if(it.hash) traits+=`<span class="tr">⛏ ${it.hash} HASH</span>`;
+  if(it.watt) traits+=`<span class="tr">⚡ ${it.watt} WATT</span>`;
+  if(it.luck) traits+=`<span class="tr gold">🍀 +${it.luck}% LUCK${it.eff?` · EFF +${it.eff}%`:''}</span>`;
+  if(id===14) traits+=`<span class="tr gold">+2 GPU SLOTS</span>`;
+  if(id===19) traits+=`<span class="tr gold">+20% STAKE</span>`;
+  const soldOut=id!==1&&it.supply-S.bought[id]<=0;
+  const unique=(id===2&&S.badge)||(it.comp==='Peripheral'&&S.periph[id])||(id===19&&S.tower);
+  const dis=locked||unique||soldOut;
+  c.innerHTML=`${id===2?'<span class="tag">1 OF 100</span>':''}${it.gen2?'<span class="tag g2">GEN 2</span>':''}
+    <div class="thumb"><img src="${THUMB[id]||''}" alt=""></div>
+    <div><div class="brand">${it.brand||'THE MINING GAME'} · ERC-1155 #${id}</div><h3>${it.name}</h3></div>
+    <div class="traits">${traits}</div>
+    <div class="sup">supply left: ${left} · owned: ${owned}</div>
+    <button class="buy ${unique?'own':''}" data-buy="${id}" ${dis?'disabled':''}>
+      ${locked?'🔒 REACH GEN 2':unique?'OWNED ✓':soldOut?'SOLD OUT':price===0?'FREE MINT':`BUY · <span class="pricetag">${fmt(costIn(S.payCur||'watt',price))} ${curSym(S.payCur||'watt')}</span>`}
+    </button>`;
+  el.appendChild(c);
+}
+function renderShop(){
+  const el=$('shopcards'); el.innerHTML='';
+  const head=t=>{ const h=document.createElement('div'); h.className='shead'; h.innerHTML=t; el.appendChild(h); };
+  head('⛏ GEN 1 · THE ORIGINAL COLLECTION');
+  [1,3,4,5,14,2].forEach(id=>shopCard(el,id,false));
+  head('🖱 BATTLESTATION · permanent luck, survives prestige');
+  [17,18,23].forEach(id=>shopCard(el,id,false));
+  const locked=S.gen<2;
+  head(`🚀 GEN 2 HARDWARE ${locked?'· <span style="color:var(--red)">locked — reach GENERATION 2 in 🔧 GARAGE</span>':'· unlocked'}`);
+  [8,9,10,12,11,13,19].forEach(id=>shopCard(el,id,locked));
+  el.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>buyItem(+b.dataset.buy));
+  document.querySelectorAll('#paybar .paybtn').forEach(b=>{
+    b.classList.toggle('on',(S.payCur||'watt')===b.dataset.cur);
+    b.onclick=()=>{ S.payCur=b.dataset.cur; SFX.click(); save(); renderShop(); };
+  });
+}
+/* rig panel */
+let selRig=-1;
+function renderRigPanel(){
+  const p=$('rigp');
+  if(selRig<0||!S.rigs[selRig]){ p.classList.remove('open'); return; }
+  const r=S.rigs[selRig];
+  p.classList.add('open');
+  const hf=heatFactor(), pf=powerFactor();
+  const eff=Math.round(hf*pf*100);
+  let rows='';
+  // CPU slot
+  const cpusHave=CPU_IDS.filter(id=>S.inv[id]>0);
+  rows+=r.cpu?slotRow(r.cpu,'✓ installed',`data-rm="${r.cpu}"`,'REMOVE')
+    :cpusHave.length?cpusHave.map(id=>slotRowEmpty(`Processor slot — ${ITEMS[id].name} ×${S.inv[id]}`,`data-in="${id}"`,'INSTALL ⚙')).join('')
+    :slotRowEmpty('Processor slot — buy a CPU in shop','','');
+  // GPU slots
+  const cap=gpuCap(r), gpusHave=GPU_IDS.filter(id=>S.inv[id]>0);
+  for(let k=0;k<cap;k++){
+    if(r.gpus[k]) rows+=slotRow(r.gpus[k],'✓ installed',`data-rmg="${k}"`,'REMOVE');
+    else if(gpusHave.length) { rows+=gpusHave.map(id=>slotRowEmpty(`GPU slot ${k+1} — ${ITEMS[id].name} ×${S.inv[id]}`,`data-ing="${id}"`,'INSTALL ⚙')).join(''); break; }
+    else { rows+=slotRowEmpty(`GPU slot ${k+1} — buy a GPU in shop`,'',''); }
+  }
+  // frame slot
+  rows+=r.frame?slotRow(14,'✓ installed · 4 GPU slots',`data-rm="14"`,'REMOVE')
+    :S.inv[14]>0?slotRowEmpty(`Rig frame — unlocks GPU slots 3 & 4`,`data-in="14"`,'INSTALL ⚙')
+    :slotRowEmpty('Rig frame slot — 2 extra GPU slots (shop)','','');
+  // ASIC slot (gen2)
+  rows+=r.asic?slotRow(r.asic,'✓ installed',`data-rm="${r.asic}"`,'REMOVE')
+    :S.inv[13]>0?slotRowEmpty('ASIC slot — Bit Hammer ×'+S.inv[13],`data-in="13"`,'INSTALL ⚙')
+    :S.gen>=2?slotRowEmpty('ASIC slot — buy a Bit Hammer in shop','','')
+    :slotRowEmpty('ASIC slot — 🔒 unlocks at GEN 2','','');
+  const ocOn=r.oc&&(r.oc.c+r.oc.m)>0, crashed=r.crashT>0, broken=r.wear>=100;
+  const wearCol=r.wear>=100?'var(--red)':r.wear>=60?'#ffae42':r.wear>=30?'var(--gold)':'var(--grn)';
+  p.innerHTML=`<h2>🖥 Gaming PC — Rig ${selRig+1} ${broken?'<span style="color:var(--red);font-size:12px">🔥 BROKEN</span>':crashed?'<span style="color:var(--red);font-size:12px">💥 CRASHED</span>':!r.on?'<span style="color:var(--gold);font-size:12px">🔋 STAKING</span>':ocOn?'<span style="color:var(--cyan);font-size:12px">🎛 OC +'+Math.round((ocHashMult(r)-1)*100)+'%</span>':''}</h2>
+    <div class="sub">Minga Basic PC · Gen ${S.gen} ${S.gen>1?`(×${Math.pow(CFG.gen2Mult,S.gen-1).toFixed(1)} bonus)`:''}</div>
+    ${rows}
+    <div class="stats2">
+      <div class="st2"><small>HASHPOWER</small><b style="color:var(--cyan)">${Math.round(rigHash(r))}</b></div>
+      <div class="st2"><small>WATT DRAW</small><b style="color:var(--gold)">${Math.round(rigWatt(r))}</b></div>
+      <div class="st2"><small>STAKE WEIGHT</small><b>${rigSW(r)}${r.on?' <small style="color:var(--dim)">(25% while on)</small>':''}</b></div>
+      <div class="st2"><small>RIG EFFICIENCY</small><b style="color:${eff>=100?'var(--grn)':eff>=60?'#ffae42':'var(--red)'}">${eff}%</b></div>
+    </div>
+    <div class="wearrow"><small>WEAR</small><div class="wearbar"><i style="width:${r.wear.toFixed(1)}%;background:${wearCol}"></i></div><b style="color:${wearCol}">${r.wear.toFixed(0)}%</b>
+      ${r.wear>=1?`<button class="hbtn" id="rp-fix">🔧 REPAIR ${fmt(repairCost(r))} ⚡</button>`:''}</div>
+    <div class="rowbtns"><button class="hbtn ${r.on?'':'gold'}" id="rp-pwr">${r.on?'🔋 POWER OFF — stake mode':'🔌 POWER ON — mine'}</button><button class="hbtn gold" id="rp-bench">🔧 OPEN CASE — WORKBENCH</button></div>
+    <div class="rowbtns"><button class="hbtn accent" id="rp-os">💻 LOG IN — RIG OS</button><button class="hbtn gold" id="rp-shop">🛒 SHOP</button><button class="hbtn" id="rp-close">CLOSE</button></div>`;
+  p.querySelectorAll('[data-in]').forEach(b=>b.onclick=()=>installPart(selRig,+b.dataset.in));
+  p.querySelectorAll('[data-ing]').forEach(b=>b.onclick=()=>installPart(selRig,+b.dataset.ing));
+  p.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>removePart(selRig,+b.dataset.rm));
+  p.querySelectorAll('[data-rmg]').forEach(b=>b.onclick=()=>removePart(selRig,r.gpus[+b.dataset.rmg],+b.dataset.rmg));
+  $('rp-shop').onclick=()=>{ openModal('m-shop'); renderShop(); };
+  $('rp-pwr').onclick=()=>togglePower(selRig);
+  const fx=$('rp-fix'); if(fx) fx.onclick=()=>repairRig(selRig);
+  $('rp-bench').onclick=()=>openBench(selRig);
+  $('rp-os').onclick=()=>openOS(selRig);
+  $('rp-close').onclick=()=>{ selRig=-1; renderRigPanel(); };
+  if(!S.osHint){ S.osHint=1; save();
+    setTimeout(()=>toast('💻 NEW: hit <b>LOG IN — RIG OS</b> to boot your rig\'s Mining Game OS — overclock it in TuneX, swap coins on SwapinDEX','cyan',9000),400); }
+}
+function slotRow(id,sub,attr,btn){
+  const it=ITEMS[id];
+  const st=it.hash||it.watt?` · ⛏${it.hash} ⚡${it.watt}`:` · SW ${it.sw}`;
+  return `<div class="slotrow"><div class="ic"><img src="${THUMB[id]||''}"></div>
+    <div class="nm">${it.name}<small>${sub}${st}</small></div>
+    ${btn?`<button ${attr}>${btn}</button>`:''}</div>`;
+}
+function slotRowEmpty(label,attr,btn){
+  return `<div class="slotrow empty"><div class="ic">▢</div>
+    <div class="nm">${label}</div>${btn?`<button ${attr}>${btn}</button>`:''}</div>`;
+}
+/* upgrades */
+function renderUpg(){
+  const defs=[
+    ['power','🔌','Power Grid',`Capacity ${powerCap()}W. Rigs beyond capacity mine slower.`,CFG.upPrice.power],
+    ['cooling','❄️','Cooling',`Ambient ${Math.round(tempTarget())}°C target. Heat above 85° throttles hashpower.`,CFG.upPrice.cooling],
+    ['rack','🗄️','Rack Expansion',`${slotCount()} rig slots. Each expansion adds 3.`,CFG.upPrice.rack],
+  ];
+  $('upgrows').innerHTML=defs.map(([k,ic,nm,ds,arr])=>{
+    const lv=S.upg[k], max=arr.length, p=arr[lv];
+    return `<div class="uprow"><div class="uic">${ic}</div>
+      <div class="ubody"><h3>${nm} <small style="color:var(--dim)">Lv ${lv}/${max}</small></h3><p>${ds}</p>
+      <div class="pips">${Array.from({length:max},(_,i)=>`<span class="pip ${i<lv?'on':''}"></span>`).join('')}</div></div>
+      <button class="ubuy" data-up="${k}" ${lv>=max||S.watt<p?'disabled':''}>${lv>=max?'MAX':fmt(p)+' ⚡'}</button></div>`;
+  }).join('');
+  document.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>buyUpgrade(b.dataset.up));
+  // battlestation comfort: monitor size + gaming chair
+  $('upgrows').insertAdjacentHTML('beforeend',`
+    <div class="uprow"><div class="uic">🖥️</div>
+      <div class="ubody"><h3>Monitor Size <small style="color:var(--dim)">${S.monSize}&Prime; ${S.monSize>=38?(S.monSize>=49?'32:9 super-ultrawide':'21:9 ultrawide'):'16:9'}</small></h3>
+      <p>Real diagonal ratios on every desk. Pick your battlestation screen.</p>
+      <div class="pips" style="gap:6px">${Object.keys(MONSIZES).map(sz=>`<button class="paybtn ${+sz===S.monSize?'on':''}" data-mon="${sz}" style="padding:3px 9px;font-size:11px">${sz}&Prime;</button>`).join('')}</div></div></div>
+    <div class="uprow"><div class="uic">${S.chair?'🏎️':'🪑'}</div>
+      <div class="ubody"><h3>Gaming Chair <small style="color:var(--dim)">${S.chair?'owned':'Lv 0/1'}</small></h3>
+      <p>${S.chair?'Racing-style chair with RGB trim on every desk — +3% luck comfort bonus.':'Upgrade every desk chair to a racing-style gaming chair. Sim comfort: +3% luck.'}</p></div>
+      <button class="ubuy" data-chair="1" ${S.chair||S.watt<CFG.chairPrice?'disabled':''}>${S.chair?'OWNED ✓':fmt(CFG.chairPrice)+' ⚡'}</button></div>`);
+  document.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{
+    S.monSize=+b.dataset.mon; SFX.click(); rebuildAllRigs(); renderUpg(); save();
+    toast(`🖥 Monitors swapped to ${S.monSize}&Prime; on every desk`,'cyan'); });
+  const chb=document.querySelector('[data-chair]');
+  if(chb) chb.onclick=()=>{ if(S.chair||S.watt<CFG.chairPrice){SFX.err();return;}
+    S.watt-=CFG.chairPrice; S.chair=1; rebuildChairs(); SFX.buy();
+    toast('🏎️ GAMING CHAIRS rolled in — +3% luck comfort bonus','gold'); renderUpg(); renderHud(); save(); };
+  const ok=S.lifeWatt>=CFG.gen2Req;
+  $('gen2box').innerHTML=`<div class="big">🚀 <b>GENERATION ${S.gen+1}</b><br>
+    <small style="color:var(--dim)">Reset your garage (Genesis Badge & Battlestation stay) for a permanent ×${CFG.gen2Mult} hashpower multiplier${S.gen===1?` — and unlock the <b style="color:var(--gold)">GEN 2 hardware shop</b>: TX190 · GP720 · GPX880 · XXL270 · Bit Hammer ASIC · Server Tower`:''}.<br>
+    Requires ${fmt(CFG.gen2Req)} ⚡ lifetime earnings — you have ${fmt(S.lifeWatt)}.</small></div>
+    <button class="ubuy" id="b-gen2" ${ok?'':'disabled'} style="background:${ok?'linear-gradient(90deg,#ffd23f,#ff8d2e)':''};color:${ok?'#000':''}">LAUNCH GEN ${S.gen+1}</button>`;
+  $('b-gen2').onclick=gen2;
+}
+/* stats */
+function renderStats(){
+  const days=((now()-S.created)/864e5);
+  const rows=[
+    ['NET WORTH',fmt(netWorth())+' ⚡'],['LIFETIME EARNED',fmt(S.lifeWatt)+' ⚡'],
+    ['⚡ BURNED MINING',fmt(S.burned)],['POOL HOST EARNED',fmt(S.poolEarnW)+' ⚡'],
+    ['ALT VALIDATORS',S.altNodes+' ('+fmt(S.valEarn)+' ALT)'],['WTX MINED',fmt(S.blocksNet.wtx)+' blk'],
+    ['BLOCKS MINED',fmtInt(S.blocks)],['LUCKY BLOCKS',fmtInt(S.lucky)],
+    ['POL BLOCKS',fmtInt(S.blocksNet.pol)],['ALT BLOCKS',fmtInt(S.blocksNet.alt)],
+    ['TOTAL HASH',fmt(totHash())+' H'],['STAKE WEIGHT',fmtInt(totSW())],
+    ['GENERATION',S.gen],['RIGS',S.rigs.length],
+    ['COINS SOLD',fmt(S.sold.pol+S.sold.alt)+' ⚡'],['DAYS MINING',days.toFixed(1)],
+  ];
+  $('statsgrid').innerHTML=rows.map(([a,b])=>`<div class="st2"><small>${a}</small><b>${b}</b></div>`).join('');
+}
+/* modals */
+function openModal(id){ $(id).classList.add('open'); SFX.click(); }
+function closeModal(id){ $(id).classList.remove('open'); }
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('pointerdown',e=>{ if(e.target===m) closeModal(m.id); }));
+/* tutorial */
+const TUTS=[
+  {t:'Your <b>Gaming PC</b> is mining! It converts <b>⚡WATT</b> (electricity) into blocks. Watch the WATT counter — mining drains it, <b>stake weight</b> regenerates it.',x:'46%',y:'52%'},
+  {t:'<b>Click your PC</b> on the desk to open the rig panel. That is where you install CPUs and GPUs.',x:'46%',y:'40%'},
+  {t:'Earned enough? Open the <b>🛒 SHOP</b> and buy the <b>Kirtex XL1 Processor</b> — a real Mining Game NFT with hashpower 10.',x:'58%',y:'12%'},
+  {t:'Coins from blocks are sold in the wallet strip (top-left). <b>ALT is volatile</b> — sell when the price runs hot. Good luck, miner! ⛏',x:'25%',y:'25%'},
+];
+function showTut(){
+  if(S.tut>=TUTS.length){ $('tut').style.display='none'; return; }
+  const t=TUTS[S.tut], el=$('tut');
+  el.style.display='block'; el.style.left=t.x; el.style.top=t.y;
+  el.innerHTML=t.t+`<br><button class="tbtn">${S.tut===TUTS.length-1?'START MINING ⛏':'NEXT ›'}</button>`;
+  el.querySelector('.tbtn').onclick=()=>{ S.tut++; save(); SFX.click(); showTut(); };
+}
+/* share */
+function shareX(){
+  const txt=`I'm running ${S.rigs.length} rig${S.rigs.length>1?'s':''} at ${fmt(totHash())} hash in The Mining Game: WATT Tycoon ⛏⚡ ${fmtInt(S.blocks)} blocks mined on Polygon + Altcoinchain. Beat my garage:`;
+  open('https://x.com/intent/post?text='+encodeURIComponent(txt+' https://mining-game.games.bu.app/'),'_blank');
+}

@@ -1,0 +1,145 @@
+
+/* ================= INPUT ================= */
+const ray=new THREE.Raycaster(), mouse=new THREE.Vector2();
+let hoverRig=-1, pdown=null;
+function rigHitboxes(){
+  const out=[];
+  rigVis.forEach((rv,i)=>{ if(!rv) return;
+    if(!rv.hit){ const m=new THREE.Mesh(new THREE.BoxGeometry(4.4,3.6,2.5),
+      new THREE.MeshBasicMaterial({visible:false}));
+      m.position.set(SLOTS[rv.slot][0],1.8,SLOTS[rv.slot][1]); m.userData.rig=i;
+      scene.add(m); rv.hit=m; }
+    out.push(rv.hit);
+  });
+  return out;
+}
+function pick(e){
+  const r=canvas.getBoundingClientRect();
+  mouse.x=((e.clientX-r.left)/r.width)*2-1; mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+  ray.setFromCamera(mouse,cam);
+  const hits=ray.intersectObjects(rigHitboxes(),false);
+  return hits.length?hits[0].object.userData.rig:-1;
+}
+canvas.addEventListener('pointermove',e=>{
+  if(TRAILER) return;
+  const h=pick(e);
+  if(h!==hoverRig){ hoverRig=h; canvas.style.cursor=h>=0?'pointer':'default'; }
+});
+canvas.addEventListener('pointerdown',e=>{ pdown=[e.clientX,e.clientY]; });
+canvas.addEventListener('pointerup',e=>{
+  if(TRAILER||!pdown) return;
+  const dx=e.clientX-pdown[0], dy=e.clientY-pdown[1]; pdown=null;
+  if(dx*dx+dy*dy>36) return;
+  const h=pick(e);
+  if(h>=0){ selRig=h; SFX.click(); renderRigPanel(); if(S.tut===1){S.tut=2;save();showTut();} }
+  else { selRig=-1; renderRigPanel(); }
+});
+/* buttons */
+$('b-shop').onclick=()=>{ openModal('m-shop'); renderShop(); if(S.tut===2){S.tut=3;save();showTut();} };
+$('b-upg').onclick=()=>{ openModal('m-upg'); renderUpg(); };
+$('b-stats').onclick=()=>{ openModal('m-stats'); renderStats(); };
+$('b-mute').onclick=()=>setMuted(!S.muted);
+$('net').onclick=switchNet;
+$('sell-pol').onclick=()=>sellCoin('pol');
+$('sell-alt').onclick=()=>sellCoin('alt');
+$('b-share').onclick=shareX;
+$('b-reset').onclick=()=>{ if(confirm('Wipe your entire garage and start over?')){ localStorage.removeItem(SAVEKEY); location.reload(); } };
+$('b-wallet').onclick=()=>{ openModal('m-web3'); renderWallet(); if(w3Has()&&!W3.addr) w3Connect(); };
+$('bench-close').onclick=()=>closeBench();
+$('bench-shop').onclick=()=>{ openModal('m-shop'); renderShop(); };
+addEventListener('keydown',e=>{
+  if(e.target.matches('input,textarea,select')) return;
+  if(e.key==='Escape'){ if(OS.open){ closeOS(); return; } if(benchOpen){ closeBench(); return; } selRig=-1; renderRigPanel(); ['m-shop','m-upg','m-stats','m-web3'].forEach(closeModal); }
+  if(OS.open) return;
+  if(e.key==='s'||e.key==='S'){ openModal('m-shop'); renderShop(); }
+  if(e.key==='n'||e.key==='N') switchNet();
+  if(e.key==='o'||e.key==='O'){ if(S&&S.rigs.length) openOS(selRig>=0?selRig:0); }
+  if(e.key==='b'||e.key==='B'){ if(benchOpen) closeBench(); else if(S&&S.rigs.length) openBench(selRig>=0?selRig:0); }
+  if(e.key==='w'||e.key==='W'){ openModal('m-web3'); renderWallet(); }
+});
+/* ================= MAIN LOOP ================= */
+let last=0, acc=0, uiT=0, scrT=0, histT=0, running=false;
+const SIMDT=0.1;
+function frame(t){
+  requestAnimationFrame(frame);
+  if(!running) { last=t; return; }
+  if(document.hidden){ last=t; return; }
+  let dt=(t-last)/1000; last=t;
+  if(dt>0.5) dt=0.5;
+  acc+=dt;
+  while(acc>=SIMDT){ simTick(SIMDT); acc-=SIMDT; }
+  // visuals
+  controls.update();
+  tickParts(dt);
+  if(badgeMesh&&badgeMesh.visible) badgeMesh.rotation.y+=dt*0.9;
+  if(badgeHolo&&badgeHolo.visible) badgeHolo.rotation.y+=dt*0.5;
+  // led colors + gentle gpu hover
+  const ledc=noWatt?0xff4d5e:(heatFactor()<1||powerFactor()<1)?0xffae42:0x3dff8a;
+  rigVis.forEach(rv=>{ if(rv){ rv.led.material.color.setHex(ledc);
+    rv.led.material.opacity=1; }});
+  // rings pulse
+  const pt=t/1000;
+  rings.forEach((rg,i)=>{ if(!rg||!rg.visible) return;
+    const occupied=S&&S.rigs.some(r=>r.slot===i);
+    const isHover=S&&S.rigs[hoverRig]&&S.rigs[hoverRig].slot===i;
+    const isSel=S&&S.rigs[selRig]&&S.rigs[selRig].slot===i;
+    rg.material.color.setHex(isSel?0x2ee6d6:isHover?0xb47cff:occupied?0x8247e5:0x3a3168);
+    rg.material.opacity=isSel?0.9:isHover?0.75:occupied?(0.3+0.15*Math.sin(pt*2+i)):0.22;
+  });
+  uiT+=dt; if(uiT>0.3){ uiT=0; if(S) renderHud(); }
+  scrT+=dt; if(scrT>0.55){ scrT=0; if(S){ drawScreen(); drawTerm(); } }
+  histT+=dt; if(histT>1){ histT=0; if(S){
+    hashHist.push(totHash()); if(hashHist.length>60) hashHist.shift();
+    priceHist.pol.push(S.price.pol); if(priceHist.pol.length>50) priceHist.pol.shift();
+    priceHist.alt.push(S.price.alt); if(priceHist.alt.length>50) priceHist.alt.shift();
+    priceHist.wtx.push(S.price.wtx); if(priceHist.wtx.length>50) priceHist.wtx.shift();
+  }}
+  if(benchOpen){ benchLoop(dt); return; }
+  renderer.render(scene,cam);
+}
+requestAnimationFrame(frame);
+setInterval(()=>{ if(running&&S) save(); },10000);
+addEventListener('beforeunload',()=>save());
+/* ================= INIT ================= */
+async function init(){
+  const note=$('loadnote');
+  try{
+    await loadModels(p=>{ note.textContent=`loading 3D hardware… ${Math.round(p*100)}%`; });
+  }catch(e){ note.textContent='model load failed — check connection & refresh'; console.error(e); return; }
+  makeThumbs(); buildPosters(); buildBadgeDisplay();
+  const saved=load();
+  if(saved){ S=saved;
+    $('mintbtn').textContent='⛏ RESUME MINING';
+    note.textContent=`welcome back — ${saved.rigs.length} rig(s) · ${fmt(saved.watt)} ⚡WATT`;
+  } else note.textContent='ready';
+  $('mintbtn').onclick=()=>{
+    $('splash').style.display='none';
+    if(!S){ S=freshState(); }
+    auInit(); setMuted(S.muted);
+    setBadgeOwned(!!S.badge); setTowerOwned(!!S.tower);
+    if(S.rigs.length===0){ mintPC(true); S.tut=0; showTut(); }
+    else { rebuildAllRigs(); applyOffline(); showTut(); }
+    refreshRings(); renderHud(); drawScreen(); save();
+    running=true;
+    if(TRAILER) startTrailerScript();
+  };
+  if(TRAILER){ $('splash').style.display='none'; trailerSetup(); }
+  window.MG={ get S(){return S;}, tick:s=>{for(let i=0;i<s*10;i++)simTick(SIMDT);renderHud();},
+    give:w=>{S.watt+=w;renderHud();}, save, mintPC, buyItem, installPart, forceBlock, cam, controls, scene, THREE,
+    openOS, closeOS, setOC, rebootRig, openBench, closeBench, W3, WEB3CFG, w3Connect, w3Refresh,
+    joinPool, hostPool, closePool, buyValidator, exitValidators, repairRig, togglePower, openPoolHub, switchNet, POOLS,
+    state:()=>JSON.parse(JSON.stringify(S)) };
+}
+function forceBlock(lucky=false){
+  const net=CFG.nets[S.net];
+  const amt=net.reward*(lucky?CFG.luckyMult:1);
+  S[net.coin]+=amt; S.blocks++; S.blocksNet[net.coin]++;
+  const ri=Math.floor(Math.random()*Math.max(1,S.rigs.length));
+  if(S.rigs[ri]){ const pos=new THREE.Vector3(SLOTS[S.rigs[ri].slot][0],2.2,SLOTS[S.rigs[ri].slot][1]);
+    burst(pos,lucky?46:16,lucky?partMatGold:partMatPur,lucky?4:2.6);
+    floatLabel(pos,`+${amt.toFixed(2)} ${net.sym}${lucky?' ✨LUCKY':''}`,lucky?'#ffd23f':'#c9a6ff'); }
+  lastBlocksFeed.push({txt:`#${S.blocks} +${amt.toFixed(2)} ${net.sym}${lucky?' LUCKY x5':''}`,lucky});
+  lucky?SFX.lucky():SFX.block();
+  renderHud();
+}
+init();

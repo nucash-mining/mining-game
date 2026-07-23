@@ -1,0 +1,143 @@
+<script type="importmap">{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"
+}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+
+/* ================= DATA : the real Mining Game collection ================= */
+const ITEMS = {
+  1:{id:1,key:'pc',   name:'Gaming PC',    brand:'Minga', comp:'Basic PC', gen:1, hash:2,  watt:5,  sw:1,  supply:0, price:0,    model:'pc.glb',
+     desc:'The basic PC needed to play the Mining Game. Free to mint!'},
+  2:{id:2,key:'badge',name:'Genesis Badge',brand:'',      comp:'Badge',    gen:1, hash:0,  watt:0,  sw:42, supply:100, price:20000, model:null, luck:10, eff:10,
+     desc:'Only 100 will ever be minted. +10% luck, +10% efficiency, stake weight 42.'},
+  3:{id:3,key:'cpu',  name:'XL1 Processor',brand:'Kirtex',comp:'Processor',gen:1, hash:10, watt:2,  sw:9,  supply:10000, price:200,  model:'cpu.glb',
+     desc:'CPU upgrade for your Gaming PC. Receives Play to Earn rewards.'},
+  4:{id:4,key:'tx120',name:'TX120 GPU',    brand:'Oblivia',comp:'GPU',     gen:1, hash:20, watt:10, sw:11, supply:4884, price:700,  model:'gpu_tx120.glb',
+     desc:'GPU upgrade for your Gaming PC. Receives Play to Earn rewards.'},
+  5:{id:5,key:'gp50', name:'GP50 GPU',     brand:'MAD',   comp:'GPU',      gen:1, hash:33, watt:16, sw:18, supply:2611, price:1200, model:'gpu_gp50.glb',
+     desc:'A powerful GPU upgrade for your Gaming PC!'},
+  /* Gen2 hardware — from the official repo's unreleased Components lineup */
+  14:{id:14,key:'frame', name:'Mining Rig Frame', brand:'Minga', comp:'Frame', gen:1, hash:0, watt:0, sw:10, supply:5000, price:8000, scene:'14_Mining_Rig_Frame',
+     desc:'Open-air frame. Expands a rig from 2 to 4 GPU slots.'},
+  8:{id:8,key:'tx190', name:'TX190 GPU',   brand:'Oblivia',comp:'GPU',     gen:2, hash:60, watt:22, sw:30, supply:3000, price:6000, scene:'8_TX_190', gen2:1, flip:1,
+     desc:'Second-generation Oblivia silicon. Triple the hash of the TX120.'},
+  9:{id:9,key:'xl190', name:'XL190 CPU',   brand:'Kirtex', comp:'Processor',gen:2, hash:35, watt:8,  sw:22, supply:2500, price:4500, scene:'9_XL_190_CPU', gen2:1,
+     desc:'Kirtex second-gen processor. Massive uplift over the XL1.'},
+  10:{id:10,key:'gp720',name:'GP720 GPU',  brand:'MAD',    comp:'GPU',     gen:2, hash:110,watt:38, sw:48, supply:1200, price:14000, scene:'10_GP_720_GPU', gen2:1, flip:1,
+     desc:'MAD flagship. Hashes harder than three GP50s.'},
+  12:{id:12,key:'xxl270',name:'XXL270 CPU',brand:'Kirtex', comp:'Processor',gen:2, hash:70, watt:15, sw:40, supply:800, price:12000, scene:'10_XXL_270_CPU', gen2:1,
+     desc:'The biggest chip Kirtex ever fabbed. Server-grade.'},
+  11:{id:11,key:'gpx880',name:'GPX880 GPU',brand:'GPX',    comp:'GPU',     gen:2, hash:180,watt:60, sw:75, supply:500, price:30000, scene:'11_GPX_880_a', gen2:1,
+     desc:'Legendary dual-fan monster. The fastest GPU in the game.'},
+  13:{id:13,key:'asic', name:'Bit Hammer ASIC',brand:'Bit Hammer',comp:'ASIC',gen:2, hash:320,watt:110,sw:120, supply:250, price:60000, scene:'13_Bit_Hammer_ASIC', gen2:1,
+     desc:'Purpose-built hashing brick. One per rig. Runs HOT.'},
+  19:{id:19,key:'tower',name:'Server Tower',brand:'Minga', comp:'Structure',gen:2, hash:0, watt:0,  sw:40, supply:1, price:20000, scene:'19_Server_Tower', gen2:1,
+     desc:'Garage centerpiece. +40 stake weight and +20% stake income.'},
+  /* battlestation peripherals — small permanent luck boosts, survive prestige */
+  17:{id:17,key:'mouse',  name:'Red Mouse',   brand:'Minga', comp:'Peripheral', gen:1, hash:0, watt:0, sw:0, supply:1, price:2500, scene:'17_Red_Mouse', luck:2,
+     desc:'+2% luck. Appears on every desk. Set bonus with keyboard & monitor.'},
+  18:{id:18,key:'kb',     name:'RGB Keyboard',brand:'Minga', comp:'Peripheral', gen:1, hash:0, watt:0, sw:0, supply:1, price:3500, scene:'18_RGB_Keyboard', luck:2,
+     desc:'+2% luck. Replaces every desk keyboard. Set bonus with mouse & monitor.'},
+  23:{id:23,key:'lc23',   name:'LC23 Monitor',brand:'Minga', comp:'Peripheral', gen:1, hash:0, watt:0, sw:0, supply:1, price:5000, scene:'23_LC_23_Monitor', luck:2,
+     desc:'+2% luck. A second screen for every desk. Set bonus with mouse & keyboard.'},
+};
+const INV_IDS=[3,4,5,8,9,10,11,12,13,14];
+const CPU_IDS=[3,9,12], GPU_IDS=[4,5,8,10,11];
+const CFG = {
+  startWatt: 250,
+  pcBasePrice: 500, pcPriceGrowth: 1.45,     // extra PCs
+  consumePerWatt: 0.02,                       // WATT/s per wattage point
+  stakePerSW: 0.05,                           // WATT/s per stake weight
+  powerBase: 60, powerPerLvl: 70, powerMax: 8,
+  coolBase: 0.55, coolPerLvl: 0.115, coolMax: 8,
+  rackMax: 2,                                 // +3 slots each
+  upPrice:{power:[400,1100,2600,6000,14000,32000,70000,160000], cooling:[350,900,2200,5200,12000,28000,60000,130000], rack:[1500,9000]},
+  towerStakeMult: 1.2,
+  chairPrice: 2500,
+  nets:{
+    polygon:{name:'Polygon', coin:'pol', sym:'POL', color:0x8247e5, lam:0.007, reward:3.0, p0:10, vol:0.035, pmin:4, pmax:22},
+    alt:    {name:'Altcoinchain', coin:'alt', sym:'ALT', color:0xffb020, lam:0.004, reward:2.2, p0:25, vol:0.10, pmin:5, pmax:95},
+    wattx:  {name:'WATTxchain', coin:'wtx', sym:'WTX', color:0xffd23f, lam:0.0055, reward:5.0, p0:2.0, vol:0.05, pmin:0.6, pmax:9, sim:true},
+  },
+  poolHostWatt:100000, poolHostCoin:100000, hostBurnCut:0.01,
+  altHybridBlock:7000000, valNodeAlt:32, altNetStake:40000, altBlockRate:0.62,
+  luckyChance: 0.05, luckyMult: 5,
+  diffSoft: 260,                               // blocks for +100% difficulty
+  gen2Req: 60000, gen2Mult: 1.6,
+  offlineCapH: 8, offlineEff: 0.5,
+};
+/* monitor sizes: diagonal inches -> [w,h] world units @2.25u/m (16:9; 38"=21:9; 49"=32:9) */
+const MONSIZES={24:[1.20,0.67],27:[1.34,0.76],32:[1.59,0.90],38:[1.98,0.84],49:[2.68,0.75]};
+const SLOTS = [ // 9 rig positions [x,z,ry]
+  [-4.6,-1.2, 0],[ 0,-1.2, 0],[ 4.6,-1.2, 0],
+  [-4.6,-4.6, 0],[ 0,-4.6, 0],[ 4.6,-4.6, 0],
+  [-4.6, 2.2, 0],[ 0, 2.2, 0],[ 4.6, 2.2, 0],
+];
+const SAVEKEY='tmg3d_v1';
+const now=()=>Date.now();
+let S=null;
+function freshState(){ const inv={},bought={2:0,17:0,18:0,19:0,23:0}; INV_IDS.forEach(i=>{inv[i]=0;bought[i]=0;}); return {
+  watt:CFG.startWatt, lifeWatt:0, pol:0, alt:0, wtx:0, price:{pol:CFG.nets.polygon.p0, alt:CFG.nets.alt.p0, wtx:CFG.nets.wattx.p0},
+  net:'polygon', rigs:[], inv, badge:0, bought, pcCount:0, periph:{17:0,18:0,23:0}, tower:0,
+  upg:{power:0,cooling:0,rack:0}, gen:1, blocks:0, blocksNet:{pol:0,alt:0,wtx:0}, lucky:0,
+  temp:24, muted:false, tut:0, created:now(), lastSeen:now(), sold:{pol:0,alt:0,wtx:0}, netSwitchT:0,
+  payCur:'watt', w3claim:{}, monSize:27, chair:0,
+  pool:{pol:'nucash',alt:'nucash',wtx:'genesis'}, myPools:{}, pend:{pol:0,alt:0,wtx:0}, payThresh:3,
+  shares:0, burned:0, altH:6998800, altHybrid:0, altNodes:0, altLocked:0, valEarn:0, poolEarnW:0, poolEarnC:{pol:0,alt:0,wtx:0},
+};}
+function save(){ if(!S) return; S.lastSeen=now(); try{localStorage.setItem(SAVEKEY,JSON.stringify(S));}catch(e){} }
+function load(){ try{ const r=localStorage.getItem(SAVEKEY); if(r){ const o=JSON.parse(r); if(o&&o.rigs){
+  const f=freshState();
+  const inv=Object.assign({},f.inv,o.inv||{}), bought=Object.assign({},f.bought,o.bought||{});
+  const st=Object.assign(f,o);
+  st.inv=inv; st.bought=bought;
+  st.periph=Object.assign({17:0,18:0,23:0},o.periph||{}); st.tower=o.tower||0;
+  st.rigs.forEach(r=>{ if(r.cpu===1||r.cpu===true) r.cpu=3; r.cpu=r.cpu||0; r.asic=r.asic||0; r.frame=r.frame||0;
+    r.oc=r.oc||{c:0,m:0}; r.crashT=r.crashT||0; r.on=r.on===undefined?1:r.on; r.wear=r.wear||0; });
+  st.monSize=MONSIZES[st.monSize]?st.monSize:27; st.price.wtx=st.price.wtx||CFG.nets.wattx.p0; st.wtx=st.wtx||0;
+  st.blocksNet.wtx=st.blocksNet.wtx||0; st.sold.wtx=st.sold.wtx||0;
+  st.pool=Object.assign({pol:'nucash',alt:'nucash',wtx:'genesis'},o.pool||{});
+  st.myPools=o.myPools||{}; st.pend=Object.assign({pol:0,alt:0,wtx:0},o.pend||{});
+  st.poolEarnC=Object.assign({pol:0,alt:0,wtx:0},o.poolEarnC||{});
+  return st; } } }catch(e){} return null; }
+/* number formatting */
+function fmt(n){ n=Number(n)||0; const a=Math.abs(n);
+  if(a>=1e9) return (n/1e9).toFixed(2)+'B'; if(a>=1e6) return (n/1e6).toFixed(2)+'M';
+  if(a>=1e4) return (n/1e3).toFixed(1)+'k'; if(a>=100) return Math.floor(n).toString();
+  if(a>=10) return n.toFixed(1); return n.toFixed(2); }
+function fmtInt(n){ n=Number(n)||0; if(n>=1e6) return (n/1e6).toFixed(2)+'M'; if(n>=1e4) return (n/1e3).toFixed(1)+'k'; return Math.floor(n).toString(); }
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+/* derived stats */
+function ocHashMult(r){ const o=r.oc||{c:0,m:0}; return 1 + o.c*0.05 + o.m*0.02; }
+function ocWattMult(r){ const o=r.oc||{c:0,m:0}; return 1 + o.c*0.07 + o.m*0.03; }
+function ocRiskPerMin(r){ const o=r.oc||{c:0,m:0}, s=o.c+o.m; if(!s) return 0;
+  const base=s*s*0.0015; return base*(S&&S.temp>=100?12:S&&S.temp>=85?4:1); }
+function rigHash(r){ if(r.crashT>0||!r.on||r.wear>=100) return 0;
+  let h=ITEMS[1].hash; if(r.cpu) h+=ITEMS[r.cpu].hash; if(r.asic) h+=ITEMS[r.asic].hash; for(const g of r.gpus) h+=ITEMS[g].hash; return h*ocHashMult(r)*(1-0.5*(r.wear||0)/100); }
+function rigWatt(r){ if(!r.on) return 0; let w=ITEMS[1].watt; if(r.cpu) w+=ITEMS[r.cpu].watt; if(r.asic) w+=ITEMS[r.asic].watt; for(const g of r.gpus) w+=ITEMS[g].watt;
+  return (r.crashT>0||r.wear>=100) ? w*0.25 : w*ocWattMult(r); }
+function rigSW(r){ let s=ITEMS[1].sw; if(r.cpu) s+=ITEMS[r.cpu].sw; if(r.asic) s+=ITEMS[r.asic].sw; if(r.frame) s+=ITEMS[14].sw; for(const g of r.gpus) s+=ITEMS[g].sw; return s; }
+function gpuCap(r){ return r.frame?4:2; }
+function totHash(){ return S.rigs.reduce((a,r)=>a+rigHash(r),0) * Math.pow(CFG.gen2Mult,S.gen-1); }
+function totWatt(){ return S.rigs.reduce((a,r)=>a+rigWatt(r),0); }
+function totSW(){ return S.rigs.reduce((a,r)=>a+rigSW(r),0) + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
+function totSWStake(){ return S.rigs.reduce((a,r)=>a+rigSW(r)*(r.on?0.25:1),0) + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
+function rigValue(r){ let v=ITEMS[1].price; if(r.cpu) v+=ITEMS[r.cpu].price; if(r.asic) v+=ITEMS[r.asic].price; if(r.frame) v+=ITEMS[14].price; for(const g of r.gpus) v+=ITEMS[g].price; return v; }
+function repairCost(r){ return Math.ceil(rigValue(r)*0.18*(r.wear||0)/100); }
+function stakeMult(){ return S.tower?CFG.towerStakeMult:1; }
+function powerCap(){ return CFG.powerBase + S.upg.power*CFG.powerPerLvl; }
+function slotCount(){ return 3 + S.upg.rack*3; }
+function periphCount(){ return (S.periph[17]?1:0)+(S.periph[18]?1:0)+(S.periph[23]?1:0); }
+function luckMult(){ const pc=periphCount(); return 1 + (S.badge?0.10:0) + pc*0.02 + (pc===3?0.03:0) + (S.chair?0.03:0); }
+function effMult(){ return S.badge?0.90:1; }
+function pcPrice(){ return Math.round(CFG.pcBasePrice*Math.pow(CFG.pcPriceGrowth,Math.max(0,S.pcCount-1))); }
+function difficulty(){ return 1 + S.blocks/CFG.diffSoft; }
+function powerFactor(){ const d=totWatt(); return d<=powerCap()?1:powerCap()/d; }
+function tempTarget(){ return 24 + totWatt()*CFG.coolBase*(1-S.upg.cooling*CFG.coolPerLvl); }
+function heatFactor(){ return S.temp>=100?0.25 : S.temp>=85?0.6 : 1; }
+function netWorth(){ return S.watt + (S.pol+S.pend.pol)*S.price.pol + (S.alt+S.pend.alt+S.altLocked)*S.price.alt + (S.wtx+S.pend.wtx)*S.price.wtx; }

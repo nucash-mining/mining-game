@@ -1,0 +1,97 @@
+
+/* ================= THREE SCENE ================= */
+const TRAILER = new URLSearchParams(location.search).has('trailer');
+const canvas = $('c3d');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, preserveDrawingBuffer:TRAILER});
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.35;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0818);
+scene.fog = new THREE.Fog(0x0a0818, 18, 40);
+const cam = new THREE.PerspectiveCamera(50, 2, 0.05, 120);
+cam.position.set(6.8, 4.6, 8.6);
+const controls = new OrbitControls(cam, canvas);
+controls.target.set(-0.6, 1.1, -1.4);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.maxPolarAngle = Math.PI*0.49; controls.minDistance = 3.5; controls.maxDistance = 24;
+controls.enablePan = false;
+function sizeRenderer(){
+  const w = TRAILER?1280:innerWidth, h = TRAILER?720:innerHeight;
+  renderer.setSize(w,h,!TRAILER); renderer.setPixelRatio(TRAILER?1:Math.min(devicePixelRatio,1.6));
+  cam.aspect=w/h; cam.updateProjectionMatrix();
+}
+sizeRenderer(); addEventListener('resize', sizeRenderer);
+/* ---------- lights ---------- */
+scene.add(new THREE.HemisphereLight(0x9c90e8, 0x1a1530, 1.25));
+const key = new THREE.DirectionalLight(0xcfc4ff, 2.2); key.position.set(6,12,8); scene.add(key);
+const purL = new THREE.PointLight(0x8247e5, 90, 30); purL.position.set(-7,4.5,-6); scene.add(purL);
+const cyanL = new THREE.PointLight(0x2ee6d6, 70, 28); cyanL.position.set(7,4,4); scene.add(cyanL);
+const badgeSpot = new THREE.SpotLight(0xffd23f, 120, 18, 0.42, 0.5); badgeSpot.position.set(0,7.5,-8.4);
+scene.add(badgeSpot);
+/* ---------- canvas texture helpers ---------- */
+function cnv(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+function ctex(c){ const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t; }
+/* floor */
+function makeFloorTex(){
+  const c=cnv(1024,1024), x=c.getContext('2d');
+  x.fillStyle='#100d22'; x.fillRect(0,0,1024,1024);
+  for(let i=0;i<9000;i++){ x.fillStyle=`rgba(${20+Math.random()*26|0},${16+Math.random()*22|0},${40+Math.random()*30|0},.35)`;
+    x.fillRect(Math.random()*1024,Math.random()*1024,2.2,2.2); }
+  x.strokeStyle='rgba(130,71,229,.30)'; x.lineWidth=2;
+  for(let i=0;i<=8;i++){ x.beginPath(); x.moveTo(i*128,0); x.lineTo(i*128,1024); x.stroke();
+    x.beginPath(); x.moveTo(0,i*128); x.lineTo(1024,i*128); x.stroke(); }
+  x.strokeStyle='rgba(46,230,214,.10)'; x.lineWidth=1;
+  for(let i=0;i<=32;i++){ x.beginPath(); x.moveTo(i*32,0); x.lineTo(i*32,1024); x.stroke();
+    x.beginPath(); x.moveTo(0,i*32); x.lineTo(1024,i*32); x.stroke(); }
+  return ctex(c);
+}
+const ROOM = {W:20, D:16, H:7.2};
+const floorTex = makeFloorTex(); floorTex.wrapS=floorTex.wrapT=THREE.RepeatWrapping; floorTex.repeat.set(2.4,2);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.W+6,ROOM.D+6),
+  new THREE.MeshStandardMaterial({map:floorTex, roughness:.92, metalness:.15}));
+floor.rotation.x=-Math.PI/2; scene.add(floor);
+/* walls */
+const wallMat = new THREE.MeshStandardMaterial({color:0x17132e, roughness:.95, metalness:.05, side:THREE.DoubleSide});
+const backWall = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.W+6,ROOM.H), wallMat);
+backWall.position.set(0,ROOM.H/2,-ROOM.D/2-1); scene.add(backWall);
+const sideL = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.D+6,ROOM.H), wallMat.clone());
+sideL.rotation.y=Math.PI/2; sideL.position.set(-ROOM.W/2-1,ROOM.H/2,0); scene.add(sideL);
+const sideR = sideL.clone(); sideR.rotation.y=-Math.PI/2; sideR.position.x=ROOM.W/2+1; scene.add(sideR);
+/* neon trims */
+function neonStrip(w, color, x,y,z, ry=0){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,0.07,0.07),
+    new THREE.MeshBasicMaterial({color}));
+  m.position.set(x,y,z); m.rotation.y=ry; scene.add(m); return m;
+}
+neonStrip(ROOM.W+6,0x8247e5, 0,ROOM.H-0.4,-ROOM.D/2-0.98);
+neonStrip(ROOM.W+6,0x2ee6d6, 0,0.12,-ROOM.D/2-0.97);
+neonStrip(ROOM.D+6,0x8247e5, -ROOM.W/2-0.98,ROOM.H-0.4,0, Math.PI/2);
+neonStrip(ROOM.D+6,0x8247e5, ROOM.W/2+0.98,ROOM.H-0.4,0, Math.PI/2);
+neonStrip(ROOM.D+6,0x2ee6d6, -ROOM.W/2-0.97,0.12,0, Math.PI/2);
+neonStrip(ROOM.D+6,0x2ee6d6, ROOM.W/2+0.97,0.12,0, Math.PI/2);
+/* logo wall text */
+function makeLogoTex(){
+  const c=cnv(1024,256), x=c.getContext('2d');
+  x.fillStyle='#0d0b1e'; x.fillRect(0,0,1024,256);
+  x.textAlign='center'; x.textBaseline='middle';
+  x.font='900 96px Segoe UI,Arial'; 
+  const g=x.createLinearGradient(0,60,0,200); g.addColorStop(0,'#ffd23f'); g.addColorStop(1,'#ff8d2e');
+  x.fillStyle=g; x.fillText('⛏ THE MINING GAME', 512, 106);
+  x.font='700 44px Segoe UI,Arial'; x.fillStyle='#2ee6d6'; x.letterSpacing='18px';
+  x.fillText('W A T T   T Y C O O N', 512, 202);
+  return ctex(c);
+}
+const logoM = new THREE.Mesh(new THREE.PlaneGeometry(9,2.25),
+  new THREE.MeshBasicMaterial({map:makeLogoTex(), transparent:false}));
+logoM.position.set(0, 5.6, -ROOM.D/2-0.95); scene.add(logoM);
+/* big wall screen (dynamic) */
+const scrC = cnv(1024,512), scrX = scrC.getContext('2d');
+const scrTex = ctex(scrC);
+const screenM = new THREE.Mesh(new THREE.PlaneGeometry(7.4,3.7),
+  new THREE.MeshBasicMaterial({map:scrTex}));
+screenM.position.set(-ROOM.W/2-0.9, 3.3, -1.4); screenM.rotation.y=Math.PI/2; scene.add(screenM);
+const screenFrame = new THREE.Mesh(new THREE.BoxGeometry(0.12,3.95,7.65),
+  new THREE.MeshStandardMaterial({color:0x0a0918,roughness:.4,metalness:.7}));
+screenFrame.position.set(-ROOM.W/2-0.97,3.3,-1.4); scene.add(screenFrame);
+/* right wall: NFT poster gallery (filled after models load) */
+const posterGroup = new THREE.Group(); scene.add(posterGroup);

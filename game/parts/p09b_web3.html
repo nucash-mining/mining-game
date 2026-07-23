@@ -1,0 +1,172 @@
+/* ================= WEB3 — real wallet + deployed Mining Game contracts ================= */
+/* Drop-in config: when Mining Game V2 / WATT V2 deploy (same seed, all chains) paste the
+   addresses into nftV2/wattV2 below. When WATTxchain launches, fill chainId+rpc. */
+const WEB3CFG={
+  chains:{
+    polygon:{ key:'polygon', net:'polygon', chainId:137, hex:'0x89', name:'Polygon', rpc:'https://polygon-rpc.com', sym:'POL', dec:18, explorer:'https://polygonscan.com',
+      nft:'0x970a8b10147e3459d3cbf56329b76ac18d329728', watt:'0xE960d5076cd3169C343Ee287A2c3380A222e5839', staking:'0xcbfcA68D10B2ec60a0FB2Bc58F7F0Bfd32CD5275',
+      nftV2:null, wattV2:null },
+    alt:{ key:'alt', net:'alt', chainId:2330, hex:'0x91a', name:'Altcoinchain', rpc:'https://rpc.altcoinchain.org', sym:'ALT', dec:18, explorer:'https://explorer.altcoinchain.org',
+      nft:'0xf9670e5D46834561813CA79854B3d7147BBbFfb2', watt:'0x6645143e49B3a15d8F205658903a55E520444698', staking:'0xe463045318393095F11ed39f1a98332aBCc1A7b1',
+      nftV2:null, wattV2:null },
+    wattx:{ key:'wattx', net:null, chainId:null, hex:null, name:'WATTxchain', rpc:null, sym:'WATT', dec:18, explorer:null,
+      nft:null, watt:null, staking:null, nftV2:null, wattV2:null, prelaunch:true },
+  },
+  sel:{ bal1155:'0x00fdd58e', balErc20:'0x70a08231', freemint:'0xaf2de086', rates:'0xdd418ae2', rewards:'0xe8a31bdc' },
+  ids:[1,2,3,4,5], // minted V1 token ids
+};
+const W3={ addr:null, chainId:null, chain:null, native:null, watt:null, rewards:null, nfts:{}, rates:{}, busy:false, err:null };
+const w3Eth=()=>window.ethereum;
+const w3Has=()=>!!window.ethereum;
+const w3Short=a=>a?a.slice(0,6)+'…'+a.slice(-4):'';
+const encU=n=>BigInt(n).toString(16).padStart(64,'0');
+const encA=a=>a.replace(/^0x/,'').toLowerCase().padStart(64,'0');
+function fromWei(hx,dp=3){ try{ if(!hx||hx==='0x') return 0; const w=BigInt(hx); return Number(w/10n**12n)/1e6; }catch(e){ return 0; } }
+async function w3Req(method,params){ return w3Eth().request({method,params}); }
+async function w3CallRaw(to,data){ return w3Req('eth_call',[{to,data},'latest']); }
+function w3ChainByHexId(id){ const n=typeof id==='string'?parseInt(id,16):id;
+  for(const k in WEB3CFG.chains){ if(WEB3CFG.chains[k].chainId===n) return WEB3CFG.chains[k]; } return null; }
+
+async function w3Connect(){
+  if(!w3Has()){ openModal('m-web3'); renderWallet(); return; }
+  if(W3.busy) return; W3.busy=true; renderWallet();
+  try{
+    const accts=await w3Req('eth_requestAccounts',[]);
+    W3.addr=accts[0]||null; W3.err=null;
+    W3.chainId=parseInt(await w3Req('eth_chainId',[]),16);
+    W3.chain=w3ChainByHexId(W3.chainId);
+    if(!w3Connect._wired){ w3Connect._wired=1;
+      w3Eth().on?.('accountsChanged',a=>{ W3.addr=a[0]||null; w3Refresh(); });
+      w3Eth().on?.('chainChanged',c=>{ W3.chainId=parseInt(c,16); W3.chain=w3ChainByHexId(W3.chainId); w3Refresh(); });
+    }
+    SFX.buy(); toast('🦊 Wallet connected: '+w3Short(W3.addr),'grn');
+    if(W3.chain&&W3.chain.net){ S.net=W3.chain.net; toast('🔗 Mining network synced to wallet chain: '+W3.chain.name,'cyan'); }
+    await w3Refresh();
+  }catch(e){ W3.err=e&&e.message||'connection rejected'; SFX.err(); }
+  W3.busy=false; renderWallet(); renderHud(); save();
+}
+async function w3Switch(key){
+  const c=WEB3CFG.chains[key];
+  if(c.prelaunch){ SFX.err(); toast('🔌 WATTxchain is pre-launch — no chainID / RPC yet. It slots in the moment the chain goes live.','gold'); return; }
+  if(!w3Has()||!W3.addr) return;
+  try{ await w3Req('wallet_switchEthereumChain',[{chainId:c.hex}]); }
+  catch(e){
+    if(e&&(e.code===4902||(''+e.message).includes('Unrecognized'))){
+      try{ await w3Req('wallet_addEthereumChain',[{chainId:c.hex,chainName:c.name,rpcUrls:[c.rpc],
+        nativeCurrency:{name:c.sym,symbol:c.sym,decimals:18},blockExplorerUrls:c.explorer?[c.explorer]:[]}]); }
+      catch(e2){ W3.err='could not add '+c.name; renderWallet(); }
+    }
+  }
+}
+async function w3Refresh(){
+  if(!W3.addr){ renderWallet(); return; }
+  const c=W3.chain;
+  W3.native=W3.watt=W3.rewards=null; W3.nfts={}; W3.rates={};
+  renderWallet();
+  if(!c){ return; } // unsupported chain
+  try{
+    const jobs=[];
+    jobs.push(w3Req('eth_getBalance',[W3.addr,'latest']).then(h=>W3.native=fromWei(h)));
+    if(c.watt) jobs.push(w3CallRaw(c.watt, WEB3CFG.sel.balErc20+encA(W3.addr)).then(h=>W3.watt=fromWei(h)));
+    if(c.staking) jobs.push(w3CallRaw(c.staking, WEB3CFG.sel.rewards+encA(W3.addr)).then(h=>W3.rewards=fromWei(h)).catch(()=>{}));
+    if(c.nft) for(const id of WEB3CFG.ids){
+      jobs.push(w3CallRaw(c.nft, WEB3CFG.sel.bal1155+encA(W3.addr)+encU(id)).then(h=>{ W3.nfts[id]=h&&h!=='0x'?Number(BigInt(h)):0; }));
+      jobs.push(w3CallRaw(c.nft, WEB3CFG.sel.rates+encU(id)).then(h=>{ W3.rates[id]=fromWei(h,6); }).catch(()=>{}));
+    }
+    await Promise.allSettled(jobs);
+    w3GrantOwned();
+  }catch(e){ W3.err=(''+(e&&e.message||e)).slice(0,120); }
+  renderWallet();
+}
+/* Owned on-chain NFTs unlock their in-game twins (once per wallet+chain+id) */
+function w3GrantOwned(){
+  if(!W3.addr||!W3.chain) return;
+  let granted=[];
+  for(const id of WEB3CFG.ids){
+    const n=W3.nfts[id]||0; if(n<=0) continue;
+    const key=W3.chain.key+':'+W3.addr.toLowerCase()+':'+id;
+    if(S.w3claim[key]) continue;
+    S.w3claim[key]=1;
+    if(id===1){ if(S.rigs.length<slotCount()) mintPC(true); }
+    else if(id===2){ if(!S.badge){ S.badge=1; setBadgeOwned(true); } }
+    else { S.inv[id]=(S.inv[id]||0)+Math.min(n,4); }
+    granted.push(ITEMS[id]?ITEMS[id].name:('#'+id));
+  }
+  if(granted.length){ SFX.gen2(); toast('⛓ On-chain NFTs verified → unlocked in-game: '+granted.join(', '),'gold',9000); renderHud(); save(); rebuildAllRigs&&rebuildAllRigs(); }
+}
+/* Real transaction: freemint(1,1) on the deployed ERC-1155 */
+async function w3Freemint(){
+  const c=W3.chain;
+  if(!c||!c.nft||!W3.addr){ SFX.err(); toast('Connect wallet on Polygon or Altcoinchain first','red'); return; }
+  try{
+    const data=WEB3CFG.sel.freemint+encU(1)+encU(1);
+    const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.nft,data}]);
+    toast('⛓ REAL freemint(1,1) sent on '+c.name+': '+w3Short(tx),'gold',9000);
+    setTimeout(w3Refresh, 8000);
+  }catch(e){ SFX.err(); toast('tx rejected: '+(''+(e&&e.message||e)).slice(0,80),'red'); }
+}
+/* ---------- wallet modal ---------- */
+function renderWallet(){
+  const b=$('b-wallet');
+  if(b) b.innerHTML=W3.addr?('🦊 '+w3Short(W3.addr)):'🦊 WALLET';
+  const m=$('w3-body'); if(!m||!$('m-web3').classList.contains('open')) return;
+  const c=W3.chain;
+  const chainPills=Object.values(WEB3CFG.chains).map(ch=>{
+    const on=c&&c.key===ch.key;
+    return `<button class="w3chip ${on?'on':''} ${ch.prelaunch?'pre':''}" data-chain="${ch.key}">${ch.key==='polygon'?'🟣':ch.key==='alt'?'🟠':'🔌'} ${ch.name}${ch.prelaunch?' <small>PRE-LAUNCH</small>':''}</button>`;
+  }).join('');
+  if(!w3Has()){
+    m.innerHTML=`<div class="w3note">No browser wallet detected. Install <b>MetaMask</b> (or any EIP-1193 wallet) and reload — the game connects to the real Mining Game contracts on Polygon & Altcoinchain. The full game works without one; on-chain sync is a bonus layer.</div>`;
+    return;
+  }
+  if(!W3.addr){
+    m.innerHTML=`<div class="w3note">Connect to sync your real Mining Game NFTs — owned components unlock in-game, balances show live, and you can free-mint the Gaming PC on-chain.</div>
+      <button class="hbtn gold" id="w3-connect" style="width:100%">${W3.busy?'CONNECTING…':'🦊 CONNECT WALLET'}</button>
+      ${W3.err?`<div class="w3err">${W3.err}</div>`:''}`;
+    $('w3-connect')?.addEventListener('click',w3Connect);
+    return;
+  }
+  const v=(x,f)=>x===null?'<span class="w3dim">…</span>':f;
+  m.innerHTML=`
+    <div class="w3addr">${W3.addr} ${c?`· <b style="color:var(--grn)">${c.name}</b>`:'· <b style="color:var(--red)">unsupported chain ('+W3.chainId+')</b>'}</div>
+    <div class="w3chips">${chainPills}</div>
+    ${c?`<div class="stats2" style="margin:10px 0">
+      <div class="st2"><small>${c.sym} (native)</small><b>${v(W3.native,fmt(W3.native))}</b></div>
+      <div class="st2"><small>WATT (on-chain)</small><b style="color:var(--gold)">${v(W3.watt,fmt(W3.watt))}</b></div>
+      <div class="st2"><small>STAKING REWARDS</small><b style="color:var(--cyan)">${v(W3.rewards,fmt(W3.rewards)+' ⚡')}</b></div>
+      <div class="st2"><small>CONTRACT</small><b style="font-size:10px">${w3Short(c.nft)}</b></div>
+    </div>
+    <div class="w3sec">YOUR MINING GAME NFTs (ERC-1155)</div>
+    <div class="w3nfts">${WEB3CFG.ids.map(id=>{
+      const n=W3.nfts[id], it=ITEMS[id];
+      return `<div class="w3nft ${n>0?'own':''}"><b>${n===undefined?'…':n}×</b> ${it?it.name:'#'+id}${W3.rates[id]?`<small>rate ${W3.rates[id]}</small>`:''}</div>`;
+    }).join('')}</div>
+    <button class="hbtn accent" id="w3-mint" style="width:100%;margin-top:8px">⛓ FREE MINT GAMING PC — REAL TX (gas only)</button>
+    <div class="w3sec" style="margin-top:12px">MINING GAME V2 · WATT V2</div>
+    <div class="w3note">V2 contracts (Gen2 components: TX190, XL190, GP720, GPX880, XXL270, Bit Hammer, Rig Frame, Server Tower, peripherals) are <b>pending deployment</b> from the deployer wallet across all chains. Gen2 purchases run simulated until the addresses drop into the config. WATTxchain joins at launch.</div>`
+    :`<div class="w3note">Switch to Polygon or Altcoinchain to read your Mining Game NFTs.</div><div class="w3chips">${chainPills}</div>`}
+    ${W3.err?`<div class="w3err">${W3.err}</div>`:''}`;
+  m.querySelectorAll('.w3chip').forEach(el=>el.onclick=()=>w3Switch(el.dataset.chain));
+  $('w3-mint')?.addEventListener('click',w3Freemint);
+}
+/* ---------- contract-call style purchase feedback ---------- */
+function txFlow(it, cost, cur){
+  const el=$('m-tx'); if(!el) return;
+  const real=!!(W3.addr&&W3.chain), v2=!!it.gen2;
+  const hash='0x'+Array.from({length:16},()=>'0123456789abcdef'[Math.random()*16|0]).join('')+'…';
+  el.innerHTML=`<div class="txbox">
+    <div class="txh">${v2?'MiningGameV2.purchase':'MiningGame.mint'}(id: ${it.id||''}${it.id?', ':''}amount: 1)</div>
+    <div class="txr"><span>item</span><b>${it.name}</b></div>
+    <div class="txr"><span>cost</span><b>${fmt(cost)} ${curSym(cur)}</b></div>
+    <div class="txr"><span>from</span><b>${real?w3Short(W3.addr):'in-game balance'}</b></div>
+    <div class="txr"><span>chain</span><b>${real?W3.chain.name:CFG.nets[S.net].name}</b></div>
+    <div class="txr"><span>status</span><b class="txst">signing…</b></div>
+    <div class="txtag">${v2?'SIMULATED — V2 contract pending deployment':'SIMULATED PURCHASE · real NFT sync via 🦊 WALLET'}</div>
+  </div>`;
+  el.classList.add('show');
+  const st=el.querySelector('.txst');
+  setTimeout(()=>{ if(st) st.textContent='pending… '+hash; },350);
+  setTimeout(()=>{ if(st){ st.textContent='✓ confirmed'; st.style.color='var(--grn)'; } SFX.swap(); },900);
+  clearTimeout(txFlow._t);
+  txFlow._t=setTimeout(()=>el.classList.remove('show'),2300);
+}

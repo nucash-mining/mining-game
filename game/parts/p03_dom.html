@@ -1,0 +1,111 @@
+<!-- ============ HUD ============ -->
+<div id="hud">
+  <div id="logo"><b>⛏ THE MINING GAME</b><span>WATT&nbsp;TYCOON</span></div>
+  <div id="stats">
+    <div class="stat" id="s-watt"><span class="ic">⚡</span><span class="col"><b id="v-watt">0</b><small>WATT</small></span></div>
+    <div class="stat" id="s-hash"><span class="ic">⛏</span><span class="col"><b id="v-hash">0</b><small>HASH</small></span></div>
+    <div class="stat" id="s-pow"><span class="ic">🔌</span><span class="col"><b id="v-pow">0/60</b><small>POWER</small></span></div>
+    <div class="stat" id="s-temp"><span class="ic">🌡</span><span class="col"><b id="v-temp">22°</b><small>TEMP</small></span></div>
+    <div class="stat" id="s-blk"><span class="ic">🧱</span><span class="col"><b id="v-blk">0</b><small>BLOCKS</small></span></div>
+  </div>
+  <div id="hudbtns">
+    <div id="net" title="Switch network"><span class="dot"></span><span id="netname">Polygon</span><small id="netdiff"></small></div>
+    <button class="hbtn" id="b-wallet">🦊 WALLET</button>
+    <button class="hbtn gold" id="b-shop">🛒 SHOP</button>
+    <button class="hbtn accent" id="b-upg">🔧 GARAGE</button>
+    <button class="hbtn" id="b-pool">🏊 POOLS</button>
+    <button class="hbtn" id="b-stats">📊</button>
+    <button class="hbtn" id="b-mute">🔊</button>
+  </div>
+</div>
+<div id="wallet">
+  <div class="coin" id="coin-pol">🟣 <b id="v-pol">0</b> POL <span class="pr" id="p-pol">@10.0</span><button id="sell-pol">SELL</button></div>
+  <div class="coin" id="coin-alt">🟠 <b id="v-alt">0</b> ALT <span class="pr" id="p-alt">@25.0</span><button id="sell-alt">SELL</button></div>
+  <div class="coin" id="coin-wtx">🟡 <b id="v-wtx">0</b> WTX <span class="pr" id="p-wtx">@2.0</span><button id="sell-wtx">SELL</button></div>
+  <div class="coin" id="coin-pool" title="Mining pool — click to open Pool Hub" style="cursor:pointer">🏊 <b id="v-pool">nucash-mining</b><span class="pr" id="p-pend"></span></div>
+</div>
+<div id="feed"></div>
+<div id="tut"></div>
+
+<!-- ============ SHOP ============ -->
+<div class="modal" id="m-shop"><div class="mbox">
+  <div class="mhead"><h2>🛒 NFT SHOP <small style="color:var(--dim);font-weight:400;font-size:11px">&nbsp;the real Mining Game collection · Polygon &amp; Altcoinchain</small></h2><button class="x" data-close="m-shop">✕</button></div>
+  <div id="paybar"><span>PAY WITH</span>
+    <button class="paybtn" data-cur="watt">⚡ WATT</button>
+    <button class="paybtn" data-cur="pol">🟣 POL</button>
+    <button class="paybtn" data-cur="alt">🟠 ALT</button>
+    <small>each purchase runs a contract call on the selected currency</small></div>
+  <div class="cards" id="shopcards"></div>
+</div></div>
+
+<!-- ============ WALLET (web3) ============ -->
+<div class="modal" id="m-web3"><div class="mbox" style="max-width:520px">
+  <div class="mhead"><h2>🦊 WALLET <small style="color:var(--dim);font-weight:400;font-size:11px">&nbsp;live contracts on Polygon &amp; Altcoinchain</small></h2><button class="x" data-close="m-web3">✕</button></div>
+  <div id="w3-body"></div>
+</div></div>
+<div id="m-tx"></div>
+
+<!-- ============ WORKBENCH (open case / drag-snap install) ============ -->
+<div id="bench">
+  <div id="bench-top">
+    <h3>🔧 WORKBENCH — RIG <span id="bench-rig">1</span></h3>
+    <small id="bench-sub">side panel off · components at real-life scale</small>
+    <span style="flex:1"></span>
+    <button class="hbtn gold" id="bench-shop">🛒 BUY COMPONENTS</button>
+    <button class="hbtn" id="bench-close">✕ CLOSE</button>
+  </div>
+  <div id="bench-hint">drag a component from the tray — compatible slots glow — release to snap it in</div>
+  <div id="bench-tray"></div>
+  <div id="bench-scale">REAL-SCALE RATIOS<br>ATX board 305×244mm · GPU 300mm<br>CPU package 40×40mm</div>
+</div>
+
+<!-- ============ GARAGE UPGRADES ============ -->
+<div class="modal" id="m-upg"><div class="mbox" style="max-width:560px">
+  <div class="mhead"><h2>🔧 GARAGE UPGRADES</h2><button class="x" data-close="m-upg">✕</button></div>
+  <div id="upgrows"></div>
+  <div id="gen2box"></div>
+</div></div>
+
+<!-- ============ POOL HUB ============ -->
+<div class="modal" id="m-pool"><div class="mbox" style="max-width:620px">
+  <div class="mhead"><h2>🏊 POOL HUB <small style="color:var(--dim);font-weight:400;font-size:11px">&nbsp;mining pools · hosting · validators</small></h2><button class="x" data-close="m-pool">✕</button></div>
+  <div id="poolbody"></div>
+</div></div>
+
+<!-- ============ STATS ============ -->
+<div class="modal" id="m-stats"><div class="mbox" style="max-width:520px">
+  <div class="mhead"><h2>📊 MINING STATS</h2><button class="x" data-close="m-stats">✕</button></div>
+  <div class="stats2" id="statsgrid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+  <div class="rowbtns">
+    <button class="hbtn accent" id="b-share">🐦 Share on X</button>
+    <button class="hbtn" id="b-reset" style="color:var(--red)">Reset save</button>
+  </div>
+  <p style="color:var(--dim);font-size:10.5px;margin-top:12px;line-height:1.6">
+    Traits are the real on-chain specs of the Mining Game ERC-1155 collection
+    (Polygon 0x970a…9728 / Altcoinchain 0xf967…ffb2). WATT is electricity — every
+    component draws it, staking weight regenerates it. This is a simulation: no wallet, no chain calls.
+  </p>
+</div></div>
+
+<!-- ============ RIG PANEL ============ -->
+<div id="rigp"></div>
+
+<!-- ============ MINING GAME OS ============ -->
+<div id="os"></div>
+
+<!-- ============ SPLASH ============ -->
+<div id="splash">
+  <div class="sub1">FREE TO PLAY · PLAY TO EARN</div>
+  <h1>THE MINING GAME</h1>
+  <p>The 3D crypto-mining simulator built from the <b style="color:var(--txt)">real Mining Game NFT hardware</b>.
+  Mint your free Gaming PC, bolt in CPUs and GPUs, feed the rig <b style="color:var(--gold)">⚡WATT</b> as electricity,
+  and race the difficulty curve mining blocks on Polygon and Altcoinchain.</p>
+  <button id="mintbtn">⚡ FREE MINT — Gaming PC</button>
+  <div class="chain">
+    <span><span class="cd" style="background:#8247e5"></span>Polygon</span>
+    <span><span class="cd" style="background:#ffd23f"></span>Altcoinchain</span>
+    <span><span class="cd" style="background:#fff3b0"></span>WATTxchain testnet</span>
+    <span>⛏ mining pools · validators · real NFT hardware</span>
+  </div>
+  <div id="loadnote">loading 3D hardware…</div>
+</div>

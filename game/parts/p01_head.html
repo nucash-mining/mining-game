@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>The Mining Game — WATT Tycoon</title>
+<meta name="description" content="3D crypto-mining simulator built on the real Mining Game NFTs. Mint rigs, install GPUs, burn WATT, mine blocks on Polygon and Altcoinchain.">
+<meta property="og:title" content="The Mining Game — WATT Tycoon">
+<meta property="og:description" content="Build 3D mining rigs from real Mining Game NFT hardware. WATT is electricity. Blocks are money. How big can your garage get?">
+<meta property="og:image" content="https://mining-game.games.bu.app/og.png">
+<meta property="og:url" content="https://mining-game.games.bu.app/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230d0b1e'/%3E%3Cpath d='M36 6 14 38h12l-4 20 22-32H32z' fill='%23ffd23f'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0d0b1e; --panel:rgba(16,13,38,.92); --panel2:rgba(24,20,54,.94);
+  --line:rgba(130,71,229,.35); --pur:#8247e5; --cyan:#2ee6d6; --gold:#ffd23f;
+  --red:#ff4d5e; --grn:#3dff8a; --txt:#e8e4ff; --dim:#9a93c4;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans-serif;-webkit-user-select:none;user-select:none}
+#c3d{position:fixed;inset:0;display:block;touch-action:none}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+button{font-family:inherit;cursor:pointer}
+/* ---------- HUD ---------- */
+#hud{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;padding:8px 10px;pointer-events:none;z-index:20}
+#hud>*{pointer-events:auto}
+#logo{display:flex;flex-direction:column;line-height:1;padding:7px 12px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+#logo b{font-size:13px;letter-spacing:.12em;color:var(--gold)}
+#logo span{font-size:9px;color:var(--dim);letter-spacing:.2em;margin-top:3px}
+#stats{display:flex;gap:6px;flex-wrap:wrap}
+.stat{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:13px}
+.stat .ic{font-size:14px}
+.stat b{font-variant-numeric:tabular-nums}
+.stat small{color:var(--dim);font-size:10px;display:block}
+.stat .col{display:flex;flex-direction:column;line-height:1.15}
+#s-watt b{color:var(--gold)} #s-hash b{color:var(--cyan)} #s-pow b{color:#b7a6ff}
+#s-temp b{color:var(--grn)} #s-temp.hot b{color:#ffae42} #s-temp.crit b{color:var(--red)}
+#hudbtns{margin-left:auto;display:flex;gap:6px}
+.hbtn{background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 12px;font-size:12.5px;font-weight:600;letter-spacing:.04em;transition:all .15s}
+.hbtn:hover{border-color:var(--pur);background:var(--panel2);transform:translateY(-1px)}
+.hbtn.gold{color:var(--gold)} .hbtn.accent{color:var(--cyan)}
+/* network pill */
+#net{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 11px;font-size:12.5px;font-weight:600}
+#net .dot{width:8px;height:8px;border-radius:50%;background:var(--pur);box-shadow:0 0 8px var(--pur)}
+#net.alt .dot{background:var(--gold);box-shadow:0 0 8px var(--gold)}
+#net.wtx .dot{background:#ffd23f;box-shadow:0 0 8px #ffd23f;border-radius:2px}
+#net:hover{border-color:var(--pur);cursor:pointer}
+#net small{color:var(--dim);font-weight:400}
+/* wallet strip */
+#wallet{position:fixed;top:56px;left:10px;display:flex;gap:6px;z-index:19;flex-wrap:wrap}
+.coin{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:5px 10px;font-size:12px}
+.coin b{font-variant-numeric:tabular-nums}
+.coin .pr{color:var(--dim);font-size:10.5px}
+.coin .pr.up{color:var(--grn)} .coin .pr.dn{color:var(--red)}
+.coin button{background:rgba(130,71,229,.25);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:2px 8px;font-size:10.5px}
+.coin button:hover{background:var(--pur)}
+/* toasts + feed */
+#feed{position:fixed;left:10px;bottom:10px;width:290px;display:flex;flex-direction:column;gap:5px;z-index:18;pointer-events:none}
+.msg{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--pur);border-radius:8px;padding:7px 10px;font-size:12px;animation:slidein .25s ease;opacity:.95}
+.msg.gold{border-left-color:var(--gold)} .msg.grn{border-left-color:var(--grn)}
+.msg.red{border-left-color:var(--red)} .msg.cyan{border-left-color:var(--cyan)}
+.msg small{color:var(--dim)}
+@keyframes slidein{from{transform:translateX(-20px);opacity:0}to{transform:none;opacity:.95}}
+/* floating 3d labels */
+.f3d{position:fixed;z-index:15;pointer-events:none;font-weight:800;font-size:15px;text-shadow:0 2px 8px #000;transition:none;color:var(--gold)}
+/* vignette */
+#vig{position:fixed;inset:0;pointer-events:none;z-index:10;opacity:0;transition:opacity .6s;
+  background:radial-gradient(ellipse at center,transparent 55%,rgba(255,40,40,.38) 100%)}
+</style>

@@ -1,0 +1,270 @@
+
+/* ---------- desks / racks ---------- */
+const deskMat = new THREE.MeshStandardMaterial({color:0x241d47, roughness:.7, metalness:.35});
+const deskTopMat = new THREE.MeshStandardMaterial({color:0x2d2557, roughness:.55, metalness:.45});
+/* real ratios @2.25u/m: desk 1.9m wide × 0.98m deep, surface 75cm (1.68u) — ATX tower 46cm no longer dwarfs it */
+const DESK={W:4.3, D:2.2, TOP:1.60, SURF:1.68, SHELF:3.05};
+function makeDesk(x,z){
+  const g=new THREE.Group();
+  const top=new THREE.Mesh(new THREE.BoxGeometry(DESK.W,0.16,DESK.D), deskTopMat); top.position.y=DESK.TOP; g.add(top);
+  const legG=new THREE.BoxGeometry(0.14,DESK.TOP,0.14);
+  [[-DESK.W/2+0.2,-DESK.D/2+0.15],[DESK.W/2-0.2,-DESK.D/2+0.15],[-DESK.W/2+0.2,DESK.D/2-0.15],[DESK.W/2-0.2,DESK.D/2-0.15]].forEach(([lx,lz])=>{
+    const l=new THREE.Mesh(legG,deskMat); l.position.set(lx,DESK.TOP/2,lz); g.add(l); });
+  const shelf=new THREE.Mesh(new THREE.BoxGeometry(DESK.W,0.09,0.95), deskMat);
+  shelf.position.set(0,DESK.SHELF,-0.62); g.add(shelf);
+  const pole=new THREE.BoxGeometry(0.09,DESK.SHELF-DESK.TOP,0.09);
+  [[-DESK.W/2+0.1,-0.62],[DESK.W/2-0.1,-0.62]].forEach(([px,pz])=>{
+    const p=new THREE.Mesh(pole,deskMat); p.position.set(px,(DESK.SHELF+DESK.TOP)/2,pz); g.add(p); });
+  g.add(makeChair(!!S.chair));
+  g.position.set(x,0,z); scene.add(g); return g;
+}
+/* procedural office / gaming chair (no chair NFT model exists yet — see repo TODO) */
+function makeChair(gaming){
+  const g=new THREE.Group(); g.name='chairG';
+  const dark=new THREE.MeshStandardMaterial({color:0x14101f,roughness:.6,metalness:.5});
+  const pad=new THREE.MeshStandardMaterial({color:gaming?0x1b1430:0x241f33,roughness:.75,metalness:.2});
+  const acc=new THREE.MeshStandardMaterial({color:0xd42a4e,roughness:.5,metalness:.3,emissive:0x550a18});
+  // 5-star base + casters + gas lift
+  for(let i=0;i<5;i++){ const a=i/5*Math.PI*2;
+    const sp=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.05,0.09),dark);
+    sp.position.set(Math.cos(a)*0.25,0.07,Math.sin(a)*0.25); sp.rotation.y=-a; g.add(sp);
+    const c=new THREE.Mesh(new THREE.SphereGeometry(0.055,8,8),dark);
+    c.position.set(Math.cos(a)*0.46,0.055,Math.sin(a)*0.46); g.add(c); }
+  const lift=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.06,0.85,10),dark);
+  lift.position.y=0.5; g.add(lift);
+  // seat (45cm high)
+  const seat=new THREE.Mesh(new THREE.BoxGeometry(0.72,0.12,0.68),pad); seat.position.y=1.01; g.add(seat);
+  if(gaming){ const sb1=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.14,0.66),acc); sb1.position.set(-0.36,1.03,0); g.add(sb1);
+    const sb2=sb1.clone(); sb2.position.x=0.36; g.add(sb2); }
+  // backrest
+  const bH=gaming?1.15:0.8;
+  const back=new THREE.Mesh(new THREE.BoxGeometry(0.7,bH,0.1),pad);
+  back.position.set(0,1.01+bH/2+0.02,0.34); back.rotation.x=0.1; g.add(back);
+  if(gaming){
+    const st=new THREE.Mesh(new THREE.BoxGeometry(0.16,bH*0.9,0.02),acc);
+    st.position.set(0,back.position.y,0.285); st.rotation.x=0.1; g.add(st);
+    const hr=new THREE.Mesh(new THREE.BoxGeometry(0.44,0.16,0.12),acc);
+    hr.position.set(0,1.01+bH+0.12,0.36); hr.rotation.x=0.1; g.add(hr);
+    const led=new THREE.Mesh(new THREE.BoxGeometry(0.72,0.03,0.03),
+      new THREE.MeshBasicMaterial({color:0xff2e5e}));
+    led.position.set(0,1.01+bH+0.02,0.31); led.rotation.x=0.1; g.add(led);
+  }
+  // armrests
+  [[-0.4],[0.4]].forEach(([ax])=>{
+    const post=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.28,0.06),dark);
+    post.position.set(ax,1.2,0.1); g.add(post);
+    const arm=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.05,0.4),gaming?acc:dark);
+    arm.position.set(ax,1.35,0.05); g.add(arm); });
+  g.position.set(0.55,0,1.55); g.rotation.y=Math.PI+0.15; // tucked at the keyboard side, facing the desk
+  return g;
+}
+function rebuildChairs(){ for(const k in deskAt){ const d=deskAt[k];
+  const old=d.children.find(c=>c.name==='chairG'); if(old) d.remove(old);
+  d.add(makeChair(!!S.chair)); } }
+const deskAt={}; // slotIndex -> desk
+/* shared animated terminal texture */
+const termC=cnv(256,160), termX=termC.getContext('2d');
+const termTex=ctex(termC);
+let termLines=[];
+function drawTerm(){
+  termX.fillStyle='#04120a'; termX.fillRect(0,0,256,160);
+  if(Math.random()<0.9){
+    const msgs=['accepted share '+(Math.random()*99|0)+'ms','gpu0 temp ok','hash '+(Math.random()*999|0)+' kH/s','watt draw nominal','> mining '+(S?CFG.nets[S.net].name.toLowerCase():'polygon'),'nonce 0x'+((Math.random()*0xffffff|0)).toString(16),'diff retarget ok','stratum keepalive'];
+    termLines.push(msgs[Math.random()*msgs.length|0]);
+    if(termLines.length>9) termLines.shift();
+  }
+  termX.font='700 13px monospace';
+  termLines.forEach((l,i)=>{ termX.fillStyle=i===termLines.length-1?'#7dffb0':'#2f9c5c'; termX.fillText(l,8,20+i*15); });
+  termTex.needsUpdate=true;
+}
+/* slot rings */
+const ringGeo = new THREE.RingGeometry(1.35,1.5,48);
+const rings=[]; // {mesh, state}
+function makeRing(i){
+  const m=new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({color:0x8247e5, transparent:true, opacity:0.0, side:THREE.DoubleSide}));
+  m.rotation.x=-Math.PI/2; m.position.set(SLOTS[i][0],0.02,SLOTS[i][1]+0.35); scene.add(m); return m;
+}
+/* ---------- GLB models ---------- */
+const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
+const PROTO = {}; // key -> {scene, box}
+const THUMB = {}; // itemId -> dataURL
+async function loadModels(progress){
+  const defs=[['pc','pc.glb'],['cpu','cpu.glb'],['tx120','gpu_tx120.glb'],['gp50','gpu_gp50.glb'],['board','pcboard.glb']];
+  const total=defs.length+1; let done=0;
+  for(const [k,f] of defs){
+    const g=await loader.loadAsync('/'+f);
+    PROTO[k]=g.scene; done++; progress&&progress(done/total);
+  }
+  // brighten PC materials (original PBR is very dark)
+  PROTO.pc.traverse(n=>{ if(n.isMesh&&n.material){ n.material.roughness=Math.min(0.85,n.material.roughness??0.8);
+    if(n.material.color) n.material.color.multiplyScalar(2.4); }});
+  // Gen2 bundle: one GLB, one scene per component (from the official repo)
+  const g2=await loader.loadAsync('/gen2.glb');
+  for(const id in ITEMS){ const it=ITEMS[id]; if(!it.scene) continue;
+    const sc=g2.scenes.find(s=>s.name===it.scene);
+    if(sc) PROTO[it.key]=sc;
+  }
+  progress&&progress(1);
+}
+function instOf(key, matBoost){
+  const src=PROTO[key]; const o=src.clone(true);
+  return o;
+}
+/* normalize: scale so height=h, ground at y=0, centered */
+function normalize(o, targetH){
+  const box=new THREE.Box3().setFromObject(o);
+  const size=new THREE.Vector3(); box.getSize(size);
+  const s=targetH/size.y; o.scale.setScalar(s);
+  const box2=new THREE.Box3().setFromObject(o);
+  const c=new THREE.Vector3(); box2.getCenter(c);
+  o.position.x-=c.x; o.position.z-=c.z; o.position.y-=box2.min.y;
+  return o;
+}
+/* normalize by max dimension (safe for long flat models like GPUs) */
+function normalizeFit(o, target){
+  const box=new THREE.Box3().setFromObject(o);
+  const size=new THREE.Vector3(); box.getSize(size);
+  const s=target/Math.max(size.x,size.y,size.z); o.scale.setScalar(s);
+  const box2=new THREE.Box3().setFromObject(o);
+  const c=new THREE.Vector3(); box2.getCenter(c);
+  o.position.x-=c.x; o.position.z-=c.z; o.position.y-=box2.min.y;
+  return o;
+}
+/* normalize by width (for flat items like keyboards/mice) */
+function normalizeW(o, targetW){
+  const box=new THREE.Box3().setFromObject(o);
+  const size=new THREE.Vector3(); box.getSize(size);
+  const s=targetW/size.x; o.scale.setScalar(s);
+  const box2=new THREE.Box3().setFromObject(o);
+  const c=new THREE.Vector3(); box2.getCenter(c);
+  o.position.x-=c.x; o.position.z-=c.z; o.position.y-=box2.min.y;
+  return o;
+}
+/* server tower (garage structure, back wall) */
+let towerVis=null;
+function setTowerOwned(own){
+  if(towerVis){ towerVis.visible=own; return; }
+  if(!own||!PROTO.tower) return;
+  towerVis=new THREE.Group();
+  const m=instOf('tower');
+  const box=new THREE.Box3().setFromObject(m); const size=new THREE.Vector3(); box.getSize(size);
+  const s=Math.min(2.8/size.y, 2.2/size.x, 2.2/size.z); m.scale.setScalar(s);
+  const box2=new THREE.Box3().setFromObject(m); const c=new THREE.Vector3(); box2.getCenter(c);
+  m.position.x-=c.x; m.position.z-=c.z; m.position.y-=box2.min.y;
+  towerVis.add(m);
+  const glow=new THREE.PointLight(0x2ee6d6, 26, 8); glow.position.set(0,2.2,1.2); towerVis.add(glow);
+  towerVis.position.set(6.6,0,-ROOM.D/2+0.9); towerVis.rotation.y=0.35;
+  scene.add(towerVis);
+}
+/* offscreen thumbnails of each model */
+function makeThumbs(){
+  const c=cnv(256,256);
+  const r2=new THREE.WebGLRenderer({canvas:c,antialias:true,preserveDrawingBuffer:true});
+  r2.setSize(256,256); r2.outputColorSpace=THREE.SRGBColorSpace;
+  r2.toneMapping=THREE.ACESFilmicToneMapping; r2.toneMappingExposure=1.5;
+  const tScene=new THREE.Scene(); tScene.background=new THREE.Color(0x14102b);
+  tScene.add(new THREE.HemisphereLight(0xffffff,0x444466,2.0));
+  const dl=new THREE.DirectionalLight(0xffffff,3.0); dl.position.set(2,3,4); tScene.add(dl);
+  const dl2=new THREE.DirectionalLight(0x8888ff,1.4); dl2.position.set(-3,1,-2); tScene.add(dl2);
+  const tc=new THREE.PerspectiveCamera(40,1,0.01,50);
+  const views={pc:[1.35,[1.9,1.15,2.4],[0,0.6,0]], cpu:[1,[1.15,0.85,1.45],[0,0.5,0]],
+    tx120:[1,[1.35,0.9,1.5],[0,0.5,0]], gp50:[1,[1.45,0.95,1.6],[0,0.5,0]]};
+  const ids={pc:1,cpu:3,tx120:4,gp50:5};
+  const g2keys={};
+  for(const id in ITEMS){ const it=ITEMS[id];
+    if(!PROTO[it.key]) continue;
+    if(!ids[it.key]){ ids[it.key]=it.id; g2keys[it.key]=1;
+      views[it.key]=[1,[1.15,1.5,1.5],[0,0.42,0]]; }
+  }
+  for(const k in views){
+    if(!PROTO[k]) continue;
+    const [h,cp,ct]=views[k];
+    const raw=instOf(k);
+    if(g2keys[k]&&ITEMS[ids[k]].flip) raw.rotation.x=Math.PI;
+    const inst=g2keys[k]?normalizeFit(raw,1.05):normalize(raw,h); tScene.add(inst);
+    if(g2keys[k]) inst.rotation.y=-0.55;
+    tc.position.set(...cp); tc.lookAt(...ct);
+    r2.toneMappingExposure=g2keys[k]?0.85:1.5;
+    r2.render(tScene,tc);
+    THUMB[ids[k]]=c.toDataURL('image/png');
+    tScene.remove(inst);
+  }
+  r2.dispose();
+  THUMB[2]='/badge.webp';
+}
+/* NFT card poster texture */
+function makeCardTex(item){
+  const c=cnv(512,700), x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,700); g.addColorStop(0,'#1c1642'); g.addColorStop(1,'#0d0b1e');
+  x.fillStyle=g; x.fillRect(0,0,512,700);
+  x.strokeStyle='rgba(130,71,229,.7)'; x.lineWidth=6; x.strokeRect(8,8,496,684);
+  x.textAlign='center';
+  x.fillStyle='#9a93c4'; x.font='700 22px Segoe UI'; x.fillText((item.brand||'MINING GAME').toUpperCase(),256,52);
+  x.fillStyle='#fff'; x.font='900 40px Segoe UI'; x.fillText(item.name,256,98);
+  const img=new Image();
+  const tex=ctex(c);
+  img.onload=()=>{ x.drawImage(img,66,130,380,380); drawTraits(); tex.needsUpdate=true; };
+  img.src=THUMB[item.id];
+  function drawTraits(){
+    x.textAlign='center'; let y=560;
+    const rows=[];
+    if(item.hash) rows.push(`⛏ HASHPOWER ${item.hash}`);
+    if(item.watt) rows.push(`⚡ WATT USAGE ${item.watt}`);
+    if(item.luck) rows.push(`🍀 LUCK +${item.luck}%  ·  EFF +${item.eff}%`);
+    rows.push(`STAKE WEIGHT ${item.sw}   ·   GEN ${item.gen}`);
+    x.font='700 26px Segoe UI';
+    rows.forEach(r=>{ x.fillStyle='#2ee6d6'; x.fillText(r,256,y); y+=42; });
+  }
+  drawTraits();
+  return tex;
+}
+function buildPosters(){
+  const ids=[1,3,4,5,2];
+  ids.forEach((id,i)=>{
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(2.0,2.73),
+      new THREE.MeshBasicMaterial({map:makeCardTex(ITEMS[id])}));
+    m.position.set(ROOM.W/2+0.9, 3.4, -6.2+i*3.1); m.rotation.y=-Math.PI/2;
+    posterGroup.add(m);
+  });
+}
+/* Genesis badge display (center back) */
+let badgeMesh=null, badgePedestal=null;
+function buildBadgeDisplay(){
+  badgePedestal=new THREE.Group();
+  const base=new THREE.Mesh(new THREE.CylinderGeometry(0.9,1.1,0.5,32),
+    new THREE.MeshStandardMaterial({color:0x241d47,roughness:.4,metalness:.7}));
+  base.position.y=0.25; badgePedestal.add(base);
+  const tex=new THREE.TextureLoader().load('/badge.webp'); tex.colorSpace=THREE.SRGBColorSpace;
+  badgeMesh=new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.05,0.09,48),
+    [new THREE.MeshStandardMaterial({color:0xffd23f,roughness:.25,metalness:.9}),
+     new THREE.MeshStandardMaterial({map:tex,roughness:.3,metalness:.4}),
+     new THREE.MeshStandardMaterial({map:tex,roughness:.3,metalness:.4})]);
+  badgeMesh.rotation.z=Math.PI/2; badgeMesh.rotation.y=Math.PI/2;
+  badgeMesh.position.y=2.2; badgePedestal.add(badgeMesh);
+  badgePedestal.position.set(0,0,-ROOM.D/2+1.4); scene.add(badgePedestal);
+  badgeSpot.target=badgeMesh; 
+  setBadgeOwned(false);
+}
+let badgeSign=null, badgeHolo=null;
+function makeBadgeSign(){
+  const c=cnv(512,128), x=c.getContext('2d');
+  x.fillStyle='#0d0b1e'; x.fillRect(0,0,512,128);
+  x.strokeStyle='rgba(255,210,63,.6)'; x.lineWidth=4; x.strokeRect(4,4,504,120);
+  x.textAlign='center'; x.fillStyle='#ffd23f'; x.font='900 44px Segoe UI';
+  x.fillText('GENESIS BADGE',256,56);
+  x.fillStyle='#9a93c4'; x.font='700 30px Segoe UI'; x.fillText('only 100 ever minted',256,100);
+  badgeSign=new THREE.Mesh(new THREE.PlaneGeometry(2.4,0.6), new THREE.MeshBasicMaterial({map:ctex(c),transparent:true}));
+  badgeSign.position.set(0,3.7,-ROOM.D/2+1.42); scene.add(badgeSign);
+}
+function setBadgeOwned(own){
+  if(!badgePedestal) return;
+  badgeMesh.visible=own;
+  if(!badgeSign) makeBadgeSign();
+  if(!badgeHolo){
+    badgeHolo=new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.05,0.09,48),
+      new THREE.MeshBasicMaterial({color:0xffd23f,wireframe:true,transparent:true,opacity:0.22}));
+    badgeHolo.rotation.z=Math.PI/2; badgeHolo.rotation.y=Math.PI/2;
+    badgeHolo.position.y=2.2; badgePedestal.add(badgeHolo);
+  }
+  badgeHolo.visible=!own;
+}

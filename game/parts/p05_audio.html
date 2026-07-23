@@ -1,0 +1,76 @@
+
+/* ================= AUDIO (hand-rolled WebAudio, routed via master) ================= */
+const AU = { ctx:null, master:null, humG:null, dest:null, started:false };
+function auInit(){
+  if(AU.started) return;
+  AU.ctx = new (window.AudioContext||window.webkitAudioContext)();
+  AU.master = AU.ctx.createGain(); AU.master.gain.value = (S&&S.muted)?0:0.85;
+  AU.master.connect(AU.ctx.destination);
+  AU.dest = AU.ctx.createMediaStreamDestination(); AU.master.connect(AU.dest);
+  // --- garage hum: filtered noise + 60hz ---
+  const nbuf = AU.ctx.createBuffer(1, AU.ctx.sampleRate*2, AU.ctx.sampleRate);
+  const d = nbuf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  const noise = AU.ctx.createBufferSource(); noise.buffer=nbuf; noise.loop=true;
+  const nf = AU.ctx.createBiquadFilter(); nf.type='lowpass'; nf.frequency.value=320; nf.Q.value=0.6;
+  const hum = AU.ctx.createOscillator(); hum.type='triangle'; hum.frequency.value=58;
+  const humF = AU.ctx.createBiquadFilter(); humF.type='lowpass'; humF.frequency.value=140;
+  AU.humG = AU.ctx.createGain(); AU.humG.gain.value=0.0;
+  noise.connect(nf).connect(AU.humG); hum.connect(humF).connect(AU.humG);
+  AU.humG.connect(AU.master); noise.start(); hum.start();
+  // --- ambient music: slow synth pad arpeggio ---
+  AU.musG = AU.ctx.createGain(); AU.musG.gain.value=0.12; AU.musG.connect(AU.master);
+  musicLoop();
+  AU.started=true;
+}
+const MUS = { seq:[0,3,7,10,12,10,7,3], root:[110,98,87.3,116.5], bar:0, t:null };
+function musicLoop(){
+  if(!AU.ctx) return;
+  const bar = MUS.bar++ % 4, root = MUS.root[bar];
+  const t0 = AU.ctx.currentTime+0.05;
+  MUS.seq.forEach((st,i)=>{
+    const f = root*Math.pow(2,st/12);
+    const o = AU.ctx.createOscillator(); o.type = i%2?'sine':'triangle'; o.frequency.value=f*2;
+    const g = AU.ctx.createGain(); const ts=t0+i*0.5;
+    g.gain.setValueAtTime(0,ts); g.gain.linearRampToValueAtTime(0.5,ts+0.06);
+    g.gain.exponentialRampToValueAtTime(0.001,ts+0.48);
+    const fl=AU.ctx.createBiquadFilter(); fl.type='lowpass'; fl.frequency.value=1200;
+    o.connect(g).connect(fl).connect(AU.musG); o.start(ts); o.stop(ts+0.5);
+  });
+  // bass drone
+  const b=AU.ctx.createOscillator(); b.type='sawtooth'; b.frequency.value=root/2;
+  const bg=AU.ctx.createGain(); bg.gain.setValueAtTime(0.0,t0);
+  bg.gain.linearRampToValueAtTime(0.10,t0+0.4); bg.gain.linearRampToValueAtTime(0.0,t0+3.9);
+  const bf=AU.ctx.createBiquadFilter(); bf.type='lowpass'; bf.frequency.value=240;
+  b.connect(bg).connect(bf).connect(AU.musG); b.start(t0); b.stop(t0+4);
+  MUS.t=setTimeout(musicLoop, 4000);
+}
+function tone(f0,f1,dur,type,vol,when=0){
+  if(!AU.ctx) return; const t=AU.ctx.currentTime+when;
+  const o=AU.ctx.createOscillator(), g=AU.ctx.createGain();
+  o.type=type; o.frequency.setValueAtTime(f0,t);
+  if(f1!==f0) o.frequency.exponentialRampToValueAtTime(Math.max(1,f1),t+dur);
+  g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.connect(g).connect(AU.master); o.start(t); o.stop(t+dur+0.02);
+}
+function noiseHit(dur,vol,freq=800){
+  if(!AU.ctx) return; const t=AU.ctx.currentTime;
+  const n=AU.ctx.createBufferSource(); const nb=AU.ctx.createBuffer(1,AU.ctx.sampleRate*dur,AU.ctx.sampleRate);
+  const dd=nb.getChannelData(0); for(let i=0;i<dd.length;i++) dd[i]=(Math.random()*2-1)*(1-i/dd.length);
+  n.buffer=nb; const f=AU.ctx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=freq;
+  const g=AU.ctx.createGain(); g.gain.value=vol;
+  n.connect(f).connect(g).connect(AU.master); n.start(t);
+}
+const SFX = {
+  click(){ tone(1400,900,0.06,'square',0.12); },
+  buy(){ tone(520,780,0.09,'square',0.2); tone(780,1170,0.12,'square',0.18,0.08); },
+  install(){ noiseHit(0.08,0.25,2400); tone(300,180,0.12,'square',0.15,0.02); },
+  block(){ tone(880,880,0.08,'sine',0.3); tone(1108,1108,0.09,'sine',0.28,0.07); tone(1318,1318,0.16,'sine',0.3,0.14); },
+  lucky(){ [660,830,990,1318,1660].forEach((f,i)=>tone(f,f,0.14,'triangle',0.3,i*0.07)); noiseHit(0.3,0.15,3000); },
+  sell(){ tone(700,1400,0.13,'sine',0.25); },
+  err(){ tone(220,150,0.16,'sawtooth',0.2); },
+  alarm(){ tone(950,700,0.28,'square',0.16); tone(950,700,0.28,'square',0.14,0.32); },
+  swap(){ tone(400,900,0.2,'sine',0.2); },
+  gen2(){ [523,659,784,1046,1318,1568].forEach((f,i)=>tone(f,f,0.25,'triangle',0.3,i*0.1)); },
+  mint(){ tone(392,392,0.12,'triangle',0.3); tone(523,523,0.12,'triangle',0.3,0.1); tone(659,659,0.2,'triangle',0.3,0.2); tone(784,784,0.34,'triangle',0.32,0.3); },
+};
+function setMuted(m){ S.muted=m; if(AU.master) AU.master.gain.value=m?0:0.85; $('b-mute').textContent=m?'🔇':'🔊'; save(); }

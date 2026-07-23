@@ -1,0 +1,155 @@
+
+/* ================= TRAILER MODE (?trailer=1) ================= */
+let trailerFrame=null, comp=null, compX=null;
+function trailerSetup(){
+  document.getElementById('hud').style.display='none';
+  document.getElementById('wallet').style.display='none';
+  document.getElementById('feed').style.display='none';
+  comp=cnv(1280,720); compX=comp.getContext('2d');
+  comp.id='compcanvas'; window.__comp=comp;
+  window.__trailerReady=true;
+  canvas.addEventListener('pointerdown',function once(){
+    canvas.removeEventListener('pointerdown',once);
+    auInit();
+    window.__rec=window.recordTrailer();
+  });
+}
+function easeIO(x){ return x<0?0:x>1?1:x*x*(3-2*x); }
+function lerpV(a,b,t){ return a.map((v,i)=>v+(b[i]-v)*t); }
+const TKEYS=[ // [tStart,tEnd, camFrom,camTo, tgtFrom,tgtTo]
+  [0,   6.0, [15,9,16],[11,6.5,12],   [0,1,-1],[0,1.2,-1]],
+  [6.0, 12.5,[11,6.5,12],[-10,4.5,9], [0,1.2,-1],[0,1.4,-1.5]],
+  [12.5,18.5,[-3.2,2.6,2.6],[-6.4,2.2,1.6],[-4.6,1.5,-1.4],[-4.6,1.6,-1.2]],
+  [18.5,24.5,[6,3.2,4],[8.5,4.6,7.5], [0,1.4,-3],[0,1.2,-2]],
+  [24.5,29.5,[2.4,2.6,-4.2],[-2.2,2.4,-4.6],[0,2.2,-6.6],[0,2.2,-6.6]],
+  [29.5,36.5,[12,7.5,13],[14,9,16],   [0,1.4,-1],[0,1,-1]],
+];
+const TCARDS=[
+  {a:0.6,b:5.2, big:'THE MINING GAME', small:'WATT TYCOON — a 3D crypto-mining simulator'},
+  {a:6.5,b:12,  big:'', small:'Built from the REAL Mining Game NFT collection — Polygon & Altcoinchain', low:true},
+  {a:13,b:18.2, big:'', small:'Bolt in real CPU & GPU NFTs — every trait is on-chain', low:true},
+  {a:19,b:24.2, big:'', small:'⚡ WATT is electricity. Blocks are money. Heat is the enemy.', low:true},
+  {a:25,b:29.3, big:'', small:'Claim the Genesis Badge — only 100 ever minted', low:true},
+  {a:30,b:36.5, big:'PLAY FREE', small:'mining-game.games.bu.app'},
+];
+let trailT0=0, trailEvents=[];
+function startTrailerScript(){
+  // demo garage
+  S=freshState(); S.tut=99; S.watt=99999;
+  mintPC(true); mintPC(false); S.watt=99999; mintPC(false); S.watt=99999;
+  S.upg.rack=1; S.upg.power=3; S.upg.cooling=2;
+  S.inv={3:3,4:2,5:2};
+  installPart(0,3); installPart(0,4); installPart(0,5);
+  installPart(1,3); installPart(1,4);
+  S.badge=1; setBadgeOwned(true);
+  S.watt=12840; S.pol=42.7; S.alt=13.2; S.blocks=317;
+  selRig=-1; renderRigPanel(); $('tut').style.display='none';
+  running=true;
+  trailT0=performance.now();
+  trailEvents=[
+    [13.5,()=>installPart(2,3)],[15.2,()=>installPart(2,4)],[16.8,()=>installPart(2,5)],
+    [19.5,()=>forceBlock(false)],[21,()=>forceBlock(false)],[22.5,()=>forceBlock(true)],
+    [26,()=>{S.net='alt';renderHud();}],
+    [31,()=>forceBlock(false)],[33,()=>forceBlock(true)],
+  ];
+  trailerFrame=(t)=>{
+    for(const ev of trailEvents){ if(ev&&t>=ev[0]){ ev[1](); trailEvents[trailEvents.indexOf(ev)]=null; } }
+    // camera
+    for(const k of TKEYS){ if(t>=k[0]&&t<=k[1]){
+      const f=easeIO((t-k[0])/(k[1]-k[0]));
+      const cp=lerpV(k[2],k[3],f), tg=lerpV(k[4],k[5],f);
+      cam.position.set(...cp); controls.target.set(...tg);
+    }}
+    // composite
+    compX.fillStyle='#000'; compX.fillRect(0,0,1280,720);
+    compX.drawImage(renderer.domElement,0,0,1280,720);
+    // fake HUD
+    compX.font='700 22px monospace'; compX.textAlign='left';
+    compX.fillStyle='rgba(13,11,30,.75)'; compX.fillRect(20,16,690,44);
+    compX.fillStyle='#ffd23f'; compX.fillText('⚡ '+fmt(S.watt),36,46);
+    compX.fillStyle='#2ee6d6'; compX.fillText('⛏ '+fmt(totHash())+' H',210,46);
+    compX.fillStyle='#b7a6ff'; compX.fillText('🧱 '+S.blocks+' BLOCKS',400,46);
+    compX.fillStyle=S.net==='alt'?'#ffb020':'#a06bff'; compX.fillText(CFG.nets[S.net].name.toUpperCase(),590,46);
+    // cards
+    compX.textAlign='center';
+    for(const c of TCARDS){
+      if(t<c.a||t>c.b) continue;
+      const fin=Math.min(1,(t-c.a)/0.5), fout=Math.min(1,(c.b-t)/0.5);
+      const al=Math.min(fin,fout);
+      compX.globalAlpha=al;
+      if(c.big){
+        compX.fillStyle='rgba(5,3,15,.55)'; compX.fillRect(0,240,1280,240);
+        const g=compX.createLinearGradient(0,300,0,400); g.addColorStop(0,'#ffd23f'); g.addColorStop(1,'#ff8d2e');
+        compX.fillStyle=g; compX.font='900 86px Segoe UI,Arial';
+        compX.fillText(c.big,640,372);
+        compX.fillStyle='#2ee6d6'; compX.font='700 30px Segoe UI,Arial';
+        compX.fillText(c.small,640,432);
+      } else {
+        compX.fillStyle='rgba(5,3,15,.68)'; compX.fillRect(0,620,1280,64);
+        compX.fillStyle='#e8e4ff'; compX.font='700 30px Segoe UI,Arial';
+        compX.fillText(c.small,640,662);
+      }
+      compX.globalAlpha=1;
+    }
+    // fade in/out
+    if(t<1){ compX.fillStyle=`rgba(0,0,0,${1-t})`; compX.fillRect(0,0,1280,720); }
+    if(t>35.5){ compX.fillStyle=`rgba(0,0,0,${Math.min(1,(t-35.5))})`; compX.fillRect(0,0,1280,720); }
+  };
+}
+window.recordTrailer=async function(){
+  const stream=comp.captureStream(30);
+  if(AU.dest) AU.dest.stream.getAudioTracks().forEach(tr=>stream.addTrack(tr));
+  const mime=MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')?'video/mp4;codecs=avc1':'video/mp4';
+  const rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:6_000_000});
+  const chunks=[];
+  rec.ondataavailable=e=>chunks.push(e.data);
+  const done=new Promise(res=>rec.onstop=res);
+  rec.start();
+  startTrailerScript();
+  await new Promise(r=>setTimeout(r,37000));
+  rec.stop(); await done;
+  const blob=new Blob(chunks,{type:'video/mp4'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='mining-game_trailer.mp4'; document.body.appendChild(a); a.click();
+  return blob.size;
+};
+
+/* offline trailer rendering (virtual clock) */
+let __vt=0;
+window.__offlineStart=function(){
+  running=false; startTrailerScript(); running=false; __vt=0;
+  $('tut').style.display='none';
+  return 'ok';
+};
+window.__offstep=function(dt,quality){
+  __vt+=dt;
+  for(const ev of trailEvents){ if(ev&&__vt>=ev[0]){ try{ev[1]();}catch(e){} trailEvents[trailEvents.indexOf(ev)]=null; } }
+  tickParts(dt);
+  if(badgeMesh&&badgeMesh.visible) badgeMesh.rotation.y+=dt*0.9;
+  if(badgeHolo&&badgeHolo.visible) badgeHolo.rotation.y+=dt*0.5;
+  if(Math.floor(__vt*2)!==Math.floor((__vt-dt)*2)){ drawScreen(); drawTerm(); }
+  controls.update();
+  renderer.render(scene,cam);
+  trailerFrame(__vt);
+  return comp.toDataURL('image/jpeg',quality||0.82);
+};
+window.__recAudioStart=async function(){
+  auInit();
+  const rec=new MediaRecorder(AU.dest.stream,{mimeType:'audio/webm'});
+  const chunks=[]; rec.ondataavailable=e=>chunks.push(e.data);
+  window.__audDone=new Promise(res=>rec.onstop=async()=>{
+    const b=new Blob(chunks,{type:'audio/webm'});
+    const buf=await b.arrayBuffer();
+    let s=''; const u=new Uint8Array(buf);
+    for(let i=0;i<u.length;i+=32768) s+=String.fromCharCode.apply(null,u.subarray(i,i+32768));
+    res(btoa(s));
+  });
+  rec.start();
+  window.__audRec=rec;
+  running=true; startTrailerScript();
+  return 'recording';
+};
+window.__recAudioStop=async function(){ window.__audRec.stop(); return await window.__audDone; };
+</script>
+</body>
+</html>

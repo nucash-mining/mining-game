@@ -1,0 +1,166 @@
+
+/* ---------- rig visuals ---------- */
+const rigVis=[]; // idx -> {group, led, gpuMeshes, cpuMesh, pcMesh}
+function clearRigVis(i){ if(rigVis[i]){ scene.remove(rigVis[i].group); rigVis[i]=null; } }
+function buildRigVis(i){
+  clearRigVis(i);
+  const r=S.rigs[i]; if(!r) return;
+  const [sx,sz]=SLOTS[r.slot];
+  if(!deskAt[r.slot]) deskAt[r.slot]=makeDesk(sx,sz);
+  const g=new THREE.Group();
+  // PC on desk — real-life scale: ATX mid-tower ≈46cm on a 75cm-high, 1.9m desk (2.25 u/m)
+  const pc=normalize(instOf('pc'),1.03);
+  pc.position.x+= -1.35; pc.position.z+= 0.18; pc.position.y+=DESK.SURF;
+  pc.rotation.y=Math.PI*0.5+0.18;
+  g.add(pc);
+  // monitor — size selectable in 🔧 GARAGE (default 27", real diagonal ratios)
+  const [mw,mh]=MONSIZES[S.monSize]||MONSIZES[27];
+  const mon=new THREE.Group();
+  const scy=0.34+mh/2;
+  const scr=new THREE.Mesh(new THREE.PlaneGeometry(mw,mh), new THREE.MeshBasicMaterial({map:termTex}));
+  scr.position.y=scy; mon.add(scr);
+  const bez=new THREE.Mesh(new THREE.BoxGeometry(mw+0.08,mh+0.08,0.06),
+    new THREE.MeshStandardMaterial({color:0x0c0a1c,roughness:.4,metalness:.6}));
+  bez.position.set(0,scy,-0.035); mon.add(bez);
+  const stand=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.055,0.34,10),
+    new THREE.MeshStandardMaterial({color:0x1a1533,roughness:.5,metalness:.6}));
+  stand.position.y=0.18; mon.add(stand);
+  const foot=new THREE.Mesh(new THREE.BoxGeometry(Math.min(0.6,mw*0.4),0.03,0.3),
+    stand.material); foot.position.y=0.02; mon.add(foot);
+  mon.position.set(0.55,DESK.SURF,-0.35); mon.rotation.y=-0.12; g.add(mon);
+  // second monitor (LC23 peripheral) — left of the main screen
+  if(S.periph[23]&&PROTO.lc23){ const m2=normalize(instOf('lc23'),0.68);
+    m2.position.x+=-0.55; m2.position.z+=-0.55; m2.position.y+=DESK.SURF; m2.rotation.y=0.35; g.add(m2); }
+  // keyboard: RGB model if owned, else plain box
+  if(S.periph[18]&&PROTO.kb){ const kbm=normalizeW(instOf('kb'),0.82);
+    kbm.position.x+=0.55; kbm.position.z+=0.55; kbm.position.y+=DESK.SURF+0.02; kbm.rotation.y=-0.1; g.add(kbm); }
+  else{ const kb=new THREE.Mesh(new THREE.BoxGeometry(0.78,0.035,0.26),
+    new THREE.MeshStandardMaterial({color:0x241d47,roughness:.6,metalness:.4}));
+    kb.position.set(0.55,DESK.SURF+0.02,0.55); kb.rotation.y=-0.1; g.add(kb); }
+  // red mouse peripheral
+  if(S.periph[17]&&PROTO.mouse){ const mm=normalizeW(instOf('mouse'),0.16);
+    mm.position.x+=1.35; mm.position.z+=0.58; mm.position.y+=DESK.SURF+0.02; mm.rotation.y=-0.3; g.add(mm); }
+  // CPU + GPUs live INSIDE the case (see 🔧 WORKBENCH) unless an open-air frame is racked
+  let cpuM=null;
+  // Bit Hammer ASIC on the floor beside the desk (real ASIC ≈ 40cm long)
+  if(r.asic&&PROTO.asic){ const am=normalizeFit(instOf('asic'),0.95);
+    am.position.x+=2.6; am.position.z+=0.45; am.rotation.y=-0.9; g.add(am); }
+  const gpuMs=[];
+  if(r.frame&&PROTO.frame){
+    // open-air mining rig frame on the shelf (never larger than the desk), GPUs racked at real ratio
+    const fm=normalizeFit(instOf('frame'),1.9);
+    fm.position.x+=0; fm.position.z+=-0.62; fm.position.y+=DESK.SHELF+0.05; g.add(fm);
+    const gn=r.gpus.length, span=0.62, x0=-(gn-1)*span/2;
+    r.gpus.forEach((gid,k)=>{
+      const it=ITEMS[gid];
+      const raw=instOf(it.key); if(it.flip) raw.rotation.x=Math.PI;
+      const m=normalizeFit(raw,0.67); // 30cm GPU at 2.25u/m
+      m.position.x+= x0+k*span; m.position.z+= -0.62; m.position.y+=DESK.SHELF+0.25;
+      g.add(m); gpuMs.push(m);
+    });
+  } else if(r.gpus.length||r.cpu){
+    // closed case: soft glow through the vents scales with installed hardware
+    const glow=new THREE.PointLight(0x2ee6d6, 0.35+0.2*r.gpus.length, 2.2);
+    glow.position.set(-1.15,1.6,0.5); g.add(glow);
+  }
+  // status LED bar on desk front
+  const led=new THREE.Mesh(new THREE.BoxGeometry(DESK.W-0.2,0.07,0.07),
+    new THREE.MeshBasicMaterial({color:0x3dff8a}));
+  led.position.set(0,DESK.TOP+0.12,DESK.D/2+0.02); g.add(led);
+  g.position.set(sx,0,sz);
+  scene.add(g);
+  rigVis[i]={group:g,led,gpuMeshes:gpuMs,cpuMesh:cpuM,pcMesh:pc,slot:r.slot};
+}
+function rebuildAllRigs(){ for(let i=0;i<9;i++) clearRigVis(i); S.rigs.forEach((r,i)=>buildRigVis(i)); refreshRings(); }
+/* rings show free/occupied slots when shopping for PC */
+function refreshRings(){
+  for(let i=0;i<9;i++){ if(!rings[i]) rings[i]=makeRing(i);
+    rings[i].visible = i<slotCount();
+  }
+}
+/* ---------- particles ---------- */
+const PARTS=[];
+const partGeo=new THREE.SphereGeometry(0.045,6,6);
+const partMatGold=new THREE.MeshBasicMaterial({color:0xffd23f});
+const partMatPur=new THREE.MeshBasicMaterial({color:0xb47cff});
+const partMatCyan=new THREE.MeshBasicMaterial({color:0x2ee6d6});
+function burst(pos, n, mat, spd=2.6){
+  for(let i=0;i<n;i++){
+    const m=new THREE.Mesh(partGeo, mat);
+    m.position.copy(pos);
+    const a=Math.random()*Math.PI*2, e=Math.random()*Math.PI/2;
+    m.userData.v=new THREE.Vector3(Math.cos(a)*Math.cos(e),Math.sin(e)+0.6,Math.sin(a)*Math.cos(e)).multiplyScalar(spd*(0.5+Math.random()*0.8));
+    m.userData.life=1.2+Math.random()*0.5;
+    scene.add(m); PARTS.push(m);
+  }
+}
+function tickParts(dt){
+  for(let i=PARTS.length-1;i>=0;i--){ const p=PARTS[i];
+    p.userData.life-=dt; if(p.userData.life<=0){ scene.remove(p); PARTS.splice(i,1); continue; }
+    p.userData.v.y-=4.5*dt; p.position.addScaledVector(p.userData.v,dt);
+    if(p.position.y<0.03){ p.position.y=0.03; p.userData.v.y*=-0.4; p.userData.v.x*=0.7; p.userData.v.z*=0.7; }
+    const s=Math.min(1,p.userData.life); p.scale.setScalar(s);
+  }
+}
+/* floating DOM labels above rigs */
+let lastLabelT=0;
+function floatLabel(worldPos, text, color, force){
+  const tn=performance.now();
+  if(!force && tn-lastLabelT<700) return;
+  lastLabelT=tn;
+  const d=document.createElement('div'); d.className='f3d'; d.textContent=text;
+  if(color) d.style.color=color;
+  document.body.appendChild(d);
+  const p=worldPos.clone(); let t=0;
+  function up(){
+    t+=1/60; p.y+=0.014;
+    const v=p.clone().project(cam);
+    d.style.left=(v.x*0.5+0.5)*innerWidth-30+'px';
+    d.style.top=(-v.y*0.5+0.5)*innerHeight+'px';
+    d.style.opacity=String(1-t/1.6);
+    if(t<1.6) requestAnimationFrame(up); else d.remove();
+  }
+  up();
+}
+/* ---------- wall screen drawing ---------- */
+const hashHist=[]; const priceHist={pol:[],alt:[],wtx:[]};
+let lastBlocksFeed=[];
+function drawScreen(){
+  const x=scrX; x.fillStyle='#07051a'; x.fillRect(0,0,1024,512);
+  x.strokeStyle='rgba(46,230,214,.25)'; x.lineWidth=2; x.strokeRect(6,6,1012,500);
+  const net=CFG.nets[S.net];
+  x.textAlign='left';
+  x.fillStyle='#9a93c4'; x.font='700 30px monospace';
+  x.fillText('NETWORK', 40, 60);
+  x.fillStyle=S.net==='polygon'?'#a06bff':'#ffb020'; x.font='900 52px monospace';
+  x.fillText(net.name.toUpperCase(), 40, 116);
+  x.fillStyle='#9a93c4'; x.font='700 26px monospace';
+  x.fillText('DIFF '+difficulty().toFixed(2)+'x   REWARD '+net.reward+' '+net.sym, 40, 158);
+  // hashrate sparkline
+  x.fillStyle='#9a93c4'; x.font='700 26px monospace'; x.fillText('HASHRATE '+fmt(totHash())+' H', 40, 220);
+  x.strokeStyle='#2ee6d6'; x.lineWidth=3; x.beginPath();
+  const H=hashHist, n=H.length, maxH=Math.max(10,...H);
+  for(let i=0;i<n;i++){ const px=40+i*(500/Math.max(60,n)), py=330-90*(H[i]/maxH);
+    i?x.lineTo(px,py):x.moveTo(px,py); }
+  x.stroke();
+  // prices
+  x.font='700 26px monospace';
+  x.fillStyle='#a06bff'; x.fillText('POL '+S.price.pol.toFixed(2)+' ⚡', 620, 220);
+  x.fillStyle='#ffb020'; x.fillText('ALT '+S.price.alt.toFixed(2)+' ⚡', 620, 258);
+  ['pol','alt'].forEach((cn,ci)=>{
+    const Ph=priceHist[cn], pn=Ph.length; if(pn<2) return;
+    const mx=Math.max(...Ph), mn=Math.min(...Ph);
+    x.strokeStyle=cn==='pol'?'#a06bff':'#ffb020'; x.lineWidth=2.5; x.beginPath();
+    for(let i=0;i<pn;i++){ const px=620+i*(360/Math.max(50,pn)), py=330-60*((Ph[i]-mn)/Math.max(0.01,mx-mn));
+      i?x.lineTo(px,py):x.moveTo(px,py); }
+    x.stroke();
+  });
+  // block feed
+  x.fillStyle='#9a93c4'; x.font='700 24px monospace'; x.fillText('LATEST BLOCKS', 40, 390);
+  x.font='400 23px monospace';
+  lastBlocksFeed.slice(-3).reverse().forEach((b,i)=>{
+    x.fillStyle=b.lucky?'#ffd23f':'#e8e4ff';
+    x.fillText(b.txt, 40, 424+i*30);
+  });
+  scrTex.needsUpdate=true;
+}

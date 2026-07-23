@@ -1,0 +1,213 @@
+
+/* ================= SIMULATION ================= */
+let noWatt=false;
+function simTick(dt){ // dt seconds (fixed 0.1)
+  const nowT=performance.now()/1000;
+  // prices random walk (every tick, small)
+  for(const nk of Object.keys(CFG.nets)){
+    const n=CFG.nets[nk], cn=n.coin;
+    const p=S.price[cn];
+    const drift=(n.p0-p)*0.0015;
+    S.price[cn]=clamp(p+p*(Math.random()-0.5)*n.vol*Math.sqrt(dt)*2+drift*dt*10, n.pmin, n.pmax);
+  }
+  // temperature
+  const tt=tempTarget();
+  S.temp += (tt-S.temp)*Math.min(1,dt*0.25);
+  // overclock stability: crashed rigs cool down & reboot timers tick; hot OC rigs may crash
+  S.rigs.forEach((r,ri)=>{
+    if(r.crashT>0){ r.crashT-=dt; if(r.crashT<=0){ r.crashT=0; toast(`🖥 Rig ${ri+1} auto-rebooted`,'cyan'); renderHud(); } return; }
+    if(r.on && r.wear<100 && rigHash(r)>0){
+      const o=r.oc||{c:0,m:0};
+      let wpm=0.05 + (o.c+o.m)*0.09 + (S.temp>80?0.5:0) + (S.temp>95?1.6:0); // % per minute
+      r.wear=Math.min(100, r.wear + wpm*dt/60);
+      if(r.wear>=100){ r.wear=100; SFX.alarm();
+        toast(`🔥 RIG ${ri+1} BROKE DOWN — 100% wear. Repair it in the rig panel`,'red',8000);
+        const pos=new THREE.Vector3(SLOTS[r.slot][0],2.0,SLOTS[r.slot][1]);
+        burst(pos,30,partMatGold,3); floatLabel(pos,'🔥 BROKEN','#ff6b74',true);
+        renderHud();
+      }
+    }
+    const risk=ocRiskPerMin(r);
+    if(risk>0 && Math.random()<risk*dt/60){
+      r.crashT=45; SFX.alarm();
+      toast(`💥 RIG ${ri+1} CRASHED — overclock unstable at ${Math.round(S.temp)}°C. Log into its OS to reboot`,'red',7000);
+      const pos=new THREE.Vector3(SLOTS[r.slot][0],2.0,SLOTS[r.slot][1]);
+      burst(pos,26,partMatCyan,3); floatLabel(pos,'💥 CRASH','#ff6b74',true);
+      if(OS.open&&OS.rig===ri) osRefresh();
+    }
+  });
+  // stake income (always on)
+  const stakeIn=totSWStake()*CFG.stakePerSW*stakeMult()*dt;
+  S.watt+=stakeIn; S.lifeWatt+=stakeIn;
+  // mining
+  const draw=totWatt();
+  const net=CFG.nets[S.net];
+  const P=curPool();
+  const hostFree=P&&P.mine; // mining on own hosted pool = free power
+  const need=hostFree?0:draw*CFG.consumePerWatt*effMult()*dt;
+  noWatt = S.watt<need;
+  if(!noWatt && S.rigs.length){
+    S.watt-=need;
+    if(need>0){ S.burned+=need*(1-CFG.hostBurnCut); } // 1% of burn goes to pool host, rest → 0x000…dEaD
+    const hf=heatFactor(), pf=powerFactor();
+    const spd=P?P.speed:1, fee=P?P.fee:0;
+    const lam=totHash()*net.lam*hf*pf*luckMult()/difficulty()*spd*(S.altHybrid&&S.net==='alt'?0.5:1);
+    if(Math.random()<lam*dt){
+      // share / block found!
+      const lucky=Math.random()<CFG.luckyChance*luckMult();
+      const amt=(net.reward/spd)*(1-fee)*(lucky?CFG.luckyMult:1)*(0.85+Math.random()*0.3);
+      poolCredit(net.coin, amt, P); S.blocks++; S.blocksNet[net.coin]++; S.shares++;
+      if(lucky) S.lucky++;
+      const ri=Math.floor(Math.random()*S.rigs.length);
+      const rv=rigVis[ri];
+      if(rv){
+        const pos=new THREE.Vector3(SLOTS[S.rigs[ri].slot][0],2.2,SLOTS[S.rigs[ri].slot][1]);
+        burst(pos, lucky?46:16, lucky?partMatGold:(S.net==='polygon'?partMatPur:partMatGold), lucky?4:2.6);
+        floatLabel(pos, `+${amt.toFixed(2)} ${net.sym}${lucky?' ✨LUCKY':''}`, lucky?'#ffd23f':(S.net==='polygon'?'#c9a6ff':'#ffce7a'), lucky);
+      }
+      lastBlocksFeed.push({txt:`#${S.blocks} +${amt.toFixed(2)} ${net.sym}${lucky?' LUCKY x5':''}`, lucky});
+      if(lastBlocksFeed.length>8) lastBlocksFeed.shift();
+      lucky?SFX.lucky():SFX.block();
+      if(lucky) toast(`✨ LUCKY BLOCK! +${amt.toFixed(2)} ${net.sym} (x${CFG.luckyMult})`,'gold');
+      renderHud();
+    }
+  }
+  poolTick(dt);
+  // hum follows draw
+  if(AU.humG) AU.humG.gain.value=(S.muted?0:Math.min(0.5,0.05+draw*0.004))*(noWatt?0.3:1);
+}
+/* market */
+function sellCoin(cn, amt){
+  amt = amt===undefined ? S[cn] : Math.min(amt, S[cn]);
+  if(amt<=0.001){ SFX.err(); return false; }
+  const val=amt*S.price[cn];
+  S[cn]-=amt; S.watt+=val; S.lifeWatt+=val; S.sold[cn]+=val;
+  SFX.sell(); toast(`Sold ${fmt(amt)} ${cn.toUpperCase()} → +${fmt(val)} ⚡WATT`,'grn');
+  renderHud(); save(); return true;
+}
+/* overclock + reboot (Mining Game OS) */
+function setOC(ri,c,m){
+  const r=S.rigs[ri]; if(!r) return;
+  r.oc={c:clamp(c,0,5), m:clamp(m,0,5)};
+  SFX.install(); renderHud(); save();
+}
+function rebootRig(ri){
+  const r=S.rigs[ri]; if(!r||r.crashT<=0) return;
+  r.crashT=0; SFX.swap();
+  toast(`🖥 Rig ${ri+1} rebooted — hashing resumed`,'grn');
+  renderHud(); save();
+}
+/* offline earnings */
+function applyOffline(){
+  const el=(now()-S.lastSeen)/1000;
+  if(el<60) return;
+  const capped=Math.min(el, CFG.offlineCapH*3600);
+  const stakeIn=totSWStake()*CFG.stakePerSW*stakeMult()*capped*CFG.offlineEff;
+  // mining estimate: expected blocks × reward, limited by watt budget
+  const draw=totWatt()*CFG.consumePerWatt*effMult();
+  const sec=Math.min(capped, draw>0 ? S.watt/draw : capped);
+  const net=CFG.nets[S.net];
+  const lam=totHash()*net.lam*powerFactor()*luckMult()/difficulty();
+  const blocks=Math.floor(lam*sec*CFG.offlineEff);
+  const coins=blocks*net.reward;
+  S.watt+=stakeIn; S.lifeWatt+=stakeIn; S.watt-=Math.min(S.watt,draw*sec);
+  S[net.coin]+=coins; S.blocks+=blocks; S.blocksNet[net.coin]+=blocks;
+  const hrs=(capped/3600).toFixed(1);
+  setTimeout(()=>toast(`⏰ While you were away ${hrs}h: +${fmt(stakeIn)} ⚡ staked, ${blocks} blocks (+${fmt(coins)} ${net.sym})`,'cyan',9000),1200);
+}
+/* ---------- actions ---------- */
+function mintPC(free){
+  if(S.pcCount>0 && S.rigs.length>=slotCount()){ SFX.err(); toast('No free rack space — buy a Rack Expansion in 🔧 GARAGE','red'); return false; }
+  const price=free?0:pcPrice();
+  if(S.watt<price){ SFX.err(); toast('Not enough WATT','red'); return false; }
+  S.watt-=price;
+  const used=new Set(S.rigs.map(r=>r.slot));
+  let slot=-1; for(let i=0;i<slotCount();i++) if(!used.has(i)){slot=i;break;}
+  S.rigs.push({slot,cpu:0,gpus:[],asic:0,frame:0,oc:{c:0,m:0},crashT:0,on:1,wear:0}); S.pcCount++;
+  buildRigVis(S.rigs.length-1);
+  burst(new THREE.Vector3(SLOTS[slot][0],1.8,SLOTS[slot][1]),30,partMatCyan,3);
+  SFX.mint(); toast(free?'🖥 Gaming PC minted — FREE':'🖥 Gaming PC minted for '+fmt(price)+' ⚡','grn');
+  renderHud(); save(); return true;
+}
+function costIn(cur,wattPrice){ return cur==='pol'?wattPrice/S.price.pol : cur==='alt'?wattPrice/S.price.alt : wattPrice; }
+function curBal(cur){ return cur==='pol'?S.pol : cur==='alt'?S.alt : S.watt; }
+function curSym(cur){ return cur==='pol'?'POL' : cur==='alt'?'ALT' : '⚡WATT'; }
+function curPay(cur,amt){ if(cur==='pol') S.pol-=amt; else if(cur==='alt') S.alt-=amt; else S.watt-=amt; }
+function buyItem(id){
+  const it=ITEMS[id];
+  if(id===1){ if(mintPC(S.pcCount===0)) renderShop(); return; }
+  if(it.gen2 && S.gen<2){ SFX.err(); toast('🔒 Gen2 hardware — reach GENERATION 2 in 🔧 GARAGE to unlock','red'); return; }
+  if(id===2 && S.badge){ SFX.err(); return; }
+  if(it.comp==='Peripheral' && S.periph[id]){ SFX.err(); return; }
+  if(id===19 && S.tower){ SFX.err(); return; }
+  const left=it.supply-S.bought[id];
+  if(left<=0){ SFX.err(); toast('Sold out!','red'); return; }
+  const cur=S.payCur||'watt', cost=costIn(cur,it.price);
+  if(curBal(cur)<cost){ SFX.err(); toast(`Not enough ${curSym(cur)}${cur==='watt'?' — mine more blocks':' — mine or switch currency in the shop'}`,'red'); return; }
+  curPay(cur,cost); S.bought[id]++;
+  txFlow(it, cost, cur);
+  if(id===2){ S.badge=1; setBadgeOwned(true);
+    burst(new THREE.Vector3(0,2.4,-ROOM.D/2+1.4),60,partMatGold,4);
+    toast('🏅 GENESIS BADGE acquired! +10% luck · +10% efficiency','gold');
+  } else if(it.comp==='Peripheral'){ S.periph[id]=1; rebuildAllRigs();
+    toast(`🖱 ${it.name} — +2% luck on every desk${periphCount()===3?' · FULL BATTLESTATION SET +3%':''}`, periphCount()===3?'gold':'grn');
+  } else if(id===19){ S.tower=1; setTowerOwned(true);
+    burst(new THREE.Vector3(5.4,2.2,-ROOM.D/2+1.9),40,partMatCyan,3.5);
+    toast('🗼 SERVER TOWER online — +40 stake weight · +20% stake income','gold');
+  } else { S.inv[id]++; toast(`${it.name} added to inventory — open a rig to install`,'grn'); }
+  SFX.buy(); renderHud(); renderShop(); save();
+}
+function installPart(ri,id){
+  const r=S.rigs[ri]; const it=ITEMS[id];
+  if(S.inv[id]<=0){ SFX.err(); return; }
+  if(it.comp==='Processor'){ if(r.cpu){SFX.err();return;} r.cpu=id; }
+  else if(it.comp==='ASIC'){ if(r.asic){SFX.err();return;} r.asic=id; }
+  else if(it.comp==='Frame'){ if(r.frame){SFX.err();return;} r.frame=1; }
+  else { if(r.gpus.length>=gpuCap(r)){SFX.err();toast(r.frame?'GPU slots full':'GPU slots full — install a Mining Rig Frame for 4 slots','red');return;} r.gpus.push(id); }
+  S.inv[id]--;
+  SFX.install(); buildRigVis(ri);
+  burst(new THREE.Vector3(SLOTS[r.slot][0],2.0,SLOTS[r.slot][1]),14,partMatCyan,2);
+  renderHud(); renderRigPanel(); save();
+}
+function removePart(ri,id,gk){
+  const r=S.rigs[ri]; const it=ITEMS[id];
+  if(it&&it.comp==='Processor'){ if(r.cpu!==id) return; r.cpu=0; S.inv[id]++; }
+  else if(it&&it.comp==='ASIC'){ if(r.asic!==id) return; r.asic=0; S.inv[id]++; }
+  else if(it&&it.comp==='Frame'){ if(!r.frame) return;
+    if(r.gpus.length>2){ SFX.err(); toast('Remove GPUs first — frame holds slots 3 & 4','red'); return; }
+    r.frame=0; S.inv[14]++; }
+  else { const ix=gk!==undefined?gk:r.gpus.indexOf(id); if(ix<0) return; r.gpus.splice(ix,1); S.inv[id]++; }
+  SFX.click(); buildRigVis(ri); renderHud(); renderRigPanel(); save();
+}
+function switchNet(){
+  const t=now(); if(t-S.netSwitchT<8000){ toast('Network sync in progress…','red'); return; }
+  S.netSwitchT=t;
+  S.net=S.net==='polygon'?'alt':S.net==='alt'?'wattx':'polygon';
+  SFX.swap();
+  const n=CFG.nets[S.net];
+  toast(`🔗 Switched to ${n.name}${n.sim?' (testnet sim — mainnet soon™)':''} — reward ${n.reward} ${n.sym}/block`, S.net==='alt'?'gold':'cyan');
+  renderHud(); save();
+}
+function buyUpgrade(k){
+  const lv=S.upg[k]; const arr=CFG.upPrice[k];
+  if(lv>=arr.length){ SFX.err(); return; }
+  const p=arr[lv];
+  if(S.watt<p){ SFX.err(); toast('Not enough WATT','red'); return; }
+  S.watt-=p; S.upg[k]++;
+  SFX.buy();
+  const names={power:'⚡ Power grid upgraded',cooling:'❄ Cooling upgraded',rack:'🗄 Rack expansion built — 3 new slots'};
+  toast(names[k]+` (Lv ${S.upg[k]})`,'grn');
+  if(k==='rack') refreshRings();
+  renderHud(); renderUpg(); save();
+}
+function gen2(){
+  if(S.lifeWatt<CFG.gen2Req){ SFX.err(); return; }
+  const kept={badge:S.badge, periph:S.periph, gen:S.gen+1, muted:S.muted, created:S.created, monSize:S.monSize, chair:S.chair};
+  const ns=freshState(); Object.assign(ns,kept);
+  ns.tut=99; S=ns; setBadgeOwned(!!S.badge); setTowerOwned(false);
+  rebuildAllRigs(); mintPC(true);
+  SFX.gen2();
+  toast(`🚀 GENERATION ${S.gen}! Permanent ×${Math.pow(CFG.gen2Mult,S.gen-1).toFixed(1)} hashpower`,'gold',8000);
+  if(S.gen===2) setTimeout(()=>toast('🔓 GEN2 HARDWARE UNLOCKED — TX190 · GP720 · GPX880 · XXL270 · Bit Hammer ASIC in the 🛒 SHOP','gold',9000),1500);
+  closeModal('m-upg'); renderHud(); save();
+}
