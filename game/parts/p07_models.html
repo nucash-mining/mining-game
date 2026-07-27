@@ -177,18 +177,62 @@ function makeRing(i){
 const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
 const PROTO = {}; // key -> {scene, box}
 const THUMB = {}; // itemId -> dataURL
+/* The models live on-chain, inscribed on BSV as 1Sat Ordinals. An inscription
+   is immutable, so an origin pins exact bytes forever -- the hardware in this
+   game outlasts any host we happen to be paying for. The gateways below are
+   interchangeable mirrors of the same content, not sources of truth; a local
+   copy beside the HTML is the last resort so the game still runs offline and
+   straight out of the repo. */
+const BSV_ORIGIN = {
+  'pc.glb'       : '29ef03b0e0aabb4c9adef4c0c7f1f37aa11567e554366d49bc90e369cf4c7994_0',
+  'cpu.glb'      : '366ff5a850a655727b8a28178556a86e19f06a81da34a35d5c03b48c885a16a8_0',
+  'gpu_tx120.glb': '9db877b8694330ab9cd56a93f14680a1a1cee0b0df0b526865fde2ebca9d31a7_0',
+  'gpu_gp50.glb' : '3a44c183f158d2627133fea83fa98a9522c4ee5b7def5ae6d9a7c9e011903054_0',
+  'gen2.glb'     : '109a1bba976772a4c40100bd2010cef8dd3fce7681bbc95d2a23eea3755606f5_0',
+  'pcboard.glb'  : 'f68f8fc159fd3e3f30605f1536492d8458de9d59c8d31d5072be814886809316_0',
+  'badge.webp'   : 'a54eaebda42a364c9eb81b6940fa29de780aae8c175e956b889d81ac4ff4e0c8_0',
+};
+const ORD_GATEWAYS = ['https://ordinals.gorillapool.io/content/','https://ordfs.network/content/'];
+/* Candidate URLs for one asset, best first. Local last: if the chain and both
+   gateways are unreachable the game still starts. */
+function assetURLs(f){
+  const o=BSV_ORIGIN[f];
+  return (o?ORD_GATEWAYS.map(g=>g+o):[]).concat(['/'+f]);
+}
+async function loadGLB(f){
+  let last;
+  for(const url of assetURLs(f)){
+    try{ return await loader.loadAsync(url); }
+    catch(e){ last=e; console.warn('[assets] '+f+' failed from '+url.split('/')[2]+', falling back'); }
+  }
+  throw new Error('all sources failed for '+f+': '+(last&&last.message||last));
+}
+/* Primary URL for an asset used directly as an <img> src. */
+function assetURL(f){ return assetURLs(f)[0]; }
+/* TextureLoader has no fallback chain of its own, so walk the candidates on
+   error and fill in the same texture object once one answers. */
+function loadTex(f){
+  const urls=assetURLs(f), tl=new THREE.TextureLoader();
+  const tex=new THREE.Texture(); tex.colorSpace=THREE.SRGBColorSpace;
+  (function attempt(i){
+    if(i>=urls.length){ console.warn('[assets] no source for '+f); return; }
+    tl.load(urls[i], t=>{ tex.image=t.image; tex.needsUpdate=true; },
+            undefined, ()=>{ console.warn('[assets] '+f+' failed from '+urls[i].split('/')[2]+', falling back'); attempt(i+1); });
+  })(0);
+  return tex;
+}
 async function loadModels(progress){
   const defs=[['pc','pc.glb'],['cpu','cpu.glb'],['tx120','gpu_tx120.glb'],['gp50','gpu_gp50.glb'],['board','pcboard.glb']];
   const total=defs.length+1; let done=0;
   for(const [k,f] of defs){
-    const g=await loader.loadAsync('/'+f);
+    const g=await loadGLB(f);
     PROTO[k]=g.scene; done++; progress&&progress(done/total);
   }
   // brighten PC materials (original PBR is very dark)
   PROTO.pc.traverse(n=>{ if(n.isMesh&&n.material){ n.material.roughness=Math.min(0.85,n.material.roughness??0.8);
     if(n.material.color) n.material.color.multiplyScalar(2.4); }});
   // Gen2 bundle: one GLB, one scene per component (from the official repo)
-  const g2=await loader.loadAsync('/gen2.glb');
+  const g2=await loadGLB('gen2.glb');
   for(const id in ITEMS){ const it=ITEMS[id]; if(!it.scene) continue;
     const sc=g2.scenes.find(s=>s.name===it.scene);
     if(sc) PROTO[it.key]=sc;
@@ -279,7 +323,7 @@ function makeThumbs(){
     tScene.remove(inst);
   }
   r2.dispose();
-  THUMB[2]='/badge.webp';
+  THUMB[2]=assetURL('badge.webp');
 }
 /* NFT card poster texture */
 function makeCardTex(item){
@@ -323,7 +367,7 @@ function buildBadgeDisplay(){
   const base=new THREE.Mesh(new THREE.CylinderGeometry(0.9,1.1,0.5,32),
     new THREE.MeshStandardMaterial({color:0x241d47,roughness:.4,metalness:.7}));
   base.position.y=0.25; badgePedestal.add(base);
-  const tex=new THREE.TextureLoader().load('/badge.webp'); tex.colorSpace=THREE.SRGBColorSpace;
+  const tex=loadTex('badge.webp');
   badgeMesh=new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.05,0.09,48),
     [new THREE.MeshStandardMaterial({color:0xffd23f,roughness:.25,metalness:.9}),
      new THREE.MeshStandardMaterial({map:tex,roughness:.3,metalness:.4}),

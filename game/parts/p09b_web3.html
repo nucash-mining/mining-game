@@ -9,7 +9,16 @@ const WEB3CFG={
     alt:{ key:'alt', net:'alt', chainId:2330, hex:'0x91a', name:'Altcoinchain', rpc:'https://rpc.altcoinchain.org', sym:'ALT', dec:18, explorer:'https://explorer.altcoinchain.org',
       nft:'0xf9670e5D46834561813CA79854B3d7147BBbFfb2', watt:'0x6645143e49B3a15d8F205658903a55E520444698', staking:'0xe463045318393095F11ed39f1a98332aBCc1A7b1',
       nftV2:null, wattV2:null },
-    wattx:{ key:'wattx', net:null, chainId:null, hex:null, name:'WATTxchain', rpc:null, sym:'WATT', dec:18, explorer:null,
+    /* WATTxchain. Chain id is ASSIGNED and final: 22356 mainnet (22357 testnet,
+       22358 regtest), matching the AuxPoW chain_id and the daemon's EVM adapter.
+       The native symbol is WTX -- WATT is the ERC20 game token, a different thing.
+       dec:18 is correct even though the WATTx EVM denominates msg.value in
+       satoshis internally: the RPC layer presents balances in 18 decimals and
+       divides an outgoing `value` by 1e10, so a wallet sees an ordinary
+       18-decimal chain. Only contract-side native constants are satoshi-scale.
+       Still prelaunch: no public RPC endpoint yet, and the game contracts are
+       deployed on regtest only. */
+    wattx:{ key:'wattx', net:'wattx', chainId:22356, hex:'0x5754', name:'WATTxchain', rpc:null, sym:'WTX', dec:18, explorer:null,
       nft:null, watt:null, staking:null, nftV2:null, wattV2:null, prelaunch:true },
   },
   sel:{ bal1155:'0x00fdd58e', balErc20:'0x70a08231', freemint:'0xaf2de086', rates:'0xdd418ae2', rewards:'0xe8a31bdc' },
@@ -47,7 +56,7 @@ async function w3Connect(){
 }
 async function w3Switch(key){
   const c=WEB3CFG.chains[key];
-  if(c.prelaunch){ SFX.err(); toast('🔌 WATTxchain is pre-launch — no chainID / RPC yet. It slots in the moment the chain goes live.','gold'); return; }
+  if(c.prelaunch){ SFX.err(); toast('🔌 WATTxchain is pre-launch — chain id 22356 is assigned, public RPC pending. It slots in the moment the chain goes live.','gold'); return; }
   if(!w3Has()||!W3.addr) return;
   try{ await w3Req('wallet_switchEthereumChain',[{chainId:c.hex}]); }
   catch(e){
