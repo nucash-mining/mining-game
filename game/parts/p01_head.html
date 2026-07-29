@@ -54,8 +54,26 @@ button{font-family:inherit;cursor:pointer}
 .coin b{font-variant-numeric:tabular-nums}
 .coin .pr{color:var(--dim);font-size:10.5px}
 .coin .pr.up{color:var(--grn)} .coin .pr.dn{color:var(--red)}
-.coin button{background:rgba(130,71,229,.25);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:2px 8px;font-size:10.5px}
+.coin button{background:rgba(130,71,229,.25);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:2px 8px;font-size:10.5px;
+  cursor:pointer;letter-spacing:.4px;font-weight:700;transition:background .15s,opacity .15s}
 .coin button:hover{background:var(--pur)}
+/* per-coin identity so the three SELL buttons aren't an undifferentiated row */
+#coin-pol{border-color:rgba(130,71,229,.5)} #coin-pol button{background:rgba(130,71,229,.28)}
+#coin-pol button:hover:not(:disabled){background:#8247e5}
+#coin-alt{border-color:rgba(255,141,46,.45)} #coin-alt button{background:rgba(255,141,46,.24)}
+#coin-alt button:hover:not(:disabled){background:#ff8d2e;color:#1a1200}
+#coin-wtx{border-color:rgba(255,210,63,.45)} #coin-wtx button{background:rgba(255,210,63,.22)}
+#coin-wtx button:hover:not(:disabled){background:#ffd23f;color:#1a1200}
+/* nothing to sell — make that obvious instead of firing an error buzz on click */
+.coin button:disabled{opacity:.32;cursor:not-allowed;background:rgba(255,255,255,.05)}
+.coin button:disabled:hover{background:rgba(255,255,255,.05)}
+/* controls hint — fades out once the player has actually moved */
+#ctrlhint{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:17;pointer-events:none;
+  background:rgba(13,11,30,.72);border:1px solid var(--line);border-radius:8px;padding:6px 12px;
+  font-size:11px;color:var(--dim);white-space:nowrap;transition:opacity .8s}
+#ctrlhint b{color:var(--txt);font-weight:700}
+#ctrlhint.gone{opacity:0}
+@media(max-width:760px){#ctrlhint{display:none}}
 /* toasts + feed */
 #feed{position:fixed;left:10px;bottom:10px;width:290px;display:flex;flex-direction:column;gap:5px;z-index:18;pointer-events:none}
 .msg{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--pur);border-radius:8px;padding:7px 10px;font-size:12px;animation:slidein .25s ease;opacity:.95}

@@ -23,6 +23,15 @@ function renderHud(){
   pp.className='pr '+(S.price.pol>=CFG.nets.polygon.p0?'up':'dn');
   pa.className='pr '+(S.price.alt>=CFG.nets.alt.p0?'up':'dn');
   pw.className='pr '+(S.price.wtx>=CFG.nets.wattx.p0?'up':'dn');
+  /* SELL sells the WHOLE balance, so dim it at zero and say so on hover —
+     it used to look identical whether or not you had anything to sell. */
+  ['pol','alt','wtx'].forEach(cn=>{
+    const b=$('sell-'+cn); if(!b) return;
+    const bal=S[cn], live=bal>0.001;
+    b.disabled=!live;
+    b.title=live?`Sell all ${fmt(bal)} ${cn.toUpperCase()} → +${fmt(bal*S.price[cn])} ⚡WATT`
+                :`No ${cn.toUpperCase()} to sell — mine some first`;
+  });
   $('v-usdt').textContent=fmt(S.usdt); $('v-dai').textContent=fmt(S.dai);
   $('coin-usdt').style.display=S.usdt>0.005?'flex':'none';
   $('coin-dai').style.display=S.dai>0.005?'flex':'none';

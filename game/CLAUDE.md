@@ -102,6 +102,26 @@ push there). For any other host: it is one HTML file + the GLB/PNG assets at the
 root (`/pc.glb`, `/gen2.glb`, ... — see `loadModels()` in p07 for the full list).
 GitHub Pages works: put `mining-game.html` as `index.html` and the assets beside it.
 
+## Movement / input (added 2026-07-28)
+
+`parts/p11_loop.html` has a walk controller: WASD, W/A/D/**X**, and arrow keys move the
+camera across the XZ plane, shift runs. It moves `cam.position` AND `controls.target` by
+the same delta, so OrbitControls keeps owning look/zoom and the framing never twists.
+Called as `tickWalk(dt)` from `frame()` in the non-seated branch.
+
+**If you change movement, re-run the harness** — `walktest.mjs` extracts the WALK block
+verbatim from the BUILT html and exercises it against real three + OrbitControls in node
+(20 assertions: direction, no y-drift, framing preservation, wall stops, blocked states,
+stuck-key release, zoom invariance). The DOM stub needs a `getRootNode()` or OrbitControls
+throws.
+
+Two traps already paid for:
+- **Menu hotkeys are on the number row** (1-5) because `w`/`s` used to open the wallet and
+  shop. Do not move them back onto letters that walk.
+- **Clamping must be one-directional.** The default camera starts at z=8.6; a naive
+  `ROOM.D/2-0.8` clamp snapped it across the room on the first keypress. `walkClamp()`
+  never pushes a camera that is already outside the box further out, only inward.
+
 ## Testing
 
 - `game/build.sh` must print `BUILD OK`.

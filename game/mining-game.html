@@ -54,8 +54,26 @@ button{font-family:inherit;cursor:pointer}
 .coin b{font-variant-numeric:tabular-nums}
 .coin .pr{color:var(--dim);font-size:10.5px}
 .coin .pr.up{color:var(--grn)} .coin .pr.dn{color:var(--red)}
-.coin button{background:rgba(130,71,229,.25);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:2px 8px;font-size:10.5px}
+.coin button{background:rgba(130,71,229,.25);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:2px 8px;font-size:10.5px;
+  cursor:pointer;letter-spacing:.4px;font-weight:700;transition:background .15s,opacity .15s}
 .coin button:hover{background:var(--pur)}
+/* per-coin identity so the three SELL buttons aren't an undifferentiated row */
+#coin-pol{border-color:rgba(130,71,229,.5)} #coin-pol button{background:rgba(130,71,229,.28)}
+#coin-pol button:hover:not(:disabled){background:#8247e5}
+#coin-alt{border-color:rgba(255,141,46,.45)} #coin-alt button{background:rgba(255,141,46,.24)}
+#coin-alt button:hover:not(:disabled){background:#ff8d2e;color:#1a1200}
+#coin-wtx{border-color:rgba(255,210,63,.45)} #coin-wtx button{background:rgba(255,210,63,.22)}
+#coin-wtx button:hover:not(:disabled){background:#ffd23f;color:#1a1200}
+/* nothing to sell — make that obvious instead of firing an error buzz on click */
+.coin button:disabled{opacity:.32;cursor:not-allowed;background:rgba(255,255,255,.05)}
+.coin button:disabled:hover{background:rgba(255,255,255,.05)}
+/* controls hint — fades out once the player has actually moved */
+#ctrlhint{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:17;pointer-events:none;
+  background:rgba(13,11,30,.72);border:1px solid var(--line);border-radius:8px;padding:6px 12px;
+  font-size:11px;color:var(--dim);white-space:nowrap;transition:opacity .8s}
+#ctrlhint b{color:var(--txt);font-weight:700}
+#ctrlhint.gone{opacity:0}
+@media(max-width:760px){#ctrlhint{display:none}}
 /* toasts + feed */
 #feed{position:fixed;left:10px;bottom:10px;width:290px;display:flex;flex-direction:column;gap:5px;z-index:18;pointer-events:none}
 .msg{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--pur);border-radius:8px;padding:7px 10px;font-size:12px;animation:slidein .25s ease;opacity:.95}
@@ -335,6 +353,7 @@ button{font-family:inherit;cursor:pointer}
   <div class="coin" id="coin-pool" title="Mining pool — click to open Pool Hub" style="cursor:pointer">🏊 <b id="v-pool">nucash-mining</b><span class="pr" id="p-pend"></span></div>
 </div>
 <div id="feed"></div>
+<div id="ctrlhint"><b>WASD</b>/<b>WAX</b>/<b>arrows</b> walk · <b>shift</b> run · drag to look · <b>1</b>shop <b>2</b>garage <b>3</b>pools <b>4</b>stats <b>5</b>wallet</div>
 <button id="standbtn" style="display:none">🧍 STAND UP <small>(esc)</small></button>
 <div id="tut"></div>
 
@@ -1830,10 +1849,12 @@ function gen2(){
    addresses into nftV2/wattV2 below. When WATTxchain launches, fill chainId+rpc. */
 const WEB3CFG={
   chains:{
-    polygon:{ key:'polygon', net:'polygon', chainId:137, hex:'0x89', name:'Polygon', rpc:'https://polygon-rpc.com', sym:'POL', dec:18, explorer:'https://polygonscan.com',
+    /* rpc: polygon-rpc.com now 401s ("API key disabled"); drpc serves it free. */
+    polygon:{ key:'polygon', net:'polygon', chainId:137, hex:'0x89', name:'Polygon', rpc:'https://polygon.drpc.org', sym:'POL', dec:18, explorer:'https://polygonscan.com',
       nft:'0x970a8b10147e3459d3cbf56329b76ac18d329728', watt:'0xE960d5076cd3169C343Ee287A2c3380A222e5839', staking:'0xcbfcA68D10B2ec60a0FB2Bc58F7F0Bfd32CD5275',
       nftV2:null, wattV2:null },
-    alt:{ key:'alt', net:'alt', chainId:2330, hex:'0x91a', name:'Altcoinchain', rpc:'https://rpc.altcoinchain.org', sym:'ALT', dec:18, explorer:'https://explorer.altcoinchain.org',
+    /* rpc: rpc0.altcoinchain.org is dead — rpc.wattxchange.app is the live node. */
+    alt:{ key:'alt', net:'alt', chainId:2330, hex:'0x91a', name:'Altcoinchain', rpc:'https://rpc.wattxchange.app', sym:'ALT', dec:18, explorer:'https://explorer.altcoinchain.org',
       nft:'0xf9670e5D46834561813CA79854B3d7147BBbFfb2', watt:'0x6645143e49B3a15d8F205658903a55E520444698', staking:'0xe463045318393095F11ed39f1a98332aBCc1A7b1',
       nftV2:null, wattV2:null },
     /* WATTxchain. Chain id is ASSIGNED and final: 22356 mainnet (22357 testnet,
@@ -2232,6 +2253,15 @@ function renderHud(){
   pp.className='pr '+(S.price.pol>=CFG.nets.polygon.p0?'up':'dn');
   pa.className='pr '+(S.price.alt>=CFG.nets.alt.p0?'up':'dn');
   pw.className='pr '+(S.price.wtx>=CFG.nets.wattx.p0?'up':'dn');
+  /* SELL sells the WHOLE balance, so dim it at zero and say so on hover —
+     it used to look identical whether or not you had anything to sell. */
+  ['pol','alt','wtx'].forEach(cn=>{
+    const b=$('sell-'+cn); if(!b) return;
+    const bal=S[cn], live=bal>0.001;
+    b.disabled=!live;
+    b.title=live?`Sell all ${fmt(bal)} ${cn.toUpperCase()} → +${fmt(bal*S.price[cn])} ⚡WATT`
+                :`No ${cn.toUpperCase()} to sell — mine some first`;
+  });
   $('v-usdt').textContent=fmt(S.usdt); $('v-dai').textContent=fmt(S.dai);
   $('coin-usdt').style.display=S.usdt>0.005?'flex':'none';
   $('coin-dai').style.display=S.dai>0.005?'flex':'none';
@@ -2889,15 +2919,88 @@ $('b-reset').onclick=()=>{ if(confirm('Wipe your entire garage and start over?')
 $('b-wallet').onclick=()=>{ openModal('m-web3'); renderWallet(); if(w3Has()&&!W3.addr) w3Connect(); };
 $('bench-close').onclick=()=>closeBench();
 $('bench-shop').onclick=()=>{ openModal('m-shop'); renderShop(); };
+/* ================= WALK CONTROLLER =================
+   WASD / WAX / arrow keys glide the camera across the floor. OrbitControls still
+   owns look + zoom; we translate cam.position and controls.target together so the
+   framing never twists. Movement is camera-relative on the XZ plane only.
+   NOTE: the old s/w hotkeys (shop/wallet) collided with strafe+forward, so every
+   menu hotkey moved to the number row — see MENUKEYS below. */
+const WALK={ f:0, b:0, l:0, r:0, run:false, on:false };
+const WALKSPD=7.2, WALKRUN=1.85, WALKEASE=9;
+const walkVel=new THREE.Vector3();
+/* Keep the player inside the room. Side walls sit at ±(ROOM.W/2+1) and the back wall
+   at -(ROOM.D/2+1); the +z side is open, so we allow pulling back past the room depth
+   for the wide establishing shot the default camera (z=8.6) starts in. */
+const WALKBOX={ x:ROOM.W/2+0.4, zMin:-(ROOM.D/2+0.4), zMax:ROOM.D/2+4 };
+/* Soft clamp: never shove a camera that is ALREADY outside the box (old saves, the
+   trailer rig, a future wider start) — just refuse to let it go further out. Hard
+   clamping here made the very first keypress snap the camera across the room. */
+function walkClamp(cur,next,lo,hi){
+  if(next>=lo&&next<=hi) return next;
+  if(next>hi) return Math.max(hi,Math.min(cur,next));   // outside high: only inward
+  return Math.min(lo,Math.max(cur,next));               // outside low: only inward
+}
+function walkBlocked(){
+  return TRAILER || SIT.on || OS.open || benchOpen || !running ||
+    ['m-shop','m-upg','m-stats','m-web3','m-pool'].some(id=>$(id)&&$(id).classList.contains('open'));
+}
+function walkKey(e,down){
+  if(e.target&&e.target.matches&&e.target.matches('input,textarea,select')) return false;
+  const k=e.key.length===1?e.key.toLowerCase():e.key;
+  let hit=true;
+  switch(k){
+    case 'w': case 'ArrowUp':    WALK.f=down?1:0; break;
+    /* x is the alternate "back" in the w/a/d/x scheme; s is the usual one */
+    case 's': case 'x': case 'ArrowDown': WALK.b=down?1:0; break;
+    case 'a': case 'ArrowLeft':  WALK.l=down?1:0; break;
+    case 'd': case 'ArrowRight': WALK.r=down?1:0; break;
+    default: hit=false;
+  }
+  if(hit) WALK.run=e.shiftKey;
+  return hit;
+}
+addEventListener('keydown',e=>{ if(walkBlocked()) return; if(walkKey(e,true)) e.preventDefault(); });
+addEventListener('keyup',  e=>{ walkKey(e,false); });
+/* Never leave a key stuck down when focus goes away or a modal opens mid-stride. */
+function walkStop(){ WALK.f=WALK.b=WALK.l=WALK.r=0; walkVel.set(0,0,0); }
+addEventListener('blur',walkStop);
+function tickWalk(dt){
+  const blocked=walkBlocked();
+  if(blocked){ if(WALK.f||WALK.b||WALK.l||WALK.r) walkStop(); walkVel.multiplyScalar(0); return; }
+  // camera-relative basis, flattened onto the floor plane
+  const fwd=new THREE.Vector3(); cam.getWorldDirection(fwd); fwd.y=0;
+  if(fwd.lengthSq()<1e-6) fwd.set(0,0,-1); else fwd.normalize();
+  const right=new THREE.Vector3().crossVectors(fwd,new THREE.Vector3(0,1,0)).normalize();
+  const want=new THREE.Vector3()
+    .addScaledVector(fwd,   WALK.f-WALK.b)
+    .addScaledVector(right, WALK.r-WALK.l);
+  if(want.lengthSq()>0) want.normalize().multiplyScalar(WALKSPD*(WALK.run?WALKRUN:1));
+  // ease toward the wanted velocity so starts/stops glide instead of snapping
+  walkVel.lerp(want,Math.min(1,dt*WALKEASE));
+  if(walkVel.lengthSq()<1e-5) return;
+  const step=walkVel.clone().multiplyScalar(dt);
+  // clamp against the room on the camera itself, then move the target by the same
+  // delta so the orbit framing is preserved exactly
+  const nx=walkClamp(cam.position.x,cam.position.x+step.x,-WALKBOX.x,WALKBOX.x);
+  const nz=walkClamp(cam.position.z,cam.position.z+step.z,WALKBOX.zMin,WALKBOX.zMax);
+  const dx=nx-cam.position.x, dz=nz-cam.position.z;
+  cam.position.x=nx; cam.position.z=nz;
+  controls.target.x+=dx; controls.target.z+=dz;
+  if(!WALK.on){ WALK.on=true; const h=$('ctrlhint'); if(h) setTimeout(()=>h.classList.add('gone'),2500); }
+}
+/* ---------- menu hotkeys (number row — the letters belong to movement now) ---------- */
 addEventListener('keydown',e=>{
   if(e.target.matches('input,textarea,select')) return;
-  if(e.key==='Escape'){ if(OS.open){ closeOS(); return; } if(benchOpen){ closeBench(); return; } selRig=-1; renderRigPanel(); ['m-shop','m-upg','m-stats','m-web3'].forEach(closeModal); }
+  if(e.key==='Escape'){ if(OS.open){ closeOS(); return; } if(benchOpen){ closeBench(); return; } selRig=-1; renderRigPanel(); ['m-shop','m-upg','m-stats','m-web3','m-pool'].forEach(closeModal); walkStop(); }
   if(OS.open) return;
-  if(e.key==='s'||e.key==='S'){ openModal('m-shop'); renderShop(); }
+  if(e.key==='1'){ openModal('m-shop'); renderShop(); walkStop(); }
+  if(e.key==='2'){ openModal('m-upg'); renderUpg(); walkStop(); }
+  if(e.key==='3'){ openPoolHub(); walkStop(); }
+  if(e.key==='4'){ openModal('m-stats'); renderStats(); walkStop(); }
+  if(e.key==='5'){ openModal('m-web3'); renderWallet(); walkStop(); }
   if(e.key==='n'||e.key==='N') switchNet();
   if(e.key==='o'||e.key==='O'){ if(S&&S.rigs.length) openOS(selRig>=0?selRig:0); }
   if(e.key==='b'||e.key==='B'){ if(benchOpen) closeBench(); else if(S&&S.rigs.length) openBench(selRig>=0?selRig:0); }
-  if(e.key==='w'||e.key==='W'){ openModal('m-web3'); renderWallet(); }
 });
 /* ================= MAIN LOOP ================= */
 let last=0, acc=0, uiT=0, scrT=0, histT=0, running=false;
@@ -2912,7 +3015,7 @@ function frame(t){
   while(acc>=SIMDT){ simTick(SIMDT); acc-=SIMDT; }
   // visuals
   if(SIT.on&&SIT.toPos){ cam.position.lerp(SIT.toPos,Math.min(1,dt*5)); controls.target.lerp(SIT.toTgt,Math.min(1,dt*5)); cam.lookAt(controls.target); }
-  else controls.update();
+  else { tickWalk(dt); controls.update(); }
   tickParts(dt);
   if(badgeMesh&&badgeMesh.visible) badgeMesh.rotation.y+=dt*0.9;
   if(badgeHolo&&badgeHolo.visible) badgeHolo.rotation.y+=dt*0.5;
@@ -2972,6 +3075,7 @@ async function init(){
     openOS, closeOS, setOC, rebootRig, openBench, closeBench, W3, WEB3CFG, w3Connect, w3Refresh,
     joinPool, hostPool, closePool, buyValidator, exitValidators, repairRig, togglePower, openPoolHub, switchNet, POOLS,
     stakeShop, unstakeShop, buildFarm, sitDown, standUp, eligibleSlots, farmStatus,
+    WALK, tickWalk, walkStop, walkBlocked,
     state:()=>JSON.parse(JSON.stringify(S)) };
 }
 function forceBlock(lucky=false){
