@@ -177,6 +177,7 @@ function frame(t){
   if(dt>0.5) dt=0.5;
   acc+=dt;
   while(acc>=SIMDT){ simTick(SIMDT); acc-=SIMDT; }
+  if(window.__audioOnly) return; // trailer audio pass: sim + SFX only, no 3D rendering
   // visuals
   if(SIT.on&&SIT.toPos){ cam.position.lerp(SIT.toPos,Math.min(1,dt*5)); controls.target.lerp(SIT.toTgt,Math.min(1,dt*5)); cam.lookAt(controls.target); }
   else { tickWalk(dt); controls.update(); }

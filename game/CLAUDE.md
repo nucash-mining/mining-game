@@ -1,10 +1,14 @@
 # Instructions for Claude Code — remaining Mining Game asset work
 
 You are working on the 3D game in `game/` (single-file build, see `game/README.md`).
-The tasks below need Blender (or another DCC tool) and could not be done in the
-browser-agent environment that built the game. Work through them in order.
 After any code change: run `game/build.sh`, open `game/mining-game.html` in a browser,
 and verify with the debug handle `window.MG` (see "Testing" below).
+
+> **Status update (Browser Use agent):** Tasks 1–4 are DONE — the assets were built
+> programmatically with `game/tools/asset-factory.html` (three.js + GLTFExporter in the
+> browser, no Blender needed) and are wired into the game with procedural fallbacks.
+> Remaining: Task 5 (optional sit-pose avatar) and Task 6 (source .blend cleanup),
+> both of which still need a DCC tool.
 
 ## Context: current scale system
 
@@ -19,7 +23,12 @@ and verify with the debug handle `window.MG` (see "Testing" below).
 - Chairs are procedural (`makeChair(gaming)` in p07): a basic desk chair on every desk,
   upgradable in GARAGE to a gaming chair (+3% luck).
 
-## Task 1 — proper desk model in Blender (replaces procedural desk)
+## Task 1 — proper desk model — ✅ DONE (desk.glb, `makeDesk` in p07)
+
+Authored in `tools/asset-factory.html` at real scale (1.911×0.978 m, surface 0.7467 m,
+shelf center 1.3556 m — exactly `DESK.*`/2.25). Loaded as `PROTO.desk`, placed with
+`scale.setScalar(2.25)`. The procedural desk remains as a fallback if the GLB 404s.
+Legacy notes for a Blender re-do (optional polish):
 
 The original desk proportions were wrong (desk too small / too low, PC case
 intersected the monitor shelf). The code-side fix shipped, but the desk should be a
@@ -38,7 +47,12 @@ real asset:
    desktop surface lands exactly at `DESK.SURF` — every object in p08 positions
    itself relative to `DESK.SURF`/`DESK.SHELF`, so keep those constants accurate.
 
-## Task 2 — monitor models with real size variants
+## Task 2 — monitor models with real size variants — ✅ DONE (monitor.glb)
+
+One parametric bezel+stand GLB with the screen mesh named `SCREEN`. `buildRigVis` (p08)
+swaps its material for the live `termTex` canvas and non-uniformly scales the 27" base
+to the `MONSIZES` entry (`mm.scale.set(2.25*mw/1.34, 2.25*mh/0.76, 2.25)`).
+Procedural fallback kept. Legacy Blender notes (option (b) is what shipped):
 
 In-game monitors are procedural planes sized from `MONSIZES` (diagonal-true ratios,
 16:9 for 24/27/32", 21:9 for 38", 32:9 for 49"). Either:
@@ -53,7 +67,12 @@ Repo already has `monitor.glb` — check its proportions in Blender first; it ma
 need a rescale + screen-plane naming (name the screen mesh `SCREEN` so the code can
 swap its material for `termTex`).
 
-## Task 3 — chair models (none exist in the collection graphics yet)
+## Task 3 — chair models — ✅ DONE (chair_desk.glb, chair_gaming.glb)
+
+Real-scale chairs (seat 45 cm, gaming back 1.05 m total) with merged geometry
+(~900 tris each). `makeChair(gaming)` in p07 clones `PROTO.chairD/chairG` at 2.25×;
+`rebuildChairs()` still swaps on upgrade (group keeps `name='chairG'`).
+Procedural fallback kept. Legacy Blender notes:
 
 Replace the procedural chairs with proper assets:
 
@@ -66,7 +85,17 @@ Replace the procedural chairs with proper assets:
    keep the position/rotation lines (tucked at the keyboard side, facing the desk),
    and keep `rebuildChairs()` working (it swaps chairs on upgrade).
 
-## Task 4 — farm structure models (new: PRO/ELITE mining farm)
+## Task 4 — farm structure models — ✅ DONE (container.glb, warehouse.glb, server_rack.glb)
+
+- `container.glb` — real 20ft HC (6.06×2.44×2.90 m), corrugated walls, open end at
+  local −Z with ~100° open doors, hazard band, NUCASH MINING decals, serial tag.
+  `makeContainer` places it at `position.z=15`, scale 2.25.
+- `warehouse.glb` — 11.556×4.444×3.333 m steel shell + gable roof, open front −Z,
+  baked '⛏ ELITE MINING FARM' sign. `makeWarehouse` places at `position.z=27`.
+- `server_rack.glb` — 4-post open rack, shelf meshes named `SHELF_0/1/2`; `makeRack`
+  slides them to the SLOTS heights (container 2-shelf racks hide `SHELF_2`).
+- All keep procedural fallbacks; interior lights/racks stay in code.
+Legacy Blender notes:
 
 The game now has a farm progression: garage -> shipping containers (PRO status,
 6 rack slots each) -> warehouse (ELITE status, 12 rack slots). All are procedural

@@ -82,6 +82,14 @@ gltfpack/meshopt to fit a 2 MB per-asset limit):
 pc.glb, cpu.glb, gpu_tx120.glb, gpu_gp50.glb, gen2.glb (all Gen2 components merged,
 one scene per component), pcboard.glb.
 
+Furniture & farm structures (built programmatically by `tools/asset-factory.html` —
+three.js + GLTFExporter in a browser page, real-scale meters, the game scales ×2.25):
+desk.glb, monitor.glb (screen mesh `SCREEN` carries the live terminal texture),
+chair_desk.glb, chair_gaming.glb, server_rack.glb (shelf meshes `SHELF_0/1/2` slide to
+SLOTS heights), container.glb (20ft HC, open end −Z), warehouse.glb (open front −Z,
+gable roof). Every one has a procedural fallback in code, so the game still runs if an
+asset 404s. Loads are parallel and per-asset fault-tolerant (`loadModels` in p07).
+
 The economy/config is one `CFG` block at the top of `parts/p04_data.html` — it is the
 living spec for the real WATTxchain contracts (pool operator locks, fee markets,
 WATT burn, validator staking).

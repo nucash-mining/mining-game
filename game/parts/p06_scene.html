@@ -2,7 +2,7 @@
 /* ================= THREE SCENE ================= */
 const TRAILER = new URLSearchParams(location.search).has('trailer');
 const canvas = $('c3d');
-const renderer = new THREE.WebGLRenderer({canvas, antialias:true, preserveDrawingBuffer:TRAILER});
+const renderer = new THREE.WebGLRenderer({canvas, antialias:!TRAILER, preserveDrawingBuffer:TRAILER});
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.35;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();

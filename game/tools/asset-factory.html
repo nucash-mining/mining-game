@@ -1,0 +1,298 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Mining Game Asset Factory</title>
+<style>
+  body{margin:0;background:#0d0b1e;color:#e8e4ff;font-family:ui-monospace,monospace;overflow:hidden}
+  #ui{position:fixed;top:8px;left:8px;z-index:9;background:rgba(16,13,38,.9);border:1px solid #8247e5;border-radius:10px;padding:10px;max-width:340px}
+  button{margin:2px;padding:5px 9px;background:#241d47;color:#e8e4ff;border:1px solid #8247e5;border-radius:6px;cursor:pointer;font-family:inherit}
+  button:hover{background:#8247e5}
+  #log{font-size:11px;color:#9a93c4;white-space:pre-wrap;margin-top:6px;max-height:200px;overflow:auto}
+</style>
+<script type="importmap">{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"
+}}</script></head><body>
+<div id="ui"><b>ASSET FACTORY</b> — Mining Game<br>
+  <button data-f="desk">1 desk</button><button data-f="mon">2 monitor</button>
+  <button data-f="chairD">3 chair office</button><button data-f="chairG">4 chair gaming</button>
+  <button data-f="rack">5 rack</button><button data-f="container">6 container</button>
+  <button data-f="warehouse">7 warehouse</button><button data-f="all">8 ALL</button>
+  <button id="exp">⬇ EXPORT ALL GLB</button>
+  <div id="log"></div></div>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
+import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+
+const log=(...a)=>{ document.getElementById('log').textContent+=a.join(' ')+'\n'; console.log(...a); };
+/* ---------- material + geometry kit (all models: meters, floor y=0, centered x/z) ---------- */
+const STD=(c,r=.7,m=.35,o={})=>new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:m,...o});
+const BAS=(c,o={})=>new THREE.MeshBasicMaterial({color:c,...o});
+function rtx(g,x=0,y=0,z=0,rx=0,ry=0,rz=0){
+  if(rx||ry||rz) g.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx,ry,rz)));
+  g.applyMatrix4(new THREE.Matrix4().makeTranslation(x,y,z));
+  return g.index?g.toNonIndexed():g;
+}
+const bx=(w,h,d,x,y,z,rx,ry,rz)=>rtx(new THREE.BoxGeometry(w,h,d),x,y,z,rx,ry,rz);
+const cy=(rt,rb,h,s,x,y,z,rx,ry,rz)=>rtx(new THREE.CylinderGeometry(rt,rb,h,s||10),x,y,z,rx,ry,rz);
+const pl=(w,h,x,y,z,rx,ry,rz)=>rtx(new THREE.PlaneGeometry(w,h),x,y,z,rx,ry,rz);
+const sp=(r,x,y,z)=>rtx(new THREE.SphereGeometry(r,10,8),x,y,z);
+class Kit{
+  constructor(){ this.b=[]; this.n=[]; }
+  add(geo,mat){ let k=this.b.find(e=>e.mat===mat); if(!k){ k={mat,geos:[]}; this.b.push(k); } k.geos.push(geo); }
+  named(name,geo,mat){ this.n.push({name,geo,mat}); }
+  group(name){ const g=new THREE.Group(); g.name=name||'';
+    for(const k of this.b) g.add(new THREE.Mesh(mergeGeometries(k.geos,false),k.mat));
+    for(const n of this.n){ const m=new THREE.Mesh(n.geo,n.mat); m.name=n.name; g.add(m); }
+    return g; }
+}
+/* ---------- canvas textures ---------- */
+function cnv(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+function ctex(c){ const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=4; return t; }
+function texCorr(base,rib,rust){
+  const c=cnv(256,256), x=c.getContext('2d');
+  x.fillStyle=base; x.fillRect(0,0,256,256);
+  for(let i=0;i<16;i++){ const g=x.createLinearGradient(i*16,0,i*16+16,0);
+    g.addColorStop(0,rib); g.addColorStop(.5,base); g.addColorStop(1,rib);
+    x.fillStyle=g; x.fillRect(i*16,0,16,256); }
+  for(let i=0;i<1500;i++){ x.fillStyle=`rgba(0,0,0,${Math.random()*.07})`; x.fillRect(Math.random()*256,Math.random()*256,2,2); }
+  for(let i=0;i<22;i++){ const rx=Math.random()*256, ry=Math.random()*170, l=20+Math.random()*60;
+    const g=x.createLinearGradient(0,ry,0,ry+l); g.addColorStop(0,rust); g.addColorStop(1,'rgba(0,0,0,0)');
+    x.fillStyle=g; x.fillRect(rx,ry,2+Math.random()*3,l); }
+  return ctex(c);
+}
+function texHazard(){
+  const c=cnv(128,32), x=c.getContext('2d');
+  for(let i=0;i<8;i++){ x.fillStyle=i%2?'#ffd23f':'#141021'; x.beginPath();
+    x.moveTo(i*16,32); x.lineTo(i*16+16,0); x.lineTo(i*16+32,0); x.lineTo(i*16+16,32); x.fill(); }
+  return ctex(c);
+}
+function texDecal(big,small,color){
+  const c=cnv(512,160), x=c.getContext('2d');
+  x.clearRect(0,0,512,160); x.textAlign='center';
+  x.strokeStyle=color||'#cfe0ff'; x.globalAlpha=.9; x.lineWidth=5; x.strokeRect(6,6,500,148); x.globalAlpha=1;
+  x.fillStyle=color||'#cfe0ff'; x.font='900 62px Arial'; x.fillText(big,256,78);
+  x.font='700 30px Arial'; x.fillText(small,256,126);
+  return ctex(c);
+}
+function texSign(big,small){
+  const c=cnv(1024,128), x=c.getContext('2d');
+  x.fillStyle='#0d0a1c'; x.fillRect(0,0,1024,128);
+  x.textAlign='center'; x.fillStyle='#ffd23f'; x.font='900 74px monospace';
+  x.fillText(big,512,72);
+  x.fillStyle='#2ee6d6'; x.font='700 34px monospace'; x.fillText(small,512,112);
+  return ctex(c);
+}
+/* ================= DESK — 1.911×0.978 m battlestation (world 4.3×2.2 @2.25u/m) =================
+   surface top exactly 0.7467 (=DESK.SURF 1.68/2.25), shelf center 1.3556 (=3.05) */
+function buildDesk(){
+  const top=STD(0x2d2557,.55,.45), frame=STD(0x241d47,.7,.35),
+        acc=STD(0x4a3f8f,.5,.5), dark=STD(0x0c0a1c,.6,.5), led=BAS(0x2ee6d6);
+  const k=new Kit();
+  const W=1.9111, D=0.9778, TOP=0.7111, SURF=0.7467, SHELF=1.3556, SHZ=-0.2756, SHD=0.4222;
+  k.add(bx(W,0.0711,D, 0,TOP,0), top);                                  // top plate
+  k.add(bx(W-0.02,0.018,0.018, 0,TOP+0.026,D/2+0.002), acc);            // front edge trim
+  k.add(bx(0.018,0.018,D-0.02, W/2-0.004,TOP+0.026,0), acc);
+  k.add(bx(0.018,0.018,D-0.02, -(W/2-0.004),TOP+0.026,0), acc);
+  [[-0.8667,-0.4222],[0.8667,-0.4222],[-0.8667,0.4222],[0.8667,0.4222]].forEach(([lx,lz])=>{
+    k.add(bx(0.0622,0.6756,0.0622, lx,0.3378,lz), frame);               // legs
+    k.add(bx(0.095,0.016,0.095, lx,0.008,lz), dark); });                // feet
+  k.add(bx(0.95,0.07,0.16, 0,TOP-0.055,-0.36), frame);                  // cable tray
+  k.add(cy(0.038,0.038,0.006,14, -0.55,SURF+0.001,-0.33), dark);        // grommet
+  k.add(bx(W,0.04,SHD, 0,SHELF,SHZ), frame);                            // monitor shelf
+  k.add(bx(W-0.02,0.016,0.016, 0,SHELF+0.014,SHZ+SHD/2-0.004), acc);    // shelf trim
+  [[-0.9111],[0.9111]].forEach(([px])=>{
+    k.add(bx(0.04,0.5889,0.04, px,1.0412,SHZ), frame);                  // shelf poles
+    k.add(bx(0.03,0.10,0.30, px*0.951,SHELF-0.07,SHZ), frame); });      // brackets
+  k.add(bx(W-0.15,0.012,0.012, 0,SHELF-0.028,SHZ+SHD/2-0.02), led);     // under-shelf glow strip
+  return k.group('desk');
+}
+/* ================= MONITOR — 27" base (screen 0.5956×0.3378 m = 1.34×0.76 u), SCREEN mesh named ================= */
+function buildMonitor(){
+  const bez=STD(0x0c0a1c,.4,.6), stand=STD(0x1a1533,.5,.6),
+        acc=STD(0x4a3f8f,.5,.5), led=BAS(0x3dff8a), scr=BAS(0xffffff);
+  const k=new Kit();
+  const SW=0.5956, SH=0.3378, CY=0.32;
+  k.named('SCREEN', pl(SW,SH, 0,CY,0.001), scr);
+  k.add(bx(SW+0.0356,SH+0.0356,0.0267, 0,CY,-0.0134), bez);             // bezel
+  k.add(bx(0.09,0.008,0.002, 0,CY-SH/2-0.012,0.001), acc);              // chin accent
+  k.add(bx(0.014,0.004,0.002, SW/2-0.03,CY-SH/2-0.012,0.001), led);     // power LED
+  k.add(cy(0.0178,0.0244,0.1511,10, 0,0.0756,-0.02), stand);            // neck
+  k.add(bx(0.10,0.11,0.02, 0,CY-0.05,-0.037), stand);                   // VESA hump
+  k.add(bx(0.238,0.0133,0.1333, 0,0.0067,0.015), stand);                // foot
+  return k.group('monitor');
+}
+/* ================= CHAIRS — seat 0.45 m, gaming back 0.511 m, office 0.356 m ================= */
+function buildChair(gaming){
+  const dark=STD(0x14101f,.6,.5), pad=STD(gaming?0x1b1430:0x241f33,.75,.2),
+        acc=STD(0xd42a4e,.5,.3,{emissive:0x550a18}), led=BAS(0xff2e5e);
+  const k=new Kit();
+  const bH=gaming?0.5111:0.3556;
+  for(let i=0;i<5;i++){ const a=i/5*Math.PI*2;
+    k.add(bx(0.2222,0.0222,0.04, Math.cos(a)*0.1111,0.0311,Math.sin(a)*0.1111, 0,-a,0), dark);
+    k.add(sp(0.0244, Math.cos(a)*0.2044,0.0244,Math.sin(a)*0.2044), dark); }
+  k.add(cy(0.0222,0.0267,0.3778,10, 0,0.2222,0), dark);                 // gas lift
+  k.add(bx(0.26,0.02,0.24, 0,0.4156,0), dark);                          // seat plate
+  k.add(bx(0.32,0.0533,0.3022, 0,0.4489,0), pad);                       // seat
+  if(gaming){ k.add(bx(0.0444,0.0622,0.2933, -0.16,0.4578,0), acc);
+              k.add(bx(0.0444,0.0622,0.2933, 0.16,0.4578,0), acc); }    // bolsters
+  const by=0.4489+bH/2+0.0089;
+  k.add(bx(0.3111,bH,0.0444, 0,by,0.1511, 0.1,0,0), pad);               // backrest
+  if(gaming){
+    k.add(bx(0.0711,bH*0.9,0.009, 0,by,0.1267, 0.1,0,0), acc);          // racing stripe
+    k.add(bx(0.1956,0.0711,0.0533, 0,0.4489+bH+0.0533,0.16, 0.1,0,0), acc); // headrest
+    k.add(bx(0.32,0.0133,0.0133, 0,0.4489+bH+0.0089,0.1378, 0.1,0,0), led); // LED strip
+  }
+  [[-0.1778],[0.1778]].forEach(([ax])=>{
+    k.add(bx(0.0267,0.1244,0.0267, ax,0.5333,0.0444), dark);            // arm posts
+    k.add(bx(0.04,0.0222,0.1778, ax,0.60,0.0222), gaming?acc:dark); }); // armrests
+  return k.group(gaming?'chairG':'chairD');
+}
+/* ================= SERVER RACK — 0.756×0.533 m shelves named SHELF_0/1/2 (tops at slot Y) ================= */
+function buildRack(){
+  const steel=STD(0x2a2440,.55,.75), rack=STD(0x191430,.5,.8);
+  const k=new Kit();
+  [[-0.3556,-0.2444],[0.3556,-0.2444],[-0.3556,0.2444],[0.3556,0.2444]].forEach(([px,pz])=>{
+    k.add(bx(0.04,1.9333,0.04, px,0.9667,pz), rack);                    // posts
+    k.add(bx(0.08,0.03,0.08, px,0.015,pz), rack); });                   // feet
+  k.add(bx(0.7511,0.045,0.045, 0,1.9111,-0.2444), rack);
+  k.add(bx(0.7511,0.045,0.045, 0,1.9111,0.2444), rack);                 // top bars
+  k.add(bx(0.045,0.045,0.5289, -0.3556,1.9111,0), rack);
+  k.add(bx(0.045,0.045,0.5289, 0.3556,1.9111,0), rack);
+  k.add(bx(0.7511,0.03,0.03, 0,1.0,-0.2444), rack);                     // rear cable bar
+  [0.55,1.9,3.25].forEach((sy,i)=>                                      // shelf plates, TOP at slot Y
+    k.named('SHELF_'+i, bx(0.7556,0.0311,0.5333, 0,sy/2.25-0.01556,0), steel));
+  return k.group('rack');
+}
+/* ================= CONTAINER — 20ft HC 6.06×2.44×2.90 m, long axis Z, OPEN end at -Z ================= */
+function hingeGeo(w,h,d, dir, ry, hx,hy,hz, mat){ // dir=+1 door extends +X from hinge, -1 extends -X
+  const g=new THREE.BoxGeometry(w,h,d); g.translate(dir*(w/2+0.02),0,0);
+  g.rotateY(ry); g.translate(hx,hy,hz); return g.index?g.toNonIndexed():g;
+}
+function buildContainer(){
+  const wallT=texCorr('#24344d','#1a2436','rgba(122,72,32,.30)');
+  const wall=STD(0xffffff,.7,.5,{map:wallT,side:THREE.DoubleSide});
+  const corner=STD(0x141824,.6,.6), steel=STD(0x2a2440,.55,.75);
+  const haz=new THREE.MeshBasicMaterial({map:texHazard()});
+  const decalT=texDecal('NUCASH MINING','⚡ WATT POWERED · 20FT HC','#cfe0ff');
+  const decal=new THREE.MeshBasicMaterial({map:decalT,transparent:true,side:THREE.DoubleSide});
+  const tagT=texDecal('MG-HC-2049','MAX GROSS 30480 KG','#8fa3c8');
+  const tag=new THREE.MeshBasicMaterial({map:tagT,transparent:true});
+  const k=new Kit();
+  const L=6.06, W=2.44, H=2.90;
+  k.add(bx(W,0.05,L, 0,0.025,0), steel);                                // floor
+  [[-1],[1]].forEach(([s])=>{                                            // long walls
+    k.add(bx(0.02,H-0.12,L-0.12, s*(W/2-0.05),(H-0.12)/2+0.06,0), wall);
+    for(let z=-L/2+0.25; z<L/2-0.18; z+=0.28)
+      k.add(bx(0.055,H-0.12,0.13, s*(W/2-0.02),(H-0.12)/2+0.06,z), wall); });
+  k.add(bx(W,0.05,L, 0,H-0.025,0), wall);                                // roof
+  k.add(bx(0.06,0.05,L, -(W/2-0.1),H-0.06,0), corner);
+  k.add(bx(0.06,0.05,L, W/2-0.1,H-0.06,0), corner);
+  k.add(bx(W-0.1,H-0.12,0.02, 0,(H-0.12)/2+0.06,L/2-0.05), wall);        // far end (+Z)
+  for(let x=-W/2+0.22; x<W/2-0.15; x+=0.28)
+    k.add(bx(0.13,H-0.12,0.05, x,(H-0.12)/2+0.06,L/2-0.02), wall);
+  for(let i=0;i<4;i++) k.add(cy(0.018,0.018,H-0.2,8, i*0.55-0.825,H/2,L/2-0.09), corner); // lock rods
+  k.add(bx(0.12,H,0.12, -(W/2-0.06),H/2,-L/2+0.06), corner);             // open-end posts
+  k.add(bx(0.12,H,0.12, W/2-0.06,H/2,-L/2+0.06), corner);
+  k.add(bx(W,0.14,0.10, 0,H-0.07,-L/2+0.05), corner);                    // header rail
+  k.add(bx(W,0.10,0.10, 0,0.05,-L/2+0.05), corner);                      // sill
+  k.add(pl(W-0.24,0.22, 0,H-0.32,-L/2-0.001, 0,Math.PI,0), haz);         // hazard band
+  k.add(hingeGeo(W/2-0.08,H-0.30,0.05, +1, 1.75, -(W/2-0.06),H/2-0.10,-L/2+0.06), wall); // left door open ~100°
+  k.add(hingeGeo(W/2-0.08,H-0.30,0.05, -1, -1.75, W/2-0.06,H/2-0.10,-L/2+0.06), wall);   // right door
+  k.add(pl(3.4,1.0, W/2+0.045,1.75,0.4, 0,Math.PI/2,0), decal);          // side decals
+  k.add(pl(3.4,1.0, -(W/2+0.045),1.75,0.4, 0,-Math.PI/2,0), decal);
+  k.add(pl(0.5,0.16, -(W/2+0.045),0.85,-L/2+0.7, 0,-Math.PI/2,0), tag);  // serial tag
+  return k.group('container');
+}
+/* ================= WAREHOUSE — 11.556×4.444×3.333 m steel shell, open front -Z, gable roof ================= */
+function buildWarehouse(){
+  const wallT=texCorr('#3a2f18','#2c2412','rgba(90,60,25,.35)');
+  const wall=STD(0xffffff,.75,.45,{map:wallT,side:THREE.DoubleSide});
+  const steel=STD(0x2a2440,.55,.75);
+  const sign=new THREE.MeshBasicMaterial({map:texSign('⛏ ELITE MINING FARM','WATT TYCOON · PRO GRADE')});
+  const k=new Kit();
+  const W=11.5556, D=4.4444, H=3.3333, half=W/2;
+  for(let i=0;i<4;i++){ const z=-D/2+0.4+i*(D-0.8)/3;                    // side columns
+    k.add(bx(0.14,H,0.20, -(half-0.10),H/2,z), steel);
+    k.add(bx(0.14,H,0.20, half-0.10,H/2,z), steel); }
+  k.add(bx(W-0.2,H-0.15,0.03, 0,(H-0.15)/2+0.05,D/2-0.06), wall);        // back panel
+  for(let x=-half+0.25; x<half-0.15; x+=0.30)
+    k.add(bx(0.15,H-0.15,0.055, x,(H-0.15)/2+0.05,D/2-0.03), wall);      // back ribs
+  [[-1],[1]].forEach(([s])=>{
+    k.add(bx(0.03,H-0.15,D-0.2, s*(half-0.06),(H-0.15)/2+0.05,0), wall); // side panels
+    for(let z=-D/2+0.25; z<D/2-0.15; z+=0.30)
+      k.add(bx(0.055,H-0.15,0.15, s*(half-0.03),(H-0.15)/2+0.05,z), wall); });
+  const ang=Math.atan2(0.55,half), slabLen=(half+0.06)/Math.cos(ang);    // gable roof
+  k.add(bx(slabLen,0.045,D, -half/2,H+0.275,0, 0,0,ang), wall);
+  k.add(bx(slabLen,0.045,D, half/2,H+0.275,0, 0,0,-ang), wall);
+  const tri=new THREE.Shape([new THREE.Vector2(-half,H),new THREE.Vector2(half,H),new THREE.Vector2(0,H+0.55)]);
+  const gable=new THREE.ExtrudeGeometry(tri,{depth:0.05,bevelEnabled:false});
+  gable.translate(0,0,D/2-0.10); k.add(gable.index?gable.toNonIndexed():gable, wall);   // back gable
+  for(let i=0;i<3;i++){ const z=-D/2+D/2*(i+0.5)/1.5+D/4*(i-1);
+    k.add(bx(W-0.3,0.06,0.06, 0,H-0.10,-D/4+i*(D/4)), steel); }          // truss ties
+  k.add(bx(W,0.72,0.12, 0,H-0.36,-D/2+0.06), wall);                      // front header
+  k.add(pl(4.4444,0.5556, 0,H-0.36,-D/2-0.005, 0,Math.PI,0), sign);      // sign
+  k.add(bx(0.16,H,0.16, -(half-0.08),H/2,-D/2+0.08), steel);             // front posts
+  k.add(bx(0.16,H,0.16, half-0.08,H/2,-D/2+0.08), steel);
+  return k.group('warehouse');
+}
+/* ================= preview scene ================= */
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.3;
+renderer.outputColorSpace=THREE.SRGBColorSpace; document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0a0818);
+const cam=new THREE.PerspectiveCamera(50,innerWidth/innerHeight,0.01,200);
+const controls=new OrbitControls(cam,renderer.domElement);
+scene.add(new THREE.HemisphereLight(0x9c90e8,0x1a1530,1.2));
+const key=new THREE.DirectionalLight(0xcfc4ff,2.2); key.position.set(6,12,8); scene.add(key);
+const cyanL=new THREE.PointLight(0x2ee6d6,60,30); cyanL.position.set(6,4,4); scene.add(cyanL);
+scene.add(new THREE.GridHelper(60,60,0x8247e5,0x241d47));
+const ghostM=new THREE.MeshStandardMaterial({color:0x2ee6d6,transparent:true,opacity:.35});
+const ghost=new THREE.Mesh(new THREE.BoxGeometry(0.204,0.458,0.436),ghostM); // 46cm ATX ghost
+const human=new THREE.Mesh(new THREE.CapsuleGeometry(0.16,1.4,6,12),new THREE.MeshStandardMaterial({color:0x8247e5,transparent:true,opacity:.4}));
+const MODELS={ desk:buildDesk, mon:buildMonitor, chairD:()=>buildChair(false), chairG:()=>buildChair(true),
+               rack:buildRack, container:buildContainer, warehouse:buildWarehouse };
+const placed={};
+function placeAll(){
+  const defs=[['desk',0,0],['mon',0,0],['chairD',1.4,0.6],['chairG',2.2,0.6],['rack',3.4,0],['container',8,0],['warehouse',17.5,0]];
+  for(const [n,x,z] of defs){ if(placed[n]) continue;
+    const g=MODELS[n](); g.position.x=x; g.position.z=z; scene.add(g); placed[n]=g;
+    const bb=new THREE.Box3().setFromObject(g), s=new THREE.Vector3(); bb.getSize(s);
+    let tris=0; g.traverse(o=>{ if(o.isMesh) tris+=o.geometry.attributes.position.count/3; });
+    log(n.padEnd(10), 'size', s.x.toFixed(2)+'×'+s.y.toFixed(2)+'×'+s.z.toFixed(2)+'m', 'tris', tris|0); }
+  // context: monitor on the desk, case ghost + human for scale
+  placed.mon.position.set(0.245,0.7467,-0.156); placed.mon.rotation.y=-0.12;
+  ghost.position.set(-0.6,0.7467+0.229,0.08); scene.add(ghost);
+  human.position.set(-1.5,0.9,0.9); scene.add(human);
+}
+const FOCUS={ desk:[[2.6,1.8,2.8],[0,0.8,0]], mon:[[0.9,1.2,1.6],[0.2,0.8,0]],
+  chairD:[[3,1.2,2.2],[1.4,0.5,0.6]], chairG:[[3.8,1.2,2.2],[2.2,0.5,0.6]],
+  rack:[[5.2,1.6,1.8],[3.4,0.9,0]], container:[[8,2.2,-5.4],[8,1.2,0]], warehouse:[[17.5,3.2,-7.5],[17.5,1.5,0]],
+  all:[[10,7,14],[8,1,0]] };
+document.getElementById('ui').addEventListener('click',e=>{
+  const f=e.target.dataset&&e.target.dataset.f; if(!f) return;
+  const [cp,tp]=FOCUS[f]; cam.position.set(...cp); controls.target.set(...tp);
+});
+placeAll();
+cam.position.set(...FOCUS.all[0]); controls.target.set(...FOCUS.all[1]);
+(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene,cam); })();
+/* ================= export ================= */
+const exporter=new GLTFExporter();
+async function exportOne(name){
+  const g=MODELS[name]();
+  const buf=await new Promise((res,rej)=>exporter.parse(g,res,rej,{binary:true}));
+  const blob=new Blob([buf],{type:'model/gltf-binary'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=name==='mon'?'monitor.glb':name==='chairD'?'chair_desk.glb':name==='chairG'?'chair_gaming.glb':name==='rack'?'server_rack.glb':name+'.glb';
+  document.body.appendChild(a); a.click(); a.remove();
+  log('exported', a.download, (blob.size/1024).toFixed(1)+'KB');
+}
+window.__exportAll=async function(){
+  for(const n of Object.keys(MODELS)){ await exportOne(n); await new Promise(r=>setTimeout(r,400)); }
+  return 'done';
+};
+document.getElementById('exp').onclick=()=>window.__exportAll();
+window.__F={renderer,scene,cam,controls,THREE,MODELS,FOCUS,placed,human,ghost};
+log('factory ready —', Object.keys(MODELS).length, 'models');
+</script></body></html>

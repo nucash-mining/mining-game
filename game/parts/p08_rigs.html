@@ -17,17 +17,25 @@ function buildRigVis(i){
   // monitor — size selectable in 🔧 GARAGE (default 27", real diagonal ratios)
   const [mw,mh]=MONSIZES[S.monSize]||MONSIZES[27];
   const mon=new THREE.Group();
-  const scy=0.34+mh/2;
-  const scr=new THREE.Mesh(new THREE.PlaneGeometry(mw,mh), new THREE.MeshBasicMaterial({map:termTex}));
-  scr.position.y=scy; mon.add(scr);
-  const bez=new THREE.Mesh(new THREE.BoxGeometry(mw+0.08,mh+0.08,0.06),
-    new THREE.MeshStandardMaterial({color:0x0c0a1c,roughness:.4,metalness:.6}));
-  bez.position.set(0,scy,-0.035); mon.add(bez);
-  const stand=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.055,0.34,10),
-    new THREE.MeshStandardMaterial({color:0x1a1533,roughness:.5,metalness:.6}));
-  stand.position.y=0.18; mon.add(stand);
-  const foot=new THREE.Mesh(new THREE.BoxGeometry(Math.min(0.6,mw*0.4),0.03,0.3),
-    stand.material); foot.position.y=0.02; mon.add(foot);
+  if(PROTO.mon27){ // real GLB bezel/stand, SCREEN mesh carries the live terminal texture
+    const mm=instOf('mon27');
+    const scrM=mm.getObjectByName('SCREEN');
+    if(scrM) scrM.material=new THREE.MeshBasicMaterial({map:termTex});
+    mm.scale.set(2.25*mw/1.34, 2.25*mh/0.76, 2.25); // authored at 27"; stretch to the picked size
+    mon.add(mm);
+  } else { // procedural fallback
+    const scy=0.34+mh/2;
+    const scr=new THREE.Mesh(new THREE.PlaneGeometry(mw,mh), new THREE.MeshBasicMaterial({map:termTex}));
+    scr.position.y=scy; mon.add(scr);
+    const bez=new THREE.Mesh(new THREE.BoxGeometry(mw+0.08,mh+0.08,0.06),
+      new THREE.MeshStandardMaterial({color:0x0c0a1c,roughness:.4,metalness:.6}));
+    bez.position.set(0,scy,-0.035); mon.add(bez);
+    const stand=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.055,0.34,10),
+      new THREE.MeshStandardMaterial({color:0x1a1533,roughness:.5,metalness:.6}));
+    stand.position.y=0.18; mon.add(stand);
+    const foot=new THREE.Mesh(new THREE.BoxGeometry(Math.min(0.6,mw*0.4),0.03,0.3),
+      stand.material); foot.position.y=0.02; mon.add(foot);
+  }
   mon.position.set(0.55,DESK.SURF,-0.35); mon.rotation.y=-0.12; g.add(mon);
   // second monitor (LC23 peripheral) — left of the main screen
   if(S.periph[23]&&PROTO.lc23){ const m2=normalize(instOf('lc23'),0.68);
@@ -79,10 +87,9 @@ function buildRackRig(i,r,sx,sz,sy){
   g.add(pc);
   if(r.asic&&PROTO.asic){ const am=normalizeFit(instOf('asic'),0.6);
     am.position.set(0, sy+0.02, 0.75); am.rotation.y=0.3; g.add(am); }
-  if(r.gpus.length||r.cpu){
-    const glow=new THREE.PointLight(0x2ee6d6, 0.3+0.18*r.gpus.length, 1.8);
-    glow.position.set(0, sy+0.5, 0.3); g.add(glow);
-  }
+  /* no per-rig glow lights on racks: 24 extra PointLights would explode the
+     forward-render light loop (shader recompiles + fps collapse on big farms) —
+     the container/warehouse interior lights carry the look instead */
   const led=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.06,0.06),
     new THREE.MeshBasicMaterial({color:0x3dff8a}));
   led.position.set(0, sy+1.12, 0.6); g.add(led);
