@@ -3,26 +3,48 @@
    addresses into nftV2/wattV2 below. When WATTxchain launches, fill chainId+rpc. */
 const WEB3CFG={
   chains:{
-    /* rpc: polygon-rpc.com now 401s ("API key disabled"); drpc serves it free. */
+    /* rpc: polygon-rpc.com now 401s ("API key disabled"); drpc serves it free.
+       pools: null until deployments-pools-137.json lands (deployer needs POL). */
     polygon:{ key:'polygon', net:'polygon', chainId:137, hex:'0x89', name:'Polygon', rpc:'https://polygon.drpc.org', sym:'POL', dec:18, explorer:'https://polygonscan.com',
       nft:'0x970a8b10147e3459d3cbf56329b76ac18d329728', watt:'0xE960d5076cd3169C343Ee287A2c3380A222e5839', staking:'0xcbfcA68D10B2ec60a0FB2Bc58F7F0Bfd32CD5275',
-      nftV2:null, wattV2:null },
-    /* rpc: rpc0.altcoinchain.org is dead — rpc.wattxchange.app is the live node. */
+      nftV2:null, wattV2:null,
+      pools:{ registry:'0xCe347180C3A45151C10366Da43fD822289ebB075', hub:'0x6f8330bB06D93A8932618EC1Fbb2818323EC3bf5',
+              engine:'0x5e6997616c7c53e1E700a97BC9e42C22C4cDb0be', rigNft:'0xf9F94e9fa744DE1209EF28321604a0Aa3B21a884', stakingPool:'0x07ef3eCDB4e4fd9D914787031b6cB746340bF661', migrator:'0xf2DbF910aD1cA08c3879C72AE6277fA903E058c4' },
+      /* QuickSwap V2 — real WPOL/WATT pool 0xEC54584a…Bef. Sell POL→WATT native-in. */
+      dex:{ kind:'univ2', router:'0xa5E0829CaCED8fFDD4De3c43696c57F7D7A678ff', weth:'0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',
+            wattOut:'0xE960d5076cd3169C343Ee287A2c3380A222e5839' } },
+    /* rpc: rpc0.altcoinchain.org is dead — rpc.wattxchange.app is the live node.
+       pools: the ON-CHAIN pool-hosting set, deployed+verified 2026-08-09
+       (deployments-pools-2330.json). 100k WATT host stake lives in registry. */
     alt:{ key:'alt', net:'alt', chainId:2330, hex:'0x91a', name:'Altcoinchain', rpc:'https://rpc.wattxchange.app', sym:'ALT', dec:18, explorer:'https://explorer.altcoinchain.org',
       nft:'0xf9670e5D46834561813CA79854B3d7147BBbFfb2', watt:'0x6645143e49B3a15d8F205658903a55E520444698', staking:'0xe463045318393095F11ed39f1a98332aBCc1A7b1',
-      nftV2:null, wattV2:null },
-    /* WATTxchain. Chain id is ASSIGNED and final: 22356 mainnet (22357 testnet,
-       22358 regtest), matching the AuxPoW chain_id and the daemon's EVM adapter.
-       The native symbol is WTX -- WATT is the ERC20 game token, a different thing.
-       dec:18 is correct even though the WATTx EVM denominates msg.value in
-       satoshis internally: the RPC layer presents balances in 18 decimals and
-       divides an outgoing `value` by 1e10, so a wallet sees an ordinary
-       18-decimal chain. Only contract-side native constants are satoshi-scale.
-       Still prelaunch: no public RPC endpoint yet, and the game contracts are
-       deployed on regtest only. */
-    wattx:{ key:'wattx', net:'wattx', chainId:22356, hex:'0x5754', name:'WATTxchain', rpc:null, sym:'WTX', dec:18, explorer:null,
-      nft:null, watt:null, staking:null, nftV2:null, wattV2:null, prelaunch:true },
+      nftV2:null, wattV2:null,
+      pools:{ registry:'0x0f1e3C2336fBf35148FdbA21F81fA3B57a1DF254', hub:'0xfbc6168D4c4f112275713B976612891E432e265e',
+              engine:'0x7069E0498bFF3022CF65c7b7F3D0da366B930c74', rigNft:'0x131A875e1bfEB2B3735E5d9Ad5e8871fF6CE9381', stakingPool:'0x62fC935400104371777aD36B78CF73f2c48dcD24', migrator:'0xdB13ecc87960632b8aAe93640F246CdAE1675B78' },
+      /* SwapinDEX (original live venue) — WATT/wALT pool 0xb2F8e147…. Sell ALT→WATT native-in. */
+      dex:{ kind:'univ2', router:'0xae168Ce47cebca9abbC5107a58df0532f1afa4d6', weth:'0x48721ADeFE5b97101722c0866c2AffCE797C32b6',
+            wattOut:'0x6645143e49B3a15d8F205658903a55E520444698' } },
+    /* WATTxchain MAINNET — LIVE since 2026-08-01. Chain id 22356 (final,
+       matches the AuxPoW chain_id). Native coin is WTX; WATT is the ERC20 game
+       token (classic set, deployments-classic-wattx-22356.json). dec:18 is
+       correct even though the EVM is satoshi-scale internally: janus presents
+       18-decimal balances and divides outgoing value by 1e10.
+       pools: null until deployments-pools-22356.json lands. */
+    wattx:{ key:'wattx', net:'wattx', chainId:22356, hex:'0x5754', name:'WATTxchain', rpc:'https://rpc-wtx.wattxchange.app', sym:'WTX', dec:18, explorer:null,
+      nft:'0x566808D0747662d0a0eeC68A854b695C01BE76a6', watt:'0x99B5503c7144dcf241551aDabFbb58e88829BD3a', staking:'0xBDfdF71830f6FC0C1de4f983EC774d03Aa006474',
+      nftV2:null, wattV2:null,
+      pools:{ registry:'0x3a02971ceAF9B817e770c36e393A95542bC65Df2', hub:'0x9fAb0fBa9b458A7A0c9D60a26BC33f6E2695F179',
+              engine:'0xb38e119a70F621bf080F51e2A436bEBc248cc0Dc', rigNft:'0x5f9be9282E29fCE419cE2e424ED3fd0be842C7e7', stakingPool:'0x0176566fe72E5733008Bfc68439FB2F3Eb43901B', migrator:'0x2301Fc735d7770f955c47B21d0FE2a66E3A195f9' } },
   },
+  /* PayoutHub target ids, in deploy-script registration order (identical on
+     every chain because the same script registers the same list). */
+  targets:[
+    {id:0, sym:'ALT', name:'Altcoinchain'},
+    {id:1, sym:'WTX', name:'WATTxchain'},
+    {id:2, sym:'POL', name:'Polygon'},
+    {id:3, sym:'BSV', name:'WATT on BSV'},
+    {id:4, sym:'HTH', name:'HTH masternode'},
+  ],
   sel:{ bal1155:'0x00fdd58e', balErc20:'0x70a08231', freemint:'0xaf2de086', rates:'0xdd418ae2', rewards:'0xe8a31bdc' },
   ids:[1,2,3,4,5], // minted V1 token ids
 };
@@ -124,21 +146,29 @@ function renderWallet(){
   const c=W3.chain;
   const chainPills=Object.values(WEB3CFG.chains).map(ch=>{
     const on=c&&c.key===ch.key;
-    return `<button class="w3chip ${on?'on':''} ${ch.prelaunch?'pre':''}" data-chain="${ch.key}">${ch.key==='polygon'?'🟣':ch.key==='alt'?'🟠':'🔌'} ${ch.name}${ch.prelaunch?' <small>PRE-LAUNCH</small>':''}</button>`;
+    return `<button class="w3chip ${on?'on':''} ${ch.prelaunch?'pre':''}" data-chain="${ch.key}">${ch.key==='polygon'?'🟣':ch.key==='alt'?'🟠':'⚡'} ${ch.name}${ch.prelaunch?' <small>PRE-LAUNCH</small>':''}</button>`;
   }).join('');
+  /* Prominent DEMO/LIVE switch — the same toggle as the HUD pill, surfaced here
+     where players come to connect a wallet for Live mode. Inline onclick so it
+     survives the early-return branches below. */
+  const live=(typeof isLive==='function')&&isLive();
+  const modeBar=`<div style="display:flex;gap:6px;margin-bottom:12px;padding:4px;background:rgba(10,8,26,.6);border:1px solid var(--line);border-radius:12px">
+    <button onclick="setMode('demo')" class="hbtn" style="flex:1;text-align:center;${!live?'background:linear-gradient(90deg,var(--pur),#5f2ec7);color:#fff;border-color:transparent':''}">🎮 DEMO</button>
+    <button onclick="setMode('live')" class="hbtn" style="flex:1;text-align:center;${live?'background:rgba(61,255,138,.18);color:var(--grn);border-color:#3dff8a':''}">🔗 LIVE</button>
+  </div>`;
   if(!w3Has()){
-    m.innerHTML=`<div class="w3note">No browser wallet detected. Install <b>MetaMask</b> (or any EIP-1193 wallet) and reload — the game connects to the real Mining Game contracts on Polygon & Altcoinchain. The full game works without one; on-chain sync is a bonus layer.</div>`;
+    m.innerHTML=`${modeBar}<div class="w3note">No browser wallet detected. Install <b>MetaMask</b> (or any EIP-1193 wallet) and reload — the game connects to the real Mining Game contracts on Polygon & Altcoinchain. The full game works without one; on-chain sync is a bonus layer.</div>`;
     return;
   }
   if(!W3.addr){
-    m.innerHTML=`<div class="w3note">Connect to sync your real Mining Game NFTs — owned components unlock in-game, balances show live, and you can free-mint the Gaming PC on-chain.</div>
+    m.innerHTML=`${modeBar}<div class="w3note">Connect to sync your real Mining Game NFTs — owned components unlock in-game, balances show live, and you can free-mint the Gaming PC on-chain.</div>
       <button class="hbtn gold" id="w3-connect" style="width:100%">${W3.busy?'CONNECTING…':'🦊 CONNECT WALLET'}</button>
       ${W3.err?`<div class="w3err">${W3.err}</div>`:''}`;
     $('w3-connect')?.addEventListener('click',w3Connect);
     return;
   }
   const v=(x,f)=>x===null?'<span class="w3dim">…</span>':f;
-  m.innerHTML=`
+  m.innerHTML=`${modeBar}
     <div class="w3addr">${W3.addr} ${c?`· <b style="color:var(--grn)">${c.name}</b>`:'· <b style="color:var(--red)">unsupported chain ('+W3.chainId+')</b>'}</div>
     <div class="w3chips">${chainPills}</div>
     ${c?`<div class="stats2" style="margin:10px 0">

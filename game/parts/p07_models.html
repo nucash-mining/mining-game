@@ -224,7 +224,8 @@ const ORD_GATEWAYS = ['https://ordinals.gorillapool.io/content/','https://ordfs.
    gateways are unreachable the game still starts. */
 function assetURLs(f){
   const o=BSV_ORIGIN[f];
-  return (o?ORD_GATEWAYS.map(g=>g+o):[]).concat(['/'+f]);
+  /* relative, not root-absolute: the game also mounts at /mining-game/ on wattxchange.app */
+  return (o?ORD_GATEWAYS.map(g=>g+o):[]).concat(['./'+f]);
 }
 async function loadGLB(f){
   let last;

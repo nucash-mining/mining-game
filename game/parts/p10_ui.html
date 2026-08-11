@@ -25,16 +25,28 @@ function renderHud(){
   pw.className='pr '+(S.price.wtx>=CFG.nets.wattx.p0?'up':'dn');
   /* SELL sells the WHOLE balance, so dim it at zero and say so on hover —
      it used to look identical whether or not you had anything to sell. */
+  const liveMode=S.mode==='live';
   ['pol','alt','wtx'].forEach(cn=>{
     const b=$('sell-'+cn); if(!b) return;
-    const bal=S[cn], live=bal>0.001;
-    b.disabled=!live;
-    b.title=live?`Sell all ${fmt(bal)} ${cn.toUpperCase()} → +${fmt(bal*S.price[cn])} ⚡WATT`
-                :`No ${cn.toUpperCase()} to sell — mine some first`;
+    const bal=S[cn], has=bal>0.001;
+    /* LIVE mode sells the wallet's real coin via a DEX swap, so don't gate on the
+       sim balance — onchainSell validates against the on-chain wallet instead. */
+    b.disabled=liveMode?false:!has;
+    b.title=liveMode
+      ? `LIVE — swap your wallet ${cn.toUpperCase()} → WATT through the real on-chain pool`
+      : (has?`Sell all ${fmt(bal)} ${cn.toUpperCase()} → +${fmt(bal*S.price[cn])} ⚡WATT`
+             :`No ${cn.toUpperCase()} to sell — mine some first`);
   });
   $('v-usdt').textContent=fmt(S.usdt); $('v-dai').textContent=fmt(S.dai);
   $('coin-usdt').style.display=S.usdt>0.005?'flex':'none';
   $('coin-dai').style.display=S.dai>0.005?'flex':'none';
+  const mp=$('modepill');
+  if(mp){ const live=S.mode==='live';
+    mp.textContent=live?'🔗 LIVE':'🎮 DEMO';
+    mp.classList.toggle('gold',live);
+    mp.style.color=live?'var(--grn)':'';
+    mp.title=live?'LIVE — sells are real DEX swaps, mining is on-chain. Click for DEMO.':'DEMO — simulated economy. Click for LIVE (real contracts).';
+  }
   const fs=farmStatus();
   $('farmpill').style.display=fs==='GARAGE'?'none':'flex';
   $('farmtier').textContent=fs;
@@ -269,4 +281,24 @@ function showTut(){
 function shareX(){
   const txt=`I'm running ${S.rigs.length} rig${S.rigs.length>1?'s':''} at ${fmt(totHash())} hash in The Mining Game: WATT Tycoon ⛏⚡ ${fmtInt(S.blocks)} blocks mined on Polygon + Altcoinchain. Beat my garage:`;
   open('https://x.com/intent/post?text='+encodeURIComponent(txt+' https://mining-game.games.bu.app/'),'_blank');
+}
+/* ---------- PWA: install-to-computer + offline shell ---------- */
+/* Only meaningful when served over http(s) with manifest.webmanifest + sw.js
+   beside the HTML (the /mining-game/ mount on wattxchange.app does this).
+   Straight from the repo or file:// everything here degrades to a no-op. */
+let _installEv=null;
+addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault(); _installEv=e;
+  if($('pwa-install')) return;
+  const b=document.createElement('button');
+  b.id='pwa-install'; b.textContent='⬇ INSTALL APP';
+  b.style.cssText='position:fixed;right:12px;bottom:12px;z-index:60;background:#151b26;color:#ffb145;border:1px solid #ffb14577;border-radius:8px;padding:8px 12px;font:600 11px monospace;cursor:pointer';
+  b.onclick=async()=>{ if(!_installEv) return; _installEv.prompt();
+    const r=await _installEv.userChoice.catch(()=>null);
+    if(r&&r.outcome==='accepted'){ toast('⬇ Installed — The Mining Game now opens as its own app','gold',8000); b.remove(); _installEv=null; } };
+  document.body.appendChild(b);
+});
+addEventListener('appinstalled',()=>{ const b=$('pwa-install'); if(b) b.remove(); _installEv=null; });
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  navigator.serviceWorker.register('sw.js',{scope:'./'}).catch(()=>{});
 }

@@ -63,9 +63,21 @@ const CFG = {
   shopStakeNPC: 150000,                           // sim stakers sharing the rewards pool
   shopStakeRate: 0.012,                           // pool % paid out per minute (pro-rata)
   nets:{
-    polygon:{name:'Polygon', coin:'pol', sym:'POL', color:0x8247e5, lam:0.007, reward:3.0, p0:10, vol:0.035, pmin:4, pmax:22},
-    alt:    {name:'Altcoinchain', coin:'alt', sym:'ALT', color:0xffb020, lam:0.004, reward:2.2, p0:25, vol:0.10, pmin:5, pmax:95},
-    wattx:  {name:'WATTxchain', coin:'wtx', sym:'WTX', color:0xffd23f, lam:0.0055, reward:5.0, p0:2.0, vol:0.05, pmin:0.6, pmax:9, sim:true},
+    /* reward = per-block coin an NFT miner competes for. Real economics:
+       - Polygon has no minable blocks for participants (no validator) → swapOnly:
+         you earn WATT and swap to POL, never "mine" POL.
+       - Altcoinchain (Fusaka hybrid) pays 1 ALT PoW + 1 ALT PoS/block; hardware
+         miners take PoW, NFT miners take the PoS half via the validator.
+       - WATTxchain pays via a dedicated validator (100k WTX staked) — gated until
+         that validator exists.
+       In LIVE mode these flags gate the sim; real earning runs through the
+       on-chain Pool Hub + PayoutHub, not this loop. */
+    polygon:{name:'Polygon', coin:'pol', sym:'POL', color:0x8247e5, lam:0.007, reward:3.0, p0:10, vol:0.035, pmin:4, pmax:22, swapOnly:true},
+    alt:    {name:'Altcoinchain', coin:'alt', sym:'ALT', color:0xffb020, lam:0.004, reward:2.0, pow:1.0, pos:1.0, p0:25, vol:0.10, pmin:5, pmax:95, validator:'Mining-Game_nucash-validator'},
+    wattx:  {name:'WATTxchain', coin:'wtx', sym:'WTX', color:0xffd23f, lam:0.0055, reward:5.0, p0:2.0, vol:0.05, pmin:0.6, pmax:9, sim:true, needsValidator:true,
+      /* until the dedicated 100k-WTX validator exists, this superstaker's real
+         PoS rewards feed the PayoutHub and are divided among NFT miners */
+      superValidator:'WkSV3Gkgdrg9dgRApNYiZttFtfy7xB4Tsr'},
   },
   poolHostWatt:100000, poolHostCoin:100000, hostBurnCut:0.01,
   altHybridBlock:7000000, valNodeAlt:32, altNetStake:40000, altBlockRate:0.62,
@@ -93,10 +105,10 @@ const now=()=>Date.now();
 let S=null;
 function freshState(){ const inv={},bought={2:0,17:0,18:0,19:0,23:0}; INV_IDS.forEach(i=>{inv[i]=0;bought[i]=0;}); return {
   watt:CFG.startWatt, lifeWatt:0, pol:0, alt:0, wtx:0, price:{pol:CFG.nets.polygon.p0, alt:CFG.nets.alt.p0, wtx:CFG.nets.wattx.p0},
-  net:'polygon', rigs:[], inv, badge:0, bought, pcCount:0, periph:{17:0,18:0,23:0}, tower:0,
+  net:'polygon', rigs:[], inv, badge:0, bought, pcCount:0, periph:{17:0,18:0,23:0}, tower:0, payoutAddr:null,
   upg:{power:0,cooling:0,rack:0}, gen:1, blocks:0, blocksNet:{pol:0,alt:0,wtx:0}, lucky:0,
   temp:24, muted:false, tut:0, created:now(), lastSeen:now(), sold:{pol:0,alt:0,wtx:0}, netSwitchT:0,
-  payCur:'watt', w3claim:{}, monSize:27, chair:0,
+  payCur:'watt', w3claim:{}, ocRigs:[], mode:'demo', monSize:27, chair:0,
   usdt:0, dai:0, containers:0, warehouse:0,
   stakedWatt:0, shopPool:25000, shopEarned:0,
   pool:{pol:'nucash',alt:'nucash',wtx:'genesis'}, myPools:{}, pend:{pol:0,alt:0,wtx:0}, payThresh:3,
@@ -136,7 +148,8 @@ function rigHash(r){ if(r.crashT>0||!r.on||r.wear>=100) return 0;
 function rigWatt(r){ if(!r.on) return 0; let w=ITEMS[1].watt; if(r.cpu) w+=ITEMS[r.cpu].watt; if(r.asic) w+=ITEMS[r.asic].watt; for(const g of r.gpus) w+=ITEMS[g].watt;
   return (r.crashT>0||r.wear>=100) ? w*0.25 : w*ocWattMult(r); }
 function rigSW(r){ let s=ITEMS[1].sw; if(r.cpu) s+=ITEMS[r.cpu].sw; if(r.asic) s+=ITEMS[r.asic].sw; if(r.frame) s+=ITEMS[14].sw; for(const g of r.gpus) s+=ITEMS[g].sw; return s; }
-function gpuCap(r){ return r.frame?4:2; }
+/* frame = open-air rack: 4-wide rows on BOTH rails (bottom + top) = 8 cards */
+function gpuCap(r){ return r.frame?8:2; }
 function totHash(){ return S.rigs.reduce((a,r)=>a+rigHash(r),0) * Math.pow(CFG.gen2Mult,S.gen-1); }
 function totWatt(){ return S.rigs.reduce((a,r)=>a+rigWatt(r),0); }
 function totSW(){ return S.rigs.reduce((a,r)=>a+rigSW(r),0) + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }

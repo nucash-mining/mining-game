@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>The Mining Game — WATT Tycoon</title>
 <meta name="description" content="3D crypto-mining simulator built on the real Mining Game NFTs. Mint rigs, install GPUs, burn WATT, mine blocks on Polygon and Altcoinchain.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a0e14">
 <meta property="og:title" content="The Mining Game — WATT Tycoon">
 <meta property="og:description" content="Build 3D mining rigs from real Mining Game NFT hardware. WATT is electricity. Blocks are money. How big can your garage get?">
 <meta property="og:image" content="https://mining-game.games.bu.app/og.png">
@@ -37,7 +39,10 @@ button{font-family:inherit;cursor:pointer}
 .stat .col{display:flex;flex-direction:column;line-height:1.15}
 #s-watt b{color:var(--gold)} #s-hash b{color:var(--cyan)} #s-pow b{color:#b7a6ff}
 #s-temp b{color:var(--grn)} #s-temp.hot b{color:#ffae42} #s-temp.crit b{color:var(--red)}
-#hudbtns{margin-left:auto;display:flex;gap:6px}
+#hudbtns{margin-left:auto;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
+/* DEMO / LIVE toggle pill — deliberately distinct from the grey action buttons */
+#modepill{border-color:#3dff8a55;background:rgba(61,255,138,.08);color:var(--grn);font-weight:800;letter-spacing:.06em}
+#modepill.gold{border-color:#3dff8a;background:rgba(61,255,138,.16);box-shadow:0 0 12px rgba(61,255,138,.35)}
 .hbtn{background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 12px;font-size:12.5px;font-weight:600;letter-spacing:.04em;transition:all .15s}
 .hbtn:hover{border-color:var(--pur);background:var(--panel2);transform:translateY(-1px)}
 .hbtn.gold{color:var(--gold)} .hbtn.accent{color:var(--cyan)}

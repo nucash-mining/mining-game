@@ -75,6 +75,7 @@ $('b-shop').onclick=()=>{ openModal('m-shop'); renderShop(); if(S.tut===2){S.tut
 $('b-upg').onclick=()=>{ openModal('m-upg'); renderUpg(); };
 $('b-stats').onclick=()=>{ openModal('m-stats'); renderStats(); };
 $('b-mute').onclick=()=>setMuted(!S.muted);
+$('modepill').onclick=()=>toggleMode();
 $('net').onclick=switchNet;
 $('sell-pol').onclick=()=>sellCoin('pol');
 $('sell-alt').onclick=()=>sellCoin('alt');
@@ -130,7 +131,8 @@ function walkStop(){ WALK.f=WALK.b=WALK.l=WALK.r=0; walkVel.set(0,0,0); }
 addEventListener('blur',walkStop);
 function tickWalk(dt){
   const blocked=walkBlocked();
-  if(blocked){ if(WALK.f||WALK.b||WALK.l||WALK.r) walkStop(); walkVel.multiplyScalar(0); return; }
+  if(blocked){ if(WALK.f||WALK.b||WALK.l||WALK.r) walkStop(); walkVel.multiplyScalar(0);
+    if(LOOK.on&&document.exitPointerLock) document.exitPointerLock(); return; }
   // camera-relative basis, flattened onto the floor plane
   const fwd=new THREE.Vector3(); cam.getWorldDirection(fwd); fwd.y=0;
   if(fwd.lengthSq()<1e-6) fwd.set(0,0,-1); else fwd.normalize();
@@ -152,6 +154,33 @@ function tickWalk(dt){
   controls.target.x+=dx; controls.target.z+=dz;
   if(!WALK.on){ WALK.on=true; const h=$('ctrlhint'); if(h) setTimeout(()=>h.classList.add('gone'),2500); }
 }
+/* ---------- free look: F captures the cursor, moving the mouse looks around ----------
+   Pointer lock only. OrbitControls is disabled while locked so the two schemes never
+   fight; the walk controller is untouched — it already derives its basis from the
+   camera's world direction, so walking follows wherever the mouse points. The look
+   pivots controls.target AROUND the camera (radius preserved), which keeps zoom and
+   the orbit framing exactly as they were on release. */
+const LOOK={on:false,minPhi:0.15,maxPhi:Math.PI-0.15,sens:0.0024};
+function lookToggle(){
+  if(document.pointerLockElement){ document.exitPointerLock(); return; }
+  if(walkBlocked()) return;
+  const cv=renderer.domElement;
+  if(cv.requestPointerLock) cv.requestPointerLock();
+}
+document.addEventListener('pointerlockchange',()=>{
+  LOOK.on=document.pointerLockElement===renderer.domElement;
+  if(typeof controls!=='undefined') controls.enabled=!LOOK.on;
+  toast(LOOK.on?'👁 FREE LOOK — mouse looks, WASD/X walks, F or Esc releases':'👁 free look off — drag to orbit', 'cyan');
+});
+document.addEventListener('mousemove',e=>{
+  if(!LOOK.on||walkBlocked()) return;
+  const dir=new THREE.Vector3().subVectors(controls.target,cam.position);
+  const sph=new THREE.Spherical().setFromVector3(dir);
+  sph.theta-=e.movementX*LOOK.sens;
+  sph.phi=Math.min(LOOK.maxPhi,Math.max(LOOK.minPhi,sph.phi+e.movementY*LOOK.sens));
+  sph.makeSafe();
+  controls.target.copy(cam.position).add(dir.setFromSpherical(sph));
+});
 /* ---------- menu hotkeys (number row — the letters belong to movement now) ---------- */
 addEventListener('keydown',e=>{
   if(e.target.matches('input,textarea,select')) return;
@@ -162,6 +191,7 @@ addEventListener('keydown',e=>{
   if(e.key==='3'){ openPoolHub(); walkStop(); }
   if(e.key==='4'){ openModal('m-stats'); renderStats(); walkStop(); }
   if(e.key==='5'){ openModal('m-web3'); renderWallet(); walkStop(); }
+  if(e.key==='f'||e.key==='F') lookToggle();
   if(e.key==='n'||e.key==='N') switchNet();
   if(e.key==='o'||e.key==='O'){ if(S&&S.rigs.length) openOS(selRig>=0?selRig:0); }
   if(e.key==='b'||e.key==='B'){ if(benchOpen) closeBench(); else if(S&&S.rigs.length) openBench(selRig>=0?selRig:0); }
@@ -186,8 +216,22 @@ function frame(t){
   if(badgeHolo&&badgeHolo.visible) badgeHolo.rotation.y+=dt*0.5;
   // led colors + gentle gpu hover
   const ledc=noWatt?0xff4d5e:(heatFactor()<1||powerFactor()<1)?0xffae42:0x3dff8a;
-  rigVis.forEach(rv=>{ if(rv){ rv.led.material.color.setHex(ledc);
-    rv.led.material.opacity=1; }});
+  const ptF=t/1000;
+  rigVis.forEach((rv,ri)=>{ if(!rv) return;
+    rv.led.material.color.setHex(ledc); rv.led.material.opacity=1;
+    // RGB cooling fans: spin faster when the rig is powered on/mining, and
+    // cycle hue along the row so the bank shimmers like real ARGB fans.
+    if(rv.fans&&rv.fans.length){
+      const on=S.rigs[ri]&&S.rigs[ri].on!==0 && !noWatt;
+      const spin=(on?9:1.2)*dt;
+      rv.fans.forEach((fan,fi)=>{
+        if(fan.userData.blades) fan.userData.blades.rotation.z+=spin;
+        const m=fan.userData.rgb;
+        if(m){ const hue=(ptF*0.18 + fi*0.14 + ri*0.05)%1;
+          m.emissive.setHSL(hue,1,0.55); m.emissiveIntensity=on?1.5:0.7; }
+      });
+    }
+  });
   // rings pulse
   const pt=t/1000;
   rings.forEach((rg,i)=>{ if(!rg||!rg.visible) return;
@@ -237,7 +281,7 @@ async function init(){
   if(TRAILER){ $('splash').style.display='none'; trailerSetup(); }
   window.MG={ get S(){return S;}, tick:s=>{for(let i=0;i<s*10;i++)simTick(SIMDT);renderHud();},
     give:w=>{S.watt+=w;renderHud();}, save, mintPC, buyItem, installPart, forceBlock, cam, controls, scene, THREE,
-    openOS, closeOS, setOC, rebootRig, openBench, closeBench, W3, WEB3CFG, w3Connect, w3Refresh,
+    openOS, closeOS, setOC, setRigNet, rebootRig, openBench, closeBench, W3, WEB3CFG, w3Connect, w3Refresh,
     joinPool, hostPool, closePool, buyValidator, exitValidators, repairRig, togglePower, openPoolHub, switchNet, POOLS,
     stakeShop, unstakeShop, buildFarm, sitDown, standUp, eligibleSlots, farmStatus,
     WALK, tickWalk, walkStop, walkBlocked,

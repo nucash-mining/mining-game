@@ -53,9 +53,13 @@ const SLOT_Y=0.32;
 function benchSlotDefs(r){
   const defs=[];
   defs.push({kind:'cpu', x:-0.28, z:-0.52, y:0.46, label:'CPU SOCKET', filled:!!r.cpu});
-  const cap=gpuCap(r);
-  for(let k=0;k<cap;k++)
+  const cap=gpuCap(r), onBoard=Math.min(cap,4);
+  for(let k=0;k<onBoard;k++)
     defs.push({kind:'gpu', idx:k, x:0, z:0.12+k*0.26, label:'PCIe x16 · '+(k+1), filled:!!r.gpus[k]});
+  /* frame owned: GPUs 5-8 hang on the open-air rack via PCI-e risers */
+  for(let k=onBoard;k<cap;k++)
+    defs.push({kind:'gpu', idx:k, floor:true, x:2.15+((k-4)%2)*0.8, z:0.6+Math.floor((k-4)/2)*0.6,
+      label:'RACK RISER · '+(k-3), filled:!!r.gpus[k]});
   defs.push({kind:'asic', x:-2.6, z:0.4, floor:true, label:'FLOOR PAD', filled:!!r.asic});
   defs.push({kind:'frame', x:2.6, z:0.4, floor:true, label:'RACK ZONE', filled:!!r.frame});
   return defs;
@@ -111,7 +115,30 @@ function benchSync(){
   const r2=S.rigs[benchRi];
   if(r2.cpu){ const m=benchCompMesh('cpu',r2.cpu); m.position.set(-0.28,0.42,-0.52); bMountG.add(m); }
   r2.gpus.forEach((gid,k)=>{
-    const m=benchCompMesh('gpu',gid); m.position.set(0,SLOT_Y+0.06,0.12+k*0.26); bMountG.add(m);
+    if(k<4){
+      /* FASTENED into the PCIe slot: card stands perpendicular to the board,
+         edge connector seated IN the slot (no float gap). */
+      const m=benchCompMesh('gpu',gid);
+      const bb=new THREE.Box3().setFromObject(m); const sz=new THREE.Vector3(); bb.getSize(sz);
+      m.rotation.x=-Math.PI/2;                       // stand the card up, connector down
+      m.position.set(0, SLOT_Y-0.03+sz.z/2, 0.12+k*0.26);
+      bMountG.add(m);
+    } else {
+      /* overflow cards live on the open-air rack, wired back with risers */
+      const col=(k-4)%2, lvl=Math.floor((k-4)/2);
+      const rg=new THREE.Group(); rg.position.set(2.75,0,-0.3); rg.rotation.y=-0.55;
+      const m=benchCompMesh('gpu',gid); m.scale.multiplyScalar(0.48);   // fit the 1.7u frame
+      m.position.set(-0.4+col*0.8, 0.32+lvl*0.55, 0.25);
+      rg.add(m); bScene.add(rg); bSceneBits.push(rg);
+      /* PCI-e riser cable: card -> board edge, sagging between */
+      rg.updateMatrixWorld(true);
+      const from=m.getWorldPosition(new THREE.Vector3()); from.y+=0.1;
+      const to=bBoardG.localToWorld(new THREE.Vector3(0.72, SLOT_Y, 0.3+((k-4)*0.14)));
+      const mid=new THREE.Vector3((from.x+to.x)/2, Math.min(from.y,to.y)-0.35, (from.z+to.z)/2+0.15);
+      const cable=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([from,mid,to]),16,0.02,5),
+        new THREE.MeshStandardMaterial({color:0x131628,roughness:.55,metalness:.35}));
+      bScene.add(cable); bSceneBits.push(cable);
+    }
   });
   if(r2.asic){ const m=benchCompMesh('asic',0); m.position.set(-2.6,0,0.4); m.rotation.y=0.7; bScene.add(m); bSceneBits.push(m); }
   if(r2.frame){ const m=benchCompMesh('frame',0); m.position.set(2.75,0,-0.3); m.rotation.y=-0.55; bScene.add(m); bSceneBits.push(m); }

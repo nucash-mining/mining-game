@@ -46,30 +46,45 @@ function simTick(dt){ // dt seconds (fixed 0.1)
   const hostFree=P&&P.mine; // mining on own hosted pool = free power
   const need=hostFree?0:draw*CFG.consumePerWatt*effMult()*dt;
   noWatt = S.watt<need;
-  if(!noWatt && S.rigs.length){
+  /* LIVE mode: the simulated block loop must NOT credit fake coins. Real earning
+     comes from the on-chain Pool Hub (startMining on the real engine → PayoutHub
+     → operator daemon pays real coin). So run the sim earning only in DEMO. */
+  const simEarn = !(typeof isLive==='function' && isLive());
+  if(simEarn && !noWatt && S.rigs.length){
     S.watt-=need;
     if(need>0){ S.burned+=need*(1-CFG.hostBurnCut); } // 1% of burn goes to pool host, rest → 0x000…dEaD
     const hf=heatFactor(), pf=powerFactor();
     const spd=P?P.speed:1, fee=P?P.fee:0;
-    const lam=totHash()*net.lam*hf*pf*luckMult()/difficulty()*spd*(S.altHybrid&&S.net==='alt'?0.5:1);
-    if(Math.random()<lam*dt){
-      // share / block found!
-      const lucky=Math.random()<CFG.luckyChance*luckMult();
-      const amt=(net.reward/spd)*(1-fee)*(lucky?CFG.luckyMult:1)*(0.85+Math.random()*0.3);
-      poolCredit(net.coin, amt, P); S.blocks++; S.blocksNet[net.coin]++; S.shares++;
-      if(lucky) S.lucky++;
-      const ri=Math.floor(Math.random()*S.rigs.length);
-      const rv=rigVis[ri];
-      if(rv){
-        const pos=new THREE.Vector3(SLOTS[S.rigs[ri].slot][0],2.2,SLOTS[S.rigs[ri].slot][1]);
-        burst(pos, lucky?46:16, lucky?partMatGold:(S.net==='polygon'?partMatPur:partMatGold), lucky?4:2.6);
-        floatLabel(pos, `+${amt.toFixed(2)} ${net.sym}${lucky?' ✨LUCKY':''}`, lucky?'#ffd23f':(S.net==='polygon'?'#c9a6ff':'#ffce7a'), lucky);
+    /* Per-rig algorithm (2026-08-11): each rig mines the chain IT selected
+       (r.net, set in its Mining Game OS), falling back to the global HUD
+       selector. Hash is pooled per chain and each chain rolls its own block. */
+    const g2=Math.pow(CFG.gen2Mult,S.gen-1);
+    const byNet={};
+    S.rigs.forEach((r,ri)=>{ const nk=CFG.nets[r.net]?r.net:S.net;
+      (byNet[nk]??={hash:0,rigs:[]}); byNet[nk].hash+=rigHash(r)*g2; byNet[nk].rigs.push(ri); });
+    for(const nk in byNet){
+      const nx=CFG.nets[nk];
+      const lam=byNet[nk].hash*nx.lam*hf*pf*luckMult()/difficulty()*spd*(S.altHybrid&&nk==='alt'?0.5:1);
+      if(Math.random()<lam*dt){
+        // share / block found on this chain!
+        const lucky=Math.random()<CFG.luckyChance*luckMult();
+        const amt=(nx.reward/spd)*(1-fee)*(lucky?CFG.luckyMult:1)*(0.85+Math.random()*0.3);
+        poolCredit(nx.coin, amt, P); S.blocks++; S.blocksNet[nx.coin]++; S.shares++;
+        if(lucky) S.lucky++;
+        const list=byNet[nk].rigs;
+        const ri=list[Math.floor(Math.random()*list.length)];
+        const rv=rigVis[ri];
+        if(rv){
+          const pos=new THREE.Vector3(SLOTS[S.rigs[ri].slot][0],2.2,SLOTS[S.rigs[ri].slot][1]);
+          burst(pos, lucky?46:16, lucky?partMatGold:(nk==='polygon'?partMatPur:partMatGold), lucky?4:2.6);
+          floatLabel(pos, `+${amt.toFixed(2)} ${nx.sym}${lucky?' ✨LUCKY':''}`, lucky?'#ffd23f':(nk==='polygon'?'#c9a6ff':'#ffce7a'), lucky);
+        }
+        lastBlocksFeed.push({txt:`#${S.blocks} +${amt.toFixed(2)} ${nx.sym}${lucky?' LUCKY x5':''}`, lucky});
+        if(lastBlocksFeed.length>8) lastBlocksFeed.shift();
+        lucky?SFX.lucky():SFX.block();
+        if(lucky) toast(`✨ LUCKY BLOCK! +${amt.toFixed(2)} ${nx.sym} (x${CFG.luckyMult})`,'gold');
+        renderHud();
       }
-      lastBlocksFeed.push({txt:`#${S.blocks} +${amt.toFixed(2)} ${net.sym}${lucky?' LUCKY x5':''}`, lucky});
-      if(lastBlocksFeed.length>8) lastBlocksFeed.shift();
-      lucky?SFX.lucky():SFX.block();
-      if(lucky) toast(`✨ LUCKY BLOCK! +${amt.toFixed(2)} ${net.sym} (x${CFG.luckyMult})`,'gold');
-      renderHud();
     }
   }
   poolTick(dt);
@@ -80,6 +95,18 @@ function simTick(dt){ // dt seconds (fixed 0.1)
 function sellCoin(cn, amt, recv){
   amt = amt===undefined ? S[cn] : Math.min(amt, S[cn]);
   if(amt<=0.001){ SFX.err(); return false; }
+  /* LIVE mode: sell is a REAL DEX swap of the player's wallet coin -> WATT.
+     It operates on the on-chain wallet balance, not the sim S[cn] counter, so
+     ask how much wallet coin to swap (never dump the whole native balance —
+     that would strand gas) and hand off to onchainSell. */
+  if(typeof isLive==='function' && isLive() && (recv===undefined||recv==='watt') && dexChainForCoin(cn)){
+    const sym=cn.toUpperCase();
+    const raw=prompt(`LIVE swap — how much ${sym} to sell for WATT?\n(from your connected wallet, leaves gas)`, '');
+    if(raw===null) return false;
+    const a=parseFloat(raw);
+    if(!(a>0)){ SFX.err(); toast('Enter a positive amount','red'); return false; }
+    onchainSell(cn, a); return true;
+  }
   const val=amt*S.price[cn];
   S[cn]-=amt; S.sold[cn]+=val;
   if(recv==='usdt'){ S.usdt+=val; toast(`Swapped ${fmt(amt)} ${cn.toUpperCase()} → +${fmt(val)} USDT`,'grn'); }
@@ -93,6 +120,15 @@ function setOC(ri,c,m){
   r.oc={c:clamp(c,0,5), m:clamp(m,0,5)};
   SFX.install(); renderHud(); save();
 }
+/* per-rig algorithm: 'alt' | 'wattx' | null (null = follow the global HUD selector) */
+function setRigNet(ri,nk){
+  const r=S.rigs[ri]; if(!r) return;
+  if(nk&&!CFG.nets[nk]) return;
+  r.net=nk||null; SFX.swap();
+  const nx=nk?CFG.nets[nk]:null;
+  toast(nx?`⛏ Rig ${ri+1} now mining ${nx.name} — ${nx.reward} ${nx.sym}/block`:`⛏ Rig ${ri+1} follows the global network selector`, 'cyan');
+  renderHud(); save();
+}
 function rebootRig(ri){
   const r=S.rigs[ri]; if(!r||r.crashT<=0) return;
   r.crashT=0; SFX.swap();
@@ -105,17 +141,25 @@ function applyOffline(){
   if(el<60) return;
   const capped=Math.min(el, CFG.offlineCapH*3600);
   const stakeIn=totSWStake()*CFG.stakePerSW*stakeMult()*capped*CFG.offlineEff;
-  // mining estimate: expected blocks × reward, limited by watt budget
+  // mining estimate: expected blocks × reward per rig-selected chain, limited by watt budget
   const draw=totWatt()*CFG.consumePerWatt*effMult();
   const sec=Math.min(capped, draw>0 ? S.watt/draw : capped);
-  const net=CFG.nets[S.net];
-  const lam=totHash()*net.lam*powerFactor()*luckMult()/difficulty();
-  const blocks=Math.floor(lam*sec*CFG.offlineEff);
-  const coins=blocks*net.reward;
+  const g2=Math.pow(CFG.gen2Mult,S.gen-1);
+  const byNet={};
+  S.rigs.forEach(r=>{ const nk=CFG.nets[r.net]?r.net:S.net; byNet[nk]=(byNet[nk]||0)+rigHash(r)*g2; });
+  let blocks=0; const parts=[];
   S.watt+=stakeIn; S.lifeWatt+=stakeIn; S.watt-=Math.min(S.watt,draw*sec);
-  S[net.coin]+=coins; S.blocks+=blocks; S.blocksNet[net.coin]+=blocks;
+  for(const nk in byNet){
+    const nx=CFG.nets[nk];
+    const lam=byNet[nk]*nx.lam*powerFactor()*luckMult()/difficulty();
+    const b=Math.floor(lam*sec*CFG.offlineEff);
+    if(b<=0) continue;
+    const coins=b*nx.reward;
+    S[nx.coin]+=coins; S.blocks+=b; S.blocksNet[nx.coin]+=b; blocks+=b;
+    parts.push(`+${fmt(coins)} ${nx.sym}`);
+  }
   const hrs=(capped/3600).toFixed(1);
-  setTimeout(()=>toast(`⏰ While you were away ${hrs}h: +${fmt(stakeIn)} ⚡ staked, ${blocks} blocks (+${fmt(coins)} ${net.sym})`,'cyan',9000),1200);
+  setTimeout(()=>toast(`⏰ While you were away ${hrs}h: +${fmt(stakeIn)} ⚡ staked, ${blocks} blocks${parts.length?' ('+parts.join(' · ')+')':''}`,'cyan',9000),1200);
 }
 /* ---------- actions ---------- */
 function mintPC(free){
@@ -173,7 +217,7 @@ function installPart(ri,id){
   if(it.comp==='Processor'){ if(r.cpu){SFX.err();return;} r.cpu=id; }
   else if(it.comp==='ASIC'){ if(r.asic){SFX.err();return;} r.asic=id; }
   else if(it.comp==='Frame'){ if(r.frame){SFX.err();return;} r.frame=1; }
-  else { if(r.gpus.length>=gpuCap(r)){SFX.err();toast(r.frame?'GPU slots full':'GPU slots full — install a Mining Rig Frame for 4 slots','red');return;} r.gpus.push(id); }
+  else { if(r.gpus.length>=gpuCap(r)){SFX.err();toast(r.frame?'GPU slots full':'GPU slots full — install a Mining Rig Frame for 8 slots','red');return;} r.gpus.push(id); }
   S.inv[id]--;
   SFX.install(); buildRigVis(ri);
   burst(new THREE.Vector3(SLOTS[r.slot][0],2.0,SLOTS[r.slot][1]),14,partMatCyan,2);
@@ -208,6 +252,7 @@ function buyUpgrade(k){
   const names={power:'⚡ Power grid upgraded',cooling:'❄ Cooling upgraded',rack:'🗄 Rack expansion built — 3 new slots'};
   toast(names[k]+` (Lv ${S.upg[k]})`,'grn');
   if(k==='rack') refreshRings();
+  if(k==='cooling'&&S.upg.cooling===1&&rebuildAllRigs) rebuildAllRigs(); // first cooling => RGB fans appear on the frames
   renderHud(); renderUpg(); save();
 }
 function gen2(){

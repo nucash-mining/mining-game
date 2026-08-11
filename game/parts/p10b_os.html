@@ -190,12 +190,24 @@ function osAppMiner(body){
       <div><small>RIG TEMP</small><b id="osm-temp">0°</b></div>
       <div><small>STATUS</small><b id="osm-st">OK</b></div>
     </div>
-    <button class="os-abtn" id="osm-boot">⟳ REBOOT RIG</button>`;
+    <div style="font-size:10px;color:#8a8a90;letter-spacing:.1em;margin:8px 0 4px">ALGORITHM — chain this rig mines</div>
+    <div style="display:flex;gap:6px" id="osm-nets">
+      <button class="os-task" data-net="">AUTO</button>
+      <button class="os-task" data-net="alt">🟠 ALT</button>
+      <button class="os-task" data-net="wattx">🟡 WTX</button>
+    </div>
+    <button class="os-abtn" id="osm-boot" style="margin-top:8px">⟳ REBOOT RIG</button>`;
+  body.querySelectorAll('#osm-nets .os-task').forEach(b=>{
+    b.onclick=()=>{ setRigNet(OS.rig, b.dataset.net||null); osRefresh(); };
+  });
   const log=body.querySelector('#osm-log');
   let ln=0;
   const W=OS.wins.miner;
   W.refresh=()=>{
     const rg=r(); if(!rg) return;
+    body.querySelectorAll('#osm-nets .os-task').forEach(b=>{
+      b.classList.toggle('on', (rg.net||'')===b.dataset.net);
+    });
     body.querySelector('#osm-hash').textContent=fmt(rigHash(rg)*Math.pow(CFG.gen2Mult,S.gen-1))+' H';
     body.querySelector('#osm-watt').textContent=fmt(rigWatt(rg))+' W';
     body.querySelector('#osm-temp').textContent=Math.round(S.temp)+'°C';
@@ -208,7 +220,7 @@ function osAppMiner(body){
     if(ln++%2===0){
       const msgs=crashed?['<span class="bad">kernel panic: gpu hang detected</span>','<span class="bad">miner daemon dead — reboot required</span>']
         :noWatt?['<span class="warn">power rail sag — WATT reserve empty</span>']
-        :['accepted share ('+(Math.random()*90+8|0)+'ms)','<span class="hl">job #'+(Math.random()*9999|0)+' from stratum+tcp://'+((curPool()||{id:'solo'}).id)+'.'+CFG.nets[S.net].coin+'.pool.watt:3333</span>','gpu clocks '+(1800+r().oc.c*120)+'/'+(9000+r().oc.m*400)+' MHz','difficulty '+difficulty().toFixed(2)+'x · luck '+Math.round((luckMult()-1)*100)+'%'];
+        :['accepted share ('+(Math.random()*90+8|0)+'ms)','<span class="hl">job #'+(Math.random()*9999|0)+' from stratum+tcp://'+((curPool()||{id:'solo'}).id)+'.'+CFG.nets[CFG.nets[r().net]?r().net:S.net].coin+'.pool.watt:3333</span>','gpu clocks '+(1800+r().oc.c*120)+'/'+(9000+r().oc.m*400)+' MHz','difficulty '+difficulty().toFixed(2)+'x · luck '+Math.round((luckMult()-1)*100)+'%'];
       log.innerHTML+=msgs[Math.random()*msgs.length|0]+'<br>';
       while(log.children.length>60) log.removeChild(log.firstChild);
       log.scrollTop=log.scrollHeight;
@@ -302,6 +314,27 @@ function osAppDex(body){
 function osAppWallet(body){
   const W=OS.wins.wallet;
   W.refresh=()=>{
+    /* payout-wallet section: key reveal survives the 600ms rebuild via W.reveal */
+    const payout = W.reveal ? `
+      <div style="font-size:10px;color:#ffae42;margin:10px 0 5px;letter-spacing:.1em">⚠ SAVE THIS KEY — SHOWN ONCE, NEVER STORED</div>
+      <div class="os-term" style="height:auto;padding:6px;word-break:break-all">
+        <div style="color:#3dff8a">address: ${W.reveal.address}</div>
+        <div style="color:#ff6b74">private key: ${W.reveal.privateKey}</div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="os-task" id="pw-copy">COPY KEY</button>
+        <button class="os-abtn" id="pw-done" style="margin:0">I SAVED MY KEY</button>
+      </div>
+      <div class="os-note">Import this key into the WATTx wallet (or any EVM wallet) to spend your payouts. Lose the key = lose the coins.</div>`
+    : S.payoutAddr ? `
+      <div style="font-size:10px;color:#8a8a90;margin:10px 0 5px;letter-spacing:.1em">PAYOUT WALLET</div>
+      <div class="os-term" style="height:auto;padding:6px;word-break:break-all"><span style="color:#3dff8a">${S.payoutAddr}</span></div>
+      <div style="display:flex;gap:6px;margin-top:6px"><button class="os-task" id="pw-copyaddr">COPY ADDRESS</button></div>
+      <div class="os-note">Validator rewards are divided to this address. Manage it in 🏊 POOLS → VALIDATOR NODE.</div>`
+    : `
+      <div style="font-size:10px;color:#8a8a90;margin:10px 0 5px;letter-spacing:.1em">PAYOUT WALLET</div>
+      <button class="os-abtn" id="pw-gen" style="margin:0">🔑 GENERATE PAYOUT WALLET</button>
+      <div class="os-note">Creates your own wallet address for real coin payouts (validator reward splits). The key is generated locally in your browser.</div>`;
     body.innerHTML=`
       <div style="font-size:10px;color:#8a8a90;margin-bottom:8px">${OS.addr?('CONNECTED · '+OS.addr):'GUEST — connect wallet at next login for an address'}</div>
       <div class="os-kv">
@@ -312,8 +345,18 @@ function osAppWallet(body){
         <div><small>BLOCKS MINED</small><b>${fmtInt(S.blocks)}</b></div>
         <div><small>LUCKY BLOCKS</small><b>${fmtInt(S.lucky)}</b></div>
       </div>
+      ${payout}
       <div style="font-size:10px;color:#8a8a90;margin:10px 0 5px;letter-spacing:.1em">RECENT BLOCKS</div>
       <div class="os-term" style="height:96px">${lastBlocksFeed.slice(-6).reverse().map(b=>`<div class="${b.lucky?'hl':''}">${b.txt}</div>`).join('')||'<span style="color:#3f7a55">no blocks yet — keep mining</span>'}</div>`;
+    const gen=body.querySelector('#pw-gen');
+    if(gen) gen.onclick=()=>{ const w=mgGenWallet(); S.payoutAddr=w.address; W.reveal=w; SFX.mint();
+      toast('🔑 Payout wallet generated — SAVE THE PRIVATE KEY NOW','gold',8000); save(); W.refresh(); };
+    const cp=body.querySelector('#pw-copy');
+    if(cp) cp.onclick=()=>{ navigator.clipboard.writeText(W.reveal.privateKey); SFX.click(); toast('Private key copied — store it somewhere safe','cyan'); };
+    const done=body.querySelector('#pw-done');
+    if(done) done.onclick=()=>{ if(!confirm('Key saved somewhere safe? It will NEVER be shown again.')) return; W.reveal=null; SFX.click(); W.refresh(); };
+    const ca=body.querySelector('#pw-copyaddr');
+    if(ca) ca.onclick=()=>{ navigator.clipboard.writeText(S.payoutAddr); SFX.click(); toast('Payout address copied','cyan'); };
   };
   W.refresh();
 }
