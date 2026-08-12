@@ -83,6 +83,9 @@ async function w3Connect(){
     }
     SFX.buy(); toast('🦊 Wallet connected: '+w3Short(W3.addr),'grn');
     if(W3.chain&&W3.chain.net){ S.net=W3.chain.net; toast('🔗 Mining network synced to wallet chain: '+W3.chain.name,'cyan'); }
+    // Connecting a wallet means you want on-chain: switch to LIVE so the HUD WATT
+    // and balances read your real WATTv2 holdings, not the demo sim counter.
+    if(W3.addr && typeof setMode==='function' && !isLive()) setMode('live');
     await w3Refresh();
   }catch(e){ W3.err=e&&e.message||'connection rejected'; SFX.err(); }
   W3.busy=false; renderWallet(); renderHud(); save();
@@ -118,7 +121,7 @@ async function w3Refresh(){
     await Promise.allSettled(jobs);
     w3GrantOwned();
   }catch(e){ W3.err=(''+(e&&e.message||e)).slice(0,120); }
-  renderWallet();
+  renderWallet(); renderHud&&renderHud();  // reflect fresh on-chain WATT in the HUD immediately
 }
 /* Live mode: the installable inventory MIRRORS your current on-chain holdings.
    available-to-install(id) = balanceOf(you, id) − how many are already fitted in

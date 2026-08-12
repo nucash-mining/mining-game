@@ -148,8 +148,13 @@ function makeWarehouse(){
     const hdr=new THREE.Mesh(new THREE.PlaneGeometry(Wd,1.6),mat.clone()); hdr.position.set(0,H-0.8,Z-Dp/2); g.add(hdr);
     const sc=cnv(512,64), sx=sc.getContext('2d');
     sx.fillStyle='#0d0a1c'; sx.fillRect(0,0,512,64); sx.font='900 38px monospace';
-    sx.fillStyle='#ffd23f'; sx.textAlign='center'; sx.fillText('⛏ ELITE MINING FARM',256,45);
-    const sign=new THREE.Mesh(new THREE.PlaneGeometry(10,1.25), new THREE.MeshBasicMaterial({map:ctex(sc),transparent:true}));
+    sx.fillStyle='#ffd23f'; sx.textAlign='left'; sx.textBaseline='middle';
+    const signTex=ctex(sc);
+    // WATT logo instead of the pickaxe glyph, then the tier label
+    const label='ELITE MINING FARM', lw=sx.measureText(label).width, ix=(512-(lw+56))/2;
+    sx.fillText(label, ix+56, 34);
+    const wimg=new Image(); wimg.onload=()=>{ sx.drawImage(wimg, ix, 8, 46, 46); signTex.needsUpdate=true; }; wimg.src='watt.png';
+    const sign=new THREE.Mesh(new THREE.PlaneGeometry(10,1.25), new THREE.MeshBasicMaterial({map:signTex,transparent:true}));
     sign.position.set(0,H-0.8,Z-Dp/2-0.05); sign.rotation.y=Math.PI; g.add(sign);
   }
   const il=new THREE.PointLight(0xffb020, 110, 24); il.position.set(0,H-1.5,Z); g.add(il);

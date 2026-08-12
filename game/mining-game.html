@@ -827,12 +827,19 @@ function makeLogoTex(){
   const c=cnv(1024,256), x=c.getContext('2d');
   x.fillStyle='#0d0b1e'; x.fillRect(0,0,1024,256);
   x.textAlign='center'; x.textBaseline='middle';
-  x.font='900 96px Segoe UI,Arial'; 
-  const g=x.createLinearGradient(0,60,0,200); g.addColorStop(0,'#ffd23f'); g.addColorStop(1,'#ff8d2e');
-  x.fillStyle=g; x.fillText('⛏ THE MINING GAME', 512, 106);
-  x.font='700 44px Segoe UI,Arial'; x.fillStyle='#2ee6d6'; x.letterSpacing='18px';
-  x.fillText('W A T T   T Y C O O N', 512, 202);
-  return ctex(c);
+  const tex=ctex(c);
+  // brand lockup image (green-pixel MINING⚡GAME) drawn onto the wall texture
+  const img=new Image();
+  img.onload=()=>{
+    const w=760, h=w*img.height/img.width;         // preserve aspect
+    x.clearRect(0,0,1024,150); x.fillStyle='#0d0b1e'; x.fillRect(0,0,1024,150);
+    x.drawImage(img,(1024-w)/2, 14, w, h);
+    tex.needsUpdate=true;
+  };
+  img.src='mg-logo.png';
+  x.font='700 44px Segoe UI,Arial'; x.fillStyle='#2ee6d6';
+  x.fillText('W A T T   T Y C O O N', 512, 210);
+  return tex;
 }
 const logoM = new THREE.Mesh(new THREE.PlaneGeometry(9,2.25),
   new THREE.MeshBasicMaterial({map:makeLogoTex(), transparent:false}));
@@ -998,8 +1005,13 @@ function makeWarehouse(){
     const hdr=new THREE.Mesh(new THREE.PlaneGeometry(Wd,1.6),mat.clone()); hdr.position.set(0,H-0.8,Z-Dp/2); g.add(hdr);
     const sc=cnv(512,64), sx=sc.getContext('2d');
     sx.fillStyle='#0d0a1c'; sx.fillRect(0,0,512,64); sx.font='900 38px monospace';
-    sx.fillStyle='#ffd23f'; sx.textAlign='center'; sx.fillText('⛏ ELITE MINING FARM',256,45);
-    const sign=new THREE.Mesh(new THREE.PlaneGeometry(10,1.25), new THREE.MeshBasicMaterial({map:ctex(sc),transparent:true}));
+    sx.fillStyle='#ffd23f'; sx.textAlign='left'; sx.textBaseline='middle';
+    const signTex=ctex(sc);
+    // WATT logo instead of the pickaxe glyph, then the tier label
+    const label='ELITE MINING FARM', lw=sx.measureText(label).width, ix=(512-(lw+56))/2;
+    sx.fillText(label, ix+56, 34);
+    const wimg=new Image(); wimg.onload=()=>{ sx.drawImage(wimg, ix, 8, 46, 46); signTex.needsUpdate=true; }; wimg.src='watt.png';
+    const sign=new THREE.Mesh(new THREE.PlaneGeometry(10,1.25), new THREE.MeshBasicMaterial({map:signTex,transparent:true}));
     sign.position.set(0,H-0.8,Z-Dp/2-0.05); sign.rotation.y=Math.PI; g.add(sign);
   }
   const il=new THREE.PointLight(0xffb020, 110, 24); il.position.set(0,H-1.5,Z); g.add(il);
@@ -2194,6 +2206,9 @@ async function w3Connect(){
     }
     SFX.buy(); toast('🦊 Wallet connected: '+w3Short(W3.addr),'grn');
     if(W3.chain&&W3.chain.net){ S.net=W3.chain.net; toast('🔗 Mining network synced to wallet chain: '+W3.chain.name,'cyan'); }
+    // Connecting a wallet means you want on-chain: switch to LIVE so the HUD WATT
+    // and balances read your real WATTv2 holdings, not the demo sim counter.
+    if(W3.addr && typeof setMode==='function' && !isLive()) setMode('live');
     await w3Refresh();
   }catch(e){ W3.err=e&&e.message||'connection rejected'; SFX.err(); }
   W3.busy=false; renderWallet(); renderHud(); save();
@@ -2229,7 +2244,7 @@ async function w3Refresh(){
     await Promise.allSettled(jobs);
     w3GrantOwned();
   }catch(e){ W3.err=(''+(e&&e.message||e)).slice(0,120); }
-  renderWallet();
+  renderWallet(); renderHud&&renderHud();  // reflect fresh on-chain WATT in the HUD immediately
 }
 /* Live mode: the installable inventory MIRRORS your current on-chain holdings.
    available-to-install(id) = balanceOf(you, id) − how many are already fitted in
