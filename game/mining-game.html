@@ -1053,6 +1053,14 @@ const BSV_ORIGIN = {
   'gen2.glb'     : '109a1bba976772a4c40100bd2010cef8dd3fce7681bbc95d2a23eea3755606f5_0',
   'pcboard.glb'  : 'f68f8fc159fd3e3f30605f1536492d8458de9d59c8d31d5072be814886809316_0',
   'badge.webp'   : 'a54eaebda42a364c9eb81b6940fa29de780aae8c175e956b889d81ac4ff4e0c8_0',
+  /* furniture & farm — inscribed 2026-08-12 */
+  'desk.glb': '3c330c7d6750f0c9ec6fdae6867690d169391c12578db257111cdbac9b5752c9_0',
+  'monitor.glb': 'abaebf340a5404df8ad42a846dbb2e26efa61efe5baab2cda498cd238c2834a1_0',
+  'chair_desk.glb': '4fb129059b2159561bb414e4cda3ad091d363b36eec3a2a4bc6e19ed7822b4de_0',
+  'chair_gaming.glb': '92b7c0578885d7e8d10f1ed92a6edddbd142a42dbbdbc1a7767cc1ed4587c72f_0',
+  'server_rack.glb': '9ab51766195a36506c2d9f410b32cda8ba9b6bafdba15efa4551e43812d91cd5_0',
+  'container.glb': '0b4f6e3f58e98e92d9d3a9704814cd3c773ac82f10b8cee7475974519d17ba2c_0',
+  'warehouse.glb': '62fbc41857815e5c47fbeb059a5abbba5dee79f85c3f83445a3d9d05c56157db_0',
 };
 const ORD_GATEWAYS = ['https://ordinals.gorillapool.io/content/','https://ordfs.network/content/'];
 /* Candidate URLs for one asset, best first. Local last: if the chain and both
@@ -2097,7 +2105,7 @@ const WEB3CFG={
       nft:'0x970a8b10147e3459d3cbf56329b76ac18d329728', watt:'0xE960d5076cd3169C343Ee287A2c3380A222e5839', staking:'0xcbfcA68D10B2ec60a0FB2Bc58F7F0Bfd32CD5275',
       nftV2:null, wattV2:null,
       pools:{ registry:'0xCe347180C3A45151C10366Da43fD822289ebB075', hub:'0x6f8330bB06D93A8932618EC1Fbb2818323EC3bf5',
-              engine:'0x5e6997616c7c53e1E700a97BC9e42C22C4cDb0be', rigNft:'0xf9F94e9fa744DE1209EF28321604a0Aa3B21a884', stakingPool:'0x07ef3eCDB4e4fd9D914787031b6cB746340bF661', migrator:'0xf2DbF910aD1cA08c3879C72AE6277fA903E058c4' },
+              engine:'0x85Dbfc41f745301fe2feE6F2307a28beF6dcEBfB', rigNft:'0xf9F94e9fa744DE1209EF28321604a0Aa3B21a884', stakingPool:'0x07ef3eCDB4e4fd9D914787031b6cB746340bF661', migrator:'0xf2DbF910aD1cA08c3879C72AE6277fA903E058c4' },
       economy:{ items:'0x0CDbf4926a8EdFFaa803B96f8fa90B065DE19Eb2', shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', stakingPool:'0x7E8FC9d7D7588F410E1399aC690F901268B08a8d', wattV2:'0x387693eCEC037C61943404F03c097d2ADA15ae3f' },
       /* QuickSwap V2 — real WPOL/WATT pool 0xEC54584a…Bef. Sell POL→WATT native-in. */
       dex:{ kind:'univ2', router:'0xa5E0829CaCED8fFDD4De3c43696c57F7D7A678ff', weth:'0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',
@@ -2109,7 +2117,7 @@ const WEB3CFG={
       nft:'0xf9670e5D46834561813CA79854B3d7147BBbFfb2', watt:'0x6645143e49B3a15d8F205658903a55E520444698', staking:'0xe463045318393095F11ed39f1a98332aBCc1A7b1',
       nftV2:null, wattV2:null,
       pools:{ registry:'0x0f1e3C2336fBf35148FdbA21F81fA3B57a1DF254', hub:'0xfbc6168D4c4f112275713B976612891E432e265e',
-              engine:'0x7069E0498bFF3022CF65c7b7F3D0da366B930c74', rigNft:'0x131A875e1bfEB2B3735E5d9Ad5e8871fF6CE9381', stakingPool:'0x62fC935400104371777aD36B78CF73f2c48dcD24', migrator:'0xdB13ecc87960632b8aAe93640F246CdAE1675B78' },
+              engine:'0x5B48e36A3FF8Dc6AA0388807a553eb45609c14Be', rigNft:'0x131A875e1bfEB2B3735E5d9Ad5e8871fF6CE9381', stakingPool:'0x62fC935400104371777aD36B78CF73f2c48dcD24', migrator:'0xdB13ecc87960632b8aAe93640F246CdAE1675B78' },
       economy:{ items:'0x851fd0205348783444Fc9EDe99Ca2321681EC99b', shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', stakingPool:'0xa3f8B04310380cD13Ec85B11420d1fc848af36C4', wattV2:'0xB7635E386283CAE6FB1A710f19CaA8220beF630D' },
       /* SwapinDEX (original live venue) — WATT/wALT pool 0xb2F8e147…. Sell ALT→WATT native-in. */
       dex:{ kind:'univ2', router:'0xae168Ce47cebca9abbC5107a58df0532f1afa4d6', weth:'0x48721ADeFE5b97101722c0866c2AffCE797C32b6',
@@ -2124,7 +2132,7 @@ const WEB3CFG={
       nft:'0x566808D0747662d0a0eeC68A854b695C01BE76a6', watt:'0x99B5503c7144dcf241551aDabFbb58e88829BD3a', staking:'0xBDfdF71830f6FC0C1de4f983EC774d03Aa006474',
       nftV2:null, wattV2:null,
       pools:{ registry:'0x3a02971ceAF9B817e770c36e393A95542bC65Df2', hub:'0x9fAb0fBa9b458A7A0c9D60a26BC33f6E2695F179',
-              engine:'0xb38e119a70F621bf080F51e2A436bEBc248cc0Dc', rigNft:'0x5f9be9282E29fCE419cE2e424ED3fd0be842C7e7', stakingPool:'0x0176566fe72E5733008Bfc68439FB2F3Eb43901B', migrator:'0x2301Fc735d7770f955c47B21d0FE2a66E3A195f9' },
+              engine:'0xE2D4eC76dFFAC5215a03332B4A01ce0AFF9A91c1', rigNft:'0x5f9be9282E29fCE419cE2e424ED3fd0be842C7e7', stakingPool:'0x0176566fe72E5733008Bfc68439FB2F3Eb43901B', migrator:'0x2301Fc735d7770f955c47B21d0FE2a66E3A195f9' },
       economy:{ items:'0x9baaFDE958d0dE13043CBb4292e467EB00ED06B4', shop:'0x0239f289Cca84E7Bb899Fe065ba452293D501355', stakingPool:'0xe9000a1ba29c3e87B4F964E9514eA4e8fd5d5749', wattV2:'0xc4603E2582aE320857379819123dFbFd3093dcfa' } },
   },
   /* PayoutHub target ids, in deploy-script registration order (identical on
