@@ -2206,9 +2206,10 @@ async function w3Connect(){
     }
     SFX.buy(); toast('🦊 Wallet connected: '+w3Short(W3.addr),'grn');
     if(W3.chain&&W3.chain.net){ S.net=W3.chain.net; toast('🔗 Mining network synced to wallet chain: '+W3.chain.name,'cyan'); }
-    // Connecting a wallet means you want on-chain: switch to LIVE so the HUD WATT
-    // and balances read your real WATTv2 holdings, not the demo sim counter.
-    if(W3.addr && typeof setMode==='function' && !isLive()) setMode('live');
+    // NOTE: connecting does NOT change the game mode. The HUD WATT stays your
+    // in-game (demo) balance so the game remains playable; your real on-chain
+    // WATT is shown in the wallet panel. Switching to LIVE is an explicit choice
+    // (the DEMO/LIVE toggle) so nobody's demo progress silently reads as 0.
     await w3Refresh();
   }catch(e){ W3.err=e&&e.message||'connection rejected'; SFX.err(); }
   W3.busy=false; renderWallet(); renderHud(); save();
