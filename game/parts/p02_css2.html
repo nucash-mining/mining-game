@@ -82,11 +82,22 @@
   #stats .stat small{display:none}
   .stat{padding:5px 7px;font-size:11.5px}
   #logo span{display:none}
+  #logo .brandimg{height:13px}
   #hudbtns .hbtn{padding:7px 9px;font-size:11px}
   #rigp{width:calc(100vw - 20px);top:auto;bottom:10px;max-height:55vh}
   #feed{width:210px;bottom:76px}
   #wallet{top:96px}
 }
+/* on-screen walk joystick (touch devices only; toggled by body.touch in p11) */
+#joy{display:none;position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom));
+  width:118px;height:118px;border-radius:50%;z-index:40;touch-action:none;-webkit-user-select:none;user-select:none;
+  background:radial-gradient(circle,rgba(130,71,229,.16),rgba(16,13,38,.55));border:1px solid var(--line);
+  box-shadow:inset 0 0 22px rgba(0,0,0,.4)}
+body.touch #joy{display:block}
+body.touch.walkoff #joy{display:none}
+#joynub{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;border-radius:50%;
+  background:radial-gradient(circle at 38% 32%,#a879ff,#6a2ec7);box-shadow:0 5px 16px rgba(0,0,0,.55);
+  border:1px solid rgba(255,255,255,.15);will-change:transform}
 /* ================= MINING GAME OS ================= */
 #os{position:fixed;inset:0;z-index:200;display:none;background:#0a0a0b;color:#ddd;font-family:ui-monospace,Menlo,Consolas,monospace}
 #os.open{display:block}

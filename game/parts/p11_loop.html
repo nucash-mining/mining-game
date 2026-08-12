@@ -129,6 +129,38 @@ addEventListener('keyup',  e=>{ walkKey(e,false); });
 /* Never leave a key stuck down when focus goes away or a modal opens mid-stride. */
 function walkStop(){ WALK.f=WALK.b=WALK.l=WALK.r=0; walkVel.set(0,0,0); }
 addEventListener('blur',walkStop);
+
+/* ---------- on-screen joystick: touch walking that feeds the same WALK state ----------
+   Shown only on coarse-pointer (touch) devices. It captures its own pointer so it never
+   fights OrbitControls (one-finger drag on the canvas still orbits the look). Sets
+   WALK.f/b/l/r analog 0..1 from the stick vector; tickWalk normalizes to constant speed. */
+if(matchMedia('(pointer:coarse)').matches || ('ontouchstart' in window)){
+  document.body.classList.add('touch');
+  const joy=$('joy'), nub=$('joynub');
+  if(joy && nub){
+    const R=44; let jid=null, cx=0, cy=0;
+    const nubTo=(x,y)=>{ nub.style.transform='translate('+x+'px,'+y+'px)'; };
+    joy.addEventListener('pointerdown',e=>{
+      jid=e.pointerId; const r=joy.getBoundingClientRect(); cx=r.left+r.width/2; cy=r.top+r.height/2;
+      try{ joy.setPointerCapture(jid); }catch(_){}
+      e.preventDefault(); e.stopPropagation();
+    });
+    joy.addEventListener('pointermove',e=>{
+      if(e.pointerId!==jid) return;
+      if(walkBlocked()){ WALK.f=WALK.b=WALK.l=WALK.r=0; nubTo(0,0); return; }
+      let dx=e.clientX-cx, dy=e.clientY-cy; const m=Math.hypot(dx,dy);
+      if(m>R){ dx=dx/m*R; dy=dy/m*R; }
+      nubTo(dx,dy);
+      const nx=dx/R, ny=dy/R; // -1..1, y+ is down/back
+      WALK.f=Math.max(0,-ny); WALK.b=Math.max(0,ny); WALK.r=Math.max(0,nx); WALK.l=Math.max(0,-nx);
+      WALK.run = m>R*0.92; // push to the rim to run
+      e.preventDefault();
+    });
+    const jEnd=e=>{ if(jid!==null && e.pointerId!==jid) return; jid=null; nubTo(0,0); WALK.f=WALK.b=WALK.l=WALK.r=0; WALK.run=false; };
+    joy.addEventListener('pointerup',jEnd);
+    joy.addEventListener('pointercancel',jEnd);
+  }
+}
 function tickWalk(dt){
   const blocked=walkBlocked();
   if(blocked){ if(WALK.f||WALK.b||WALK.l||WALK.r) walkStop(); walkVel.multiplyScalar(0);
