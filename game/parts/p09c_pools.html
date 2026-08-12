@@ -114,6 +114,8 @@ function exitValidators(){
   S.altLocked=0; S.altNodes=0; SFX.click(); renderPoolHub(); renderHud(); save();
 }
 function stakeShop(amt){
+  /* LIVE mode: stake real WATT v2 into the on-chain WattStakingPool. */
+  if(typeof isLive==='function' && isLive() && typeof ecoCfg==='function' && ecoCfg()){ ocStakeWatt(amt); return; }
   amt=Math.min(amt===undefined?S.watt:amt, S.watt);
   if(amt<=0){ SFX.err(); return; }
   S.watt-=amt; S.stakedWatt+=amt; SFX.buy();
@@ -121,9 +123,62 @@ function stakeShop(amt){
   renderPoolHub(); renderHud(); save();
 }
 function unstakeShop(){
+  if(typeof isLive==='function' && isLive() && typeof ecoCfg==='function' && ecoCfg()){ ocUnstakeWatt(); return; }
   if(S.stakedWatt<=0){ SFX.err(); return; }
   S.watt+=S.stakedWatt; toast(`Unstaked ${fmt(S.stakedWatt)} ⚡`,'cyan'); S.stakedWatt=0;
   SFX.click(); renderPoolHub(); renderHud(); save();
+}
+/* ===== real WATT staking (WattStakingPool) — stake WATT v2, earn WATT ===== */
+const ECO_STAKE_ABI=[
+  'function stake(uint256)','function unstake(uint256)','function claim()',
+  'function pending(address) view returns (uint256)','function balanceOf(address) view returns (uint256)'];
+async function ocStakeWatt(amt){
+  const c=ecoCfg(); if(!c) return;
+  try{
+    const E=await poolEthers();
+    const prov=new E.BrowserProvider(w3Eth()); const signer=await prov.getSigner();
+    const watt=new E.Contract(c.economy.wattV2, POOL_ABI.erc20, signer);
+    const pool=new E.Contract(c.economy.stakingPool, ECO_STAKE_ABI, signer);
+    const bal=await watt.balanceOf(W3.addr);
+    let wei = amt!==undefined ? E.parseEther(String(amt)) : bal;
+    if(wei>bal) wei=bal;
+    if(wei<=0n){ SFX.err(); toast('No WATT to stake — swap your old WATT for the new WATT first','red',9000); return; }
+    if((await watt.allowance(W3.addr,c.economy.stakingPool))<wei){ toast('Approve WATT to the staking pool…','gold',7000); await (await watt.approve(c.economy.stakingPool,wei)).wait(); }
+    toast(`🥩 Staking ${ocFmt(wei)} WATT on-chain…`,'gold',8000);
+    await (await pool.stake(wei)).wait();
+    SFX.buy(); toast(`✅ Staked ${ocFmt(wei)} WATT — earning WATT from the funded pool (buys feed it). Claim anytime.`,'grn',11000);
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('stake failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
+  renderPoolHub&&renderPoolHub();
+}
+async function ocUnstakeWatt(){
+  const c=ecoCfg(); if(!c) return;
+  try{
+    const E=await poolEthers();
+    const prov=new E.BrowserProvider(w3Eth()); const signer=await prov.getSigner();
+    const pool=new E.Contract(c.economy.stakingPool, ECO_STAKE_ABI, signer);
+    const staked=await pool.balanceOf(W3.addr);
+    if(staked<=0n){ SFX.err(); toast('You have no WATT staked on-chain','gold'); return; }
+    toast(`Unstaking ${ocFmt(staked)} WATT + claiming rewards…`,'gold',8000);
+    await (await pool.unstake(staked)).wait(); // unstake auto-claims
+    SFX.click(); toast(`✅ Unstaked ${ocFmt(staked)} WATT + rewards claimed`,'grn',9000);
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('unstake failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
+  renderPoolHub&&renderPoolHub();
+}
+async function ocClaimWatt(){
+  const c=ecoCfg(); if(!c) return;
+  try{
+    const E=await poolEthers();
+    const prov=new E.BrowserProvider(w3Eth()); const signer=await prov.getSigner();
+    const pool=new E.Contract(c.economy.stakingPool, ECO_STAKE_ABI, signer);
+    const owed=await pool.pending(W3.addr);
+    if(owed<=0n){ toast('No WATT rewards to claim yet','gold'); return; }
+    await (await pool.claim()).wait();
+    SFX.buy(); toast(`✅ Claimed ${ocFmt(owed)} WATT staking rewards`,'grn',9000);
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('claim failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
+  renderPoolHub&&renderPoolHub();
 }
 function repairRig(ri){
   const r=S.rigs[ri]; if(!r||r.wear<1){ SFX.err(); return; }
@@ -363,6 +418,47 @@ async function ocStop(rigId){
   }catch(e){ SFX.err(); toast('stopMining failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
   fillChainPools();
 }
+/* ===== ITEM SHOP — buy game items as real NFTs (Live mode) ===== */
+const SHOP_ABI=[
+  'function buyWithWatt(uint256,uint256)',
+  'function buyWithNative(uint256,uint256) payable',
+  'function buyWithToken(uint256,uint256,address,uint256)',
+  'function costWatt(uint256,uint256) view returns (uint256)',
+  'function costInNative(uint256,uint256) view returns (uint256)',
+  'function priceWatt(uint256) view returns (uint256)'];
+function ecoCfg(){ return (W3.addr&&W3.chain&&W3.chain.economy)?W3.chain:null; }
+/* Buy game item `id` as a real NFT via the on-chain ItemShop, paying in the
+   shop's selected currency. WATT payment funds the staking pool; native
+   (POL/ALT/WTX) is priced at WATT value and goes to the treasury. Returns true
+   if it handled the purchase on-chain. */
+async function ocBuyItem(id){
+  const c=ecoCfg(); if(!c) return false;
+  try{
+    const E=await poolEthers();
+    const prov=new E.BrowserProvider(w3Eth()); const signer=await prov.getSigner();
+    const shop=new E.Contract(c.economy.shop, SHOP_ABI, signer);
+    const priceW=await shop.priceWatt(id).catch(()=>0n);
+    if(!priceW||priceW===0n){ toast(`${ITEMS[id]?ITEMS[id].name:'#'+id} isn't sold on-chain yet`,'gold',8000); return true; }
+    const cur=S.payCur||'watt';
+    if(cur==='watt'){
+      const watt=new E.Contract(c.economy.wattV2, POOL_ABI.erc20, signer);
+      const cost=await shop.costWatt(id,1);
+      if((await watt.balanceOf(W3.addr))<cost){ SFX.err(); toast(`Need ${ocFmt(cost)} WATT — swap your old WATT for the new WATT first`,'red',10000); return true; }
+      if((await watt.allowance(W3.addr,c.economy.shop))<cost){ toast('Approve WATT to the shop…','gold',7000); await (await watt.approve(c.economy.shop,cost)).wait(); }
+      toast(`Buying ${ITEMS[id]?ITEMS[id].name:'#'+id} for ${ocFmt(cost)} WATT (funds the staking pool)…`,'gold',9000);
+      await (await shop.buyWithWatt(id,1)).wait();
+    } else if(cur==='pol'||cur==='alt'||cur==='wtx'){
+      if(W3.chainId!==c.chainId){ SFX.err(); toast(`Switch your wallet to ${c.name} to pay in ${cur.toUpperCase()}`,'gold',8000); w3Switch(c.key); return true; }
+      const val=await shop.costInNative(id,1);
+      toast(`Buying ${ITEMS[id]?ITEMS[id].name:'#'+id} for ${ocFmt(val)} ${c.sym}…`,'gold',9000);
+      await (await shop.buyWithNative(id,1,{value:val})).wait();
+    } else { SFX.err(); toast(`On-chain buy takes WATT or ${c.sym} for now — pick one in the shop`,'gold',9000); return true; }
+    SFX.mint(); toast(`⛓ MINTED ${ITEMS[id]?ITEMS[id].name:'item #'+id} on ${c.name} — real NFT, tradeable on OpenSea`,'gold',12000);
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('buy failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
+  return true;
+}
+
 /* CLAIM RIG — turn the classic Mining Game NFTs you already own (ERC-1155
    components) into an engine-compatible rig via the RigClaimMigrator. Escrows
    your components (reclaim anytime by returning the rig). */

@@ -190,6 +190,12 @@ function curPay(cur,amt){
 function buyItem(id){
   const it=ITEMS[id];
   if(id===1){ if(mintPC(S.pcCount===0)) renderShop(); return; }
+  /* LIVE mode: buy the item as a REAL NFT through the on-chain ItemShop instead
+     of the sim shop. ocBuyItem handles payment (WATT→staking pool, or native at
+     WATT value→treasury), mint, and messaging; the sim inventory is untouched. */
+  if(typeof isLive==='function' && isLive() && typeof ecoCfg==='function' && ecoCfg()){
+    ocBuyItem(id).then(()=>renderShop&&renderShop()); return;
+  }
   if(it.gen2 && S.gen<2){ SFX.err(); toast('🔒 Gen2 hardware — reach GENERATION 2 in 🔧 GARAGE to unlock','red'); return; }
   if(id===2 && S.badge){ SFX.err(); return; }
   if(it.comp==='Peripheral' && S.periph[id]){ SFX.err(); return; }
