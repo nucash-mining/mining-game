@@ -2102,7 +2102,9 @@ const WEB3CFG={
     /* rpc: polygon-rpc.com now 401s ("API key disabled"); drpc serves it free.
        pools: null until deployments-pools-137.json lands (deployer needs POL). */
     polygon:{ key:'polygon', net:'polygon', chainId:137, hex:'0x89', name:'Polygon', rpc:'https://polygon.drpc.org', sym:'POL', dec:18, explorer:'https://polygonscan.com',
-      nft:'0x970a8b10147e3459d3cbf56329b76ac18d329728', watt:'0xE960d5076cd3169C343Ee287A2c3380A222e5839', staking:'0xcbfcA68D10B2ec60a0FB2Bc58F7F0Bfd32CD5275',
+      nft:'0x0CDbf4926a8EdFFaa803B96f8fa90B065DE19Eb2', watt:'0x387693eCEC037C61943404F03c097d2ADA15ae3f', staking:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f',
+      shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', mg:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f', vault:'0x72A716F62aCfF960f6F097B4c7909B2368eD3acA', migrator:'0x97BcC99ff34FA2cde929c97074011E8929F59679',
+      classicNft:'0x970a8b10147e3459d3cbf56329b76ac18d329728', oldWatt:'0xE960d5076cd3169C343Ee287A2c3380A222e5839',
       nftV2:null, wattV2:null,
       pools:{ registry:'0xCe347180C3A45151C10366Da43fD822289ebB075', hub:'0x6f8330bB06D93A8932618EC1Fbb2818323EC3bf5',
               engine:'0x85Dbfc41f745301fe2feE6F2307a28beF6dcEBfB', rigNft:'0xf9F94e9fa744DE1209EF28321604a0Aa3B21a884', stakingPool:'0x07ef3eCDB4e4fd9D914787031b6cB746340bF661', migrator:'0xf2DbF910aD1cA08c3879C72AE6277fA903E058c4' },
@@ -2114,7 +2116,9 @@ const WEB3CFG={
        pools: the ON-CHAIN pool-hosting set, deployed+verified 2026-08-09
        (deployments-pools-2330.json). 100k WATT host stake lives in registry. */
     alt:{ key:'alt', net:'alt', chainId:2330, hex:'0x91a', name:'Altcoinchain', rpc:'https://rpc.wattxchange.app', sym:'ALT', dec:18, explorer:'https://explorer.altcoinchain.org',
-      nft:'0xf9670e5D46834561813CA79854B3d7147BBbFfb2', watt:'0x6645143e49B3a15d8F205658903a55E520444698', staking:'0xe463045318393095F11ed39f1a98332aBCc1A7b1',
+      nft:'0x851fd0205348783444Fc9EDe99Ca2321681EC99b', watt:'0xB7635E386283CAE6FB1A710f19CaA8220beF630D', staking:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f',
+      shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', mg:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f', vault:'0x72A716F62aCfF960f6F097B4c7909B2368eD3acA', migrator:'0x97BcC99ff34FA2cde929c97074011E8929F59679',
+      classicNft:'0xf9670e5D46834561813CA79854B3d7147BBbFfb2', oldWatt:'0x6645143e49B3a15d8F205658903a55E520444698',
       nftV2:null, wattV2:null,
       pools:{ registry:'0x0f1e3C2336fBf35148FdbA21F81fA3B57a1DF254', hub:'0xfbc6168D4c4f112275713B976612891E432e265e',
               engine:'0x5B48e36A3FF8Dc6AA0388807a553eb45609c14Be', rigNft:'0x131A875e1bfEB2B3735E5d9Ad5e8871fF6CE9381', stakingPool:'0x62fC935400104371777aD36B78CF73f2c48dcD24', migrator:'0xdB13ecc87960632b8aAe93640F246CdAE1675B78' },
@@ -2129,7 +2133,9 @@ const WEB3CFG={
        18-decimal balances and divides outgoing value by 1e10.
        pools: null until deployments-pools-22356.json lands. */
     wattx:{ key:'wattx', net:'wattx', chainId:22356, hex:'0x5754', name:'WATTxchain', rpc:'https://rpc-wtx.wattxchange.app', sym:'WTX', dec:18, explorer:null,
-      nft:'0x566808D0747662d0a0eeC68A854b695C01BE76a6', watt:'0x99B5503c7144dcf241551aDabFbb58e88829BD3a', staking:'0xBDfdF71830f6FC0C1de4f983EC774d03Aa006474',
+      nft:'0x9baaFDE958d0dE13043CBb4292e467EB00ED06B4', watt:'0xc4603E2582aE320857379819123dFbFd3093dcfa', staking:'0xBDfdF71830f6FC0C1de4f983EC774d03Aa006474',
+      shop:'0x0239f289Cca84E7Bb899Fe065ba452293D501355',
+      classicNft:'0x566808D0747662d0a0eeC68A854b695C01BE76a6', oldWatt:'0x99B5503c7144dcf241551aDabFbb58e88829BD3a',
       nftV2:null, wattV2:null,
       pools:{ registry:'0x3a02971ceAF9B817e770c36e393A95542bC65Df2', hub:'0x9fAb0fBa9b458A7A0c9D60a26BC33f6E2695F179',
               engine:'0xE2D4eC76dFFAC5215a03332B4A01ce0AFF9A91c1', rigNft:'0x5f9be9282E29fCE419cE2e424ED3fd0be842C7e7', stakingPool:'0x0176566fe72E5733008Bfc68439FB2F3Eb43901B', migrator:'0x2301Fc735d7770f955c47B21d0FE2a66E3A195f9' },
@@ -2144,8 +2150,8 @@ const WEB3CFG={
     {id:3, sym:'BSV', name:'WATT on BSV'},
     {id:4, sym:'HTH', name:'HTH masternode'},
   ],
-  sel:{ bal1155:'0x00fdd58e', balErc20:'0x70a08231', freemint:'0xaf2de086', rates:'0xdd418ae2', rewards:'0xe8a31bdc' },
-  ids:[1,2,3,4,5], // minted V1 token ids
+  sel:{ bal1155:'0x00fdd58e', balErc20:'0x70a08231', freemint:'0xaf2de086', buyWithWatt:'0x663e0d4c', rates:'0xdd418ae2', rewards:'0xe8a31bdc' },
+  ids:[1,2,3,4,5,8,9,10,11,12,13,14,17,18,19,23], // V3 collection component ids
 };
 const W3={ addr:null, chainId:null, chain:null, native:null, watt:null, rewards:null, nfts:{}, rates:{}, busy:false, err:null };
 const w3Eth=()=>window.ethereum;
@@ -2226,14 +2232,16 @@ function w3GrantOwned(){
   }
   if(granted.length){ SFX.gen2(); toast('⛓ On-chain NFTs verified → unlocked in-game: '+granted.join(', '),'gold',9000); renderHud(); save(); rebuildAllRigs&&rebuildAllRigs(); }
 }
-/* Real transaction: freemint(1,1) on the deployed ERC-1155 */
+/* Real transaction: free-mint the Gaming PC (id 1). On the V3 economy the item
+   collection is minter-gated, so the free PC is bought through the shop at its
+   0-WATT catalog price via buyWithWatt(1,1). */
 async function w3Freemint(){
   const c=W3.chain;
-  if(!c||!c.nft||!W3.addr){ SFX.err(); toast('Connect wallet on Polygon or Altcoinchain first','red'); return; }
+  if(!c||!c.shop||!W3.addr){ SFX.err(); toast('Connect wallet on Polygon or Altcoinchain first','red'); return; }
   try{
-    const data=WEB3CFG.sel.freemint+encU(1)+encU(1);
-    const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.nft,data}]);
-    toast('⛓ REAL freemint(1,1) sent on '+c.name+': '+w3Short(tx),'gold',9000);
+    const data=WEB3CFG.sel.buyWithWatt+encU(1)+encU(1);
+    const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.shop,data}]);
+    toast('⛓ Free Gaming PC minted via shop on '+c.name+': '+w3Short(tx),'gold',9000);
     setTimeout(w3Refresh, 8000);
   }catch(e){ SFX.err(); toast('tx rejected: '+(''+(e&&e.message||e)).slice(0,80),'red'); }
 }
