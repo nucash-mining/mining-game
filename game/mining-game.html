@@ -2216,21 +2216,33 @@ async function w3Refresh(){
   }catch(e){ W3.err=(''+(e&&e.message||e)).slice(0,120); }
   renderWallet();
 }
-/* Owned on-chain NFTs unlock their in-game twins (once per wallet+chain+id) */
+/* Live mode: the installable inventory MIRRORS your current on-chain holdings.
+   available-to-install(id) = balanceOf(you, id) − how many are already fitted in
+   your rigs. This is a live sync (re-runs every wallet refresh), so swaps, buys
+   and migrations show up immediately — no one-time grant, no demo items counted. */
 function w3GrantOwned(){
-  if(!W3.addr||!W3.chain) return;
-  let granted=[];
-  for(const id of WEB3CFG.ids){
-    const n=W3.nfts[id]||0; if(n<=0) continue;
-    const key=W3.chain.key+':'+W3.addr.toLowerCase()+':'+id;
-    if(S.w3claim[key]) continue;
-    S.w3claim[key]=1;
-    if(id===1){ if(S.rigs.length<slotCount()) mintPC(true); }
-    else if(id===2){ if(!S.badge){ S.badge=1; setBadgeOwned(true); } }
-    else { S.inv[id]=(S.inv[id]||0)+Math.min(n,4); }
-    granted.push(ITEMS[id]?ITEMS[id].name:('#'+id));
+  if(!W3.addr||!W3.chain||!(typeof isLive==='function'&&isLive())) return;
+  // count components already installed across every rig
+  const inst={};
+  for(const r of S.rigs){
+    if(r.cpu) inst[r.cpu]=(inst[r.cpu]||0)+1;
+    if(r.asic) inst[r.asic]=(inst[r.asic]||0)+1;
+    if(r.frame) inst[14]=(inst[14]||0)+1;
+    for(const g of r.gpus) inst[g]=(inst[g]||0)+1;
   }
-  if(granted.length){ SFX.gen2(); toast('⛓ On-chain NFTs verified → unlocked in-game: '+granted.join(', '),'gold',9000); renderHud(); save(); rebuildAllRigs&&rebuildAllRigs(); }
+  // Gaming PC → ensure a rig exists if you own one on-chain
+  if((W3.nfts[1]||0)>0 && S.rigs.length===0) mintPC(true);
+  // Genesis Badge
+  if((W3.nfts[2]||0)>0 && !S.badge){ S.badge=1; setBadgeOwned(true); }
+  // every other component: set inventory to (owned − installed)
+  let any=false;
+  for(const id of WEB3CFG.ids){
+    if(id===1||id===2) continue;
+    const avail=Math.max(0,(W3.nfts[id]||0)-(inst[id]||0));
+    if(avail!==(S.inv[id]||0)) any=true;
+    S.inv[id]=avail;
+  }
+  if(any){ renderHud(); save(); if(typeof benchSync==='function'&&benchOpen) benchSync(); rebuildAllRigs&&rebuildAllRigs(); }
 }
 /* Real transaction: free-mint the Gaming PC (id 1). On the V3 economy the item
    collection is minter-gated, so the free PC is bought through the shop at its
