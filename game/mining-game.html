@@ -1330,36 +1330,31 @@ function buildRigVis(i){
     // open-air mining rig frame on the shelf (never larger than the desk).
     const fm=normalizeFit(instOf('frame'),1.9);
     fm.position.x+=0; fm.position.z+=-0.62; fm.position.y+=DESK.SHELF+0.05; g.add(fm);
-    /* Real open-air rig (art direction 2026-08-11): GPUs sit in rows of 4 on
-       BOTH rails — bottom rail fills first, then the top rail — every card the
-       same way round with the FANS FACING LEFT (-x). The per-item `flip` flag
-       used to point mixed gen1/gen2 cards different directions — force ONE
-       uniform orientation instead (FRAME_GPU_FLIP flips the whole set together
-       if the base model sits upside-down). */
+    /* Real open-air rig (user-picked pose 2026-08-11): rows of 4 on BOTH rails
+       (bottom fills first, then the top rail), every card PARALLEL to the rack
+       with its FAN FACE OUT toward the player — the wall-of-fans look. Verified
+       against the inscribed GLBs in an isolated harness: BOTH GP50 and TX120
+       are authored long-axis=x, fans=+z, so IDENTITY rotation is exactly this
+       pose; ignore the per-item `flip` flag (it's what mixed the old cards). */
     const FRAME_GPU_FLIP=false;      // true => rotate every card 180° on X together
-    /* The GLBs' native orientation IS fans-left (-x) — verified in-browser
-       2026-08-11 for both GP50 and TX120. Identity + uniform is correct; the
-       old mixed look came from honoring the per-item `flip` flag. */
-    const gn=r.gpus.length, perRow=4, span=0.56, railGap=0.72, rowGap=0.62;
-    const baseZ=-0.62, baseY=DESK.SHELF+0.22;
-    /* Fan direction: rotate every card so the FANS FACE LEFT (-x). Identity did
-       not read as fans-left in-game, so apply an explicit yaw. If the fans come
-       out facing RIGHT, flip FANS_YAW's sign (the whole set turns together). */
-    const FANS_YAW = -Math.PI/2;
+    const gn=r.gpus.length, perRow=4, span=0.46, railGap=0.72, rowGap=0.62;
+    const baseZ=-0.60, baseY=DESK.SHELF+0.22;
     // riser-board PCB material (shared)
     const pcbMat=new THREE.MeshStandardMaterial({color:0x0b3d1e,roughness:.75,metalness:.1});
     const riserGeo=new THREE.BoxGeometry(0.20,0.02,0.085);
     r.gpus.forEach((gid,k)=>{
       const it=ITEMS[gid];
       const raw=instOf(it.key);
-      raw.rotation.set(FRAME_GPU_FLIP?Math.PI:0, FANS_YAW, 0); // uniform, fans LEFT
-      const m=normalizeFit(raw,0.60); // ~27cm card at 2.25u/m
+      raw.rotation.set(FRAME_GPU_FLIP?Math.PI:0, 0, 0); // identity = fans OUT (+z), uniform
+      const m=normalizeFit(raw,0.56); // ~25cm card at 2.25u/m
       const rail=Math.floor(k/perRow)%2;          // 0 = bottom rail, 1 = top rail
       const depth=Math.floor(k/(perRow*2));       // >8 cards: next pair of rails behind
       const col=k%perRow;
       const inRow=Math.min(perRow, gn-Math.floor(k/perRow)*perRow);
       const x0=-(inRow-1)*span/2;
-      const gx=x0+col*span, gy=baseY+rail*railGap, gz=baseZ-depth*rowGap;
+      /* dense row: neighbours slightly overlap in x, so stagger alternate cards
+         a hair in z — reads layered instead of z-fighting */
+      const gx=x0+col*span, gy=baseY+rail*railGap, gz=baseZ-depth*rowGap+(col%2)*0.04;
       m.position.x+= gx; m.position.z+= gz; m.position.y+= gy;
       g.add(m); gpuMs.push(m);
       /* PCI-e riser BOARD snapped onto the card's bottom edge — normalizeFit
@@ -1376,11 +1371,12 @@ function buildRigVis(i){
       const cable=new THREE.Mesh(new THREE.TubeGeometry(curve,14,0.012,5),
         new THREE.MeshStandardMaterial({color:0x101322,roughness:.6,metalness:.3}));
       g.add(cable);
-      /* Cooling upgrade => an RGB fan IN FRONT OF THIS CARD, resting on the
-         same rail the card sits on (ring radius 0.16+0.028 => center +0.19). */
+      /* Cooling upgrade => an RGB fan IN FRONT OF THIS CARD, its BOTTOM resting
+         on the same rail the card sits on (ring outer radius 0.188 => center
+         gy+0.20 puts the ring bottom just on the rail). */
       if(S.upg&&S.upg.cooling>0){
         const fan=makeRGBFan();
-        fan.position.set(gx, gy+0.19, gz+0.30);
+        fan.position.set(gx, gy+0.20, gz+0.24);
         g.add(fan); fanMs.push(fan);
       }
     });
@@ -2000,6 +1996,12 @@ function curPay(cur,amt){
 function buyItem(id){
   const it=ITEMS[id];
   if(id===1){ if(mintPC(S.pcCount===0)) renderShop(); return; }
+  /* LIVE mode: buy the item as a REAL NFT through the on-chain ItemShop instead
+     of the sim shop. ocBuyItem handles payment (WATT→staking pool, or native at
+     WATT value→treasury), mint, and messaging; the sim inventory is untouched. */
+  if(typeof isLive==='function' && isLive() && typeof ecoCfg==='function' && ecoCfg()){
+    ocBuyItem(id).then(()=>renderShop&&renderShop()); return;
+  }
   if(it.gen2 && S.gen<2){ SFX.err(); toast('🔒 Gen2 hardware — reach GENERATION 2 in 🔧 GARAGE to unlock','red'); return; }
   if(id===2 && S.badge){ SFX.err(); return; }
   if(it.comp==='Peripheral' && S.periph[id]){ SFX.err(); return; }
@@ -2088,6 +2090,7 @@ const WEB3CFG={
       nftV2:null, wattV2:null,
       pools:{ registry:'0xCe347180C3A45151C10366Da43fD822289ebB075', hub:'0x6f8330bB06D93A8932618EC1Fbb2818323EC3bf5',
               engine:'0x5e6997616c7c53e1E700a97BC9e42C22C4cDb0be', rigNft:'0xf9F94e9fa744DE1209EF28321604a0Aa3B21a884', stakingPool:'0x07ef3eCDB4e4fd9D914787031b6cB746340bF661', migrator:'0xf2DbF910aD1cA08c3879C72AE6277fA903E058c4' },
+      economy:{ items:'0x0CDbf4926a8EdFFaa803B96f8fa90B065DE19Eb2', shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', stakingPool:'0x7E8FC9d7D7588F410E1399aC690F901268B08a8d', wattV2:'0x387693eCEC037C61943404F03c097d2ADA15ae3f' },
       /* QuickSwap V2 — real WPOL/WATT pool 0xEC54584a…Bef. Sell POL→WATT native-in. */
       dex:{ kind:'univ2', router:'0xa5E0829CaCED8fFDD4De3c43696c57F7D7A678ff', weth:'0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',
             wattOut:'0xE960d5076cd3169C343Ee287A2c3380A222e5839' } },
@@ -2099,6 +2102,7 @@ const WEB3CFG={
       nftV2:null, wattV2:null,
       pools:{ registry:'0x0f1e3C2336fBf35148FdbA21F81fA3B57a1DF254', hub:'0xfbc6168D4c4f112275713B976612891E432e265e',
               engine:'0x7069E0498bFF3022CF65c7b7F3D0da366B930c74', rigNft:'0x131A875e1bfEB2B3735E5d9Ad5e8871fF6CE9381', stakingPool:'0x62fC935400104371777aD36B78CF73f2c48dcD24', migrator:'0xdB13ecc87960632b8aAe93640F246CdAE1675B78' },
+      economy:{ items:'0x851fd0205348783444Fc9EDe99Ca2321681EC99b', shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', stakingPool:'0xa3f8B04310380cD13Ec85B11420d1fc848af36C4', wattV2:'0xB7635E386283CAE6FB1A710f19CaA8220beF630D' },
       /* SwapinDEX (original live venue) — WATT/wALT pool 0xb2F8e147…. Sell ALT→WATT native-in. */
       dex:{ kind:'univ2', router:'0xae168Ce47cebca9abbC5107a58df0532f1afa4d6', weth:'0x48721ADeFE5b97101722c0866c2AffCE797C32b6',
             wattOut:'0x6645143e49B3a15d8F205658903a55E520444698' } },
@@ -2112,7 +2116,8 @@ const WEB3CFG={
       nft:'0x566808D0747662d0a0eeC68A854b695C01BE76a6', watt:'0x99B5503c7144dcf241551aDabFbb58e88829BD3a', staking:'0xBDfdF71830f6FC0C1de4f983EC774d03Aa006474',
       nftV2:null, wattV2:null,
       pools:{ registry:'0x3a02971ceAF9B817e770c36e393A95542bC65Df2', hub:'0x9fAb0fBa9b458A7A0c9D60a26BC33f6E2695F179',
-              engine:'0xb38e119a70F621bf080F51e2A436bEBc248cc0Dc', rigNft:'0x5f9be9282E29fCE419cE2e424ED3fd0be842C7e7', stakingPool:'0x0176566fe72E5733008Bfc68439FB2F3Eb43901B', migrator:'0x2301Fc735d7770f955c47B21d0FE2a66E3A195f9' } },
+              engine:'0xb38e119a70F621bf080F51e2A436bEBc248cc0Dc', rigNft:'0x5f9be9282E29fCE419cE2e424ED3fd0be842C7e7', stakingPool:'0x0176566fe72E5733008Bfc68439FB2F3Eb43901B', migrator:'0x2301Fc735d7770f955c47B21d0FE2a66E3A195f9' },
+      economy:{ items:'0x9baaFDE958d0dE13043CBb4292e467EB00ED06B4', shop:'0x0239f289Cca84E7Bb899Fe065ba452293D501355', stakingPool:'0xe9000a1ba29c3e87B4F964E9514eA4e8fd5d5749', wattV2:'0xc4603E2582aE320857379819123dFbFd3093dcfa' } },
   },
   /* PayoutHub target ids, in deploy-script registration order (identical on
      every chain because the same script registers the same list). */
@@ -2405,6 +2410,8 @@ function exitValidators(){
   S.altLocked=0; S.altNodes=0; SFX.click(); renderPoolHub(); renderHud(); save();
 }
 function stakeShop(amt){
+  /* LIVE mode: stake real WATT v2 into the on-chain WattStakingPool. */
+  if(typeof isLive==='function' && isLive() && typeof ecoCfg==='function' && ecoCfg()){ ocStakeWatt(amt); return; }
   amt=Math.min(amt===undefined?S.watt:amt, S.watt);
   if(amt<=0){ SFX.err(); return; }
   S.watt-=amt; S.stakedWatt+=amt; SFX.buy();
@@ -2412,9 +2419,62 @@ function stakeShop(amt){
   renderPoolHub(); renderHud(); save();
 }
 function unstakeShop(){
+  if(typeof isLive==='function' && isLive() && typeof ecoCfg==='function' && ecoCfg()){ ocUnstakeWatt(); return; }
   if(S.stakedWatt<=0){ SFX.err(); return; }
   S.watt+=S.stakedWatt; toast(`Unstaked ${fmt(S.stakedWatt)} ⚡`,'cyan'); S.stakedWatt=0;
   SFX.click(); renderPoolHub(); renderHud(); save();
+}
+/* ===== real WATT staking (WattStakingPool) — stake WATT v2, earn WATT ===== */
+const ECO_STAKE_ABI=[
+  'function stake(uint256)','function unstake(uint256)','function claim()',
+  'function pending(address) view returns (uint256)','function balanceOf(address) view returns (uint256)'];
+async function ocStakeWatt(amt){
+  const c=ecoCfg(); if(!c) return;
+  try{
+    const E=await poolEthers();
+    const prov=new E.BrowserProvider(w3Eth()); const signer=await prov.getSigner();
+    const watt=new E.Contract(c.economy.wattV2, POOL_ABI.erc20, signer);
+    const pool=new E.Contract(c.economy.stakingPool, ECO_STAKE_ABI, signer);
+    const bal=await watt.balanceOf(W3.addr);
+    let wei = amt!==undefined ? E.parseEther(String(amt)) : bal;
+    if(wei>bal) wei=bal;
+    if(wei<=0n){ SFX.err(); toast('No WATT to stake — swap your old WATT for the new WATT first','red',9000); return; }
+    if((await watt.allowance(W3.addr,c.economy.stakingPool))<wei){ toast('Approve WATT to the staking pool…','gold',7000); await (await watt.approve(c.economy.stakingPool,wei)).wait(); }
+    toast(`🥩 Staking ${ocFmt(wei)} WATT on-chain…`,'gold',8000);
+    await (await pool.stake(wei)).wait();
+    SFX.buy(); toast(`✅ Staked ${ocFmt(wei)} WATT — earning WATT from the funded pool (buys feed it). Claim anytime.`,'grn',11000);
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('stake failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
+  renderPoolHub&&renderPoolHub();
+}
+async function ocUnstakeWatt(){
+  const c=ecoCfg(); if(!c) return;
+  try{
+    const E=await poolEthers();
+    const prov=new E.BrowserProvider(w3Eth()); const signer=await prov.getSigner();
+    const pool=new E.Contract(c.economy.stakingPool, ECO_STAKE_ABI, signer);
+    const staked=await pool.balanceOf(W3.addr);
+    if(staked<=0n){ SFX.err(); toast('You have no WATT staked on-chain','gold'); return; }
+    toast(`Unstaking ${ocFmt(staked)} WATT + claiming rewards…`,'gold',8000);
+    await (await pool.unstake(staked)).wait(); // unstake auto-claims
+    SFX.click(); toast(`✅ Unstaked ${ocFmt(staked)} WATT + rewards claimed`,'grn',9000);
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('unstake failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
+  renderPoolHub&&renderPoolHub();
+}
+async function ocClaimWatt(){
+  const c=ecoCfg(); if(!c) return;
+  try{
+    const E=await poolEthers();
+    const prov=new E.BrowserProvider(w3Eth()); const signer=await prov.getSigner();
+    const pool=new E.Contract(c.economy.stakingPool, ECO_STAKE_ABI, signer);
+    const owed=await pool.pending(W3.addr);
+    if(owed<=0n){ toast('No WATT rewards to claim yet','gold'); return; }
+    await (await pool.claim()).wait();
+    SFX.buy(); toast(`✅ Claimed ${ocFmt(owed)} WATT staking rewards`,'grn',9000);
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('claim failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
+  renderPoolHub&&renderPoolHub();
 }
 function repairRig(ri){
   const r=S.rigs[ri]; if(!r||r.wear<1){ SFX.err(); return; }
@@ -2654,6 +2714,47 @@ async function ocStop(rigId){
   }catch(e){ SFX.err(); toast('stopMining failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
   fillChainPools();
 }
+/* ===== ITEM SHOP — buy game items as real NFTs (Live mode) ===== */
+const SHOP_ABI=[
+  'function buyWithWatt(uint256,uint256)',
+  'function buyWithNative(uint256,uint256) payable',
+  'function buyWithToken(uint256,uint256,address,uint256)',
+  'function costWatt(uint256,uint256) view returns (uint256)',
+  'function costInNative(uint256,uint256) view returns (uint256)',
+  'function priceWatt(uint256) view returns (uint256)'];
+function ecoCfg(){ return (W3.addr&&W3.chain&&W3.chain.economy)?W3.chain:null; }
+/* Buy game item `id` as a real NFT via the on-chain ItemShop, paying in the
+   shop's selected currency. WATT payment funds the staking pool; native
+   (POL/ALT/WTX) is priced at WATT value and goes to the treasury. Returns true
+   if it handled the purchase on-chain. */
+async function ocBuyItem(id){
+  const c=ecoCfg(); if(!c) return false;
+  try{
+    const E=await poolEthers();
+    const prov=new E.BrowserProvider(w3Eth()); const signer=await prov.getSigner();
+    const shop=new E.Contract(c.economy.shop, SHOP_ABI, signer);
+    const priceW=await shop.priceWatt(id).catch(()=>0n);
+    if(!priceW||priceW===0n){ toast(`${ITEMS[id]?ITEMS[id].name:'#'+id} isn't sold on-chain yet`,'gold',8000); return true; }
+    const cur=S.payCur||'watt';
+    if(cur==='watt'){
+      const watt=new E.Contract(c.economy.wattV2, POOL_ABI.erc20, signer);
+      const cost=await shop.costWatt(id,1);
+      if((await watt.balanceOf(W3.addr))<cost){ SFX.err(); toast(`Need ${ocFmt(cost)} WATT — swap your old WATT for the new WATT first`,'red',10000); return true; }
+      if((await watt.allowance(W3.addr,c.economy.shop))<cost){ toast('Approve WATT to the shop…','gold',7000); await (await watt.approve(c.economy.shop,cost)).wait(); }
+      toast(`Buying ${ITEMS[id]?ITEMS[id].name:'#'+id} for ${ocFmt(cost)} WATT (funds the staking pool)…`,'gold',9000);
+      await (await shop.buyWithWatt(id,1)).wait();
+    } else if(cur==='pol'||cur==='alt'||cur==='wtx'){
+      if(W3.chainId!==c.chainId){ SFX.err(); toast(`Switch your wallet to ${c.name} to pay in ${cur.toUpperCase()}`,'gold',8000); w3Switch(c.key); return true; }
+      const val=await shop.costInNative(id,1);
+      toast(`Buying ${ITEMS[id]?ITEMS[id].name:'#'+id} for ${ocFmt(val)} ${c.sym}…`,'gold',9000);
+      await (await shop.buyWithNative(id,1,{value:val})).wait();
+    } else { SFX.err(); toast(`On-chain buy takes WATT or ${c.sym} for now — pick one in the shop`,'gold',9000); return true; }
+    SFX.mint(); toast(`⛓ MINTED ${ITEMS[id]?ITEMS[id].name:'item #'+id} on ${c.name} — real NFT, tradeable on OpenSea`,'gold',12000);
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('buy failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
+  return true;
+}
+
 /* CLAIM RIG — turn the classic Mining Game NFTs you already own (ERC-1155
    components) into an engine-compatible rig via the RigClaimMigrator. Escrows
    your components (reclaim anytime by returning the rig). */

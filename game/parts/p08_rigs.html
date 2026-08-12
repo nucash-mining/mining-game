@@ -59,36 +59,31 @@ function buildRigVis(i){
     // open-air mining rig frame on the shelf (never larger than the desk).
     const fm=normalizeFit(instOf('frame'),1.9);
     fm.position.x+=0; fm.position.z+=-0.62; fm.position.y+=DESK.SHELF+0.05; g.add(fm);
-    /* Real open-air rig (art direction 2026-08-11): GPUs sit in rows of 4 on
-       BOTH rails — bottom rail fills first, then the top rail — every card the
-       same way round with the FANS FACING LEFT (-x). The per-item `flip` flag
-       used to point mixed gen1/gen2 cards different directions — force ONE
-       uniform orientation instead (FRAME_GPU_FLIP flips the whole set together
-       if the base model sits upside-down). */
+    /* Real open-air rig (user-picked pose 2026-08-11): rows of 4 on BOTH rails
+       (bottom fills first, then the top rail), every card PARALLEL to the rack
+       with its FAN FACE OUT toward the player — the wall-of-fans look. Verified
+       against the inscribed GLBs in an isolated harness: BOTH GP50 and TX120
+       are authored long-axis=x, fans=+z, so IDENTITY rotation is exactly this
+       pose; ignore the per-item `flip` flag (it's what mixed the old cards). */
     const FRAME_GPU_FLIP=false;      // true => rotate every card 180° on X together
-    /* The GLBs' native orientation IS fans-left (-x) — verified in-browser
-       2026-08-11 for both GP50 and TX120. Identity + uniform is correct; the
-       old mixed look came from honoring the per-item `flip` flag. */
-    const gn=r.gpus.length, perRow=4, span=0.56, railGap=0.72, rowGap=0.62;
-    const baseZ=-0.62, baseY=DESK.SHELF+0.22;
-    /* Fan direction: rotate every card so the FANS FACE LEFT (-x). Identity did
-       not read as fans-left in-game, so apply an explicit yaw. If the fans come
-       out facing RIGHT, flip FANS_YAW's sign (the whole set turns together). */
-    const FANS_YAW = -Math.PI/2;
+    const gn=r.gpus.length, perRow=4, span=0.46, railGap=0.72, rowGap=0.62;
+    const baseZ=-0.60, baseY=DESK.SHELF+0.22;
     // riser-board PCB material (shared)
     const pcbMat=new THREE.MeshStandardMaterial({color:0x0b3d1e,roughness:.75,metalness:.1});
     const riserGeo=new THREE.BoxGeometry(0.20,0.02,0.085);
     r.gpus.forEach((gid,k)=>{
       const it=ITEMS[gid];
       const raw=instOf(it.key);
-      raw.rotation.set(FRAME_GPU_FLIP?Math.PI:0, FANS_YAW, 0); // uniform, fans LEFT
-      const m=normalizeFit(raw,0.60); // ~27cm card at 2.25u/m
+      raw.rotation.set(FRAME_GPU_FLIP?Math.PI:0, 0, 0); // identity = fans OUT (+z), uniform
+      const m=normalizeFit(raw,0.56); // ~25cm card at 2.25u/m
       const rail=Math.floor(k/perRow)%2;          // 0 = bottom rail, 1 = top rail
       const depth=Math.floor(k/(perRow*2));       // >8 cards: next pair of rails behind
       const col=k%perRow;
       const inRow=Math.min(perRow, gn-Math.floor(k/perRow)*perRow);
       const x0=-(inRow-1)*span/2;
-      const gx=x0+col*span, gy=baseY+rail*railGap, gz=baseZ-depth*rowGap;
+      /* dense row: neighbours slightly overlap in x, so stagger alternate cards
+         a hair in z — reads layered instead of z-fighting */
+      const gx=x0+col*span, gy=baseY+rail*railGap, gz=baseZ-depth*rowGap+(col%2)*0.04;
       m.position.x+= gx; m.position.z+= gz; m.position.y+= gy;
       g.add(m); gpuMs.push(m);
       /* PCI-e riser BOARD snapped onto the card's bottom edge — normalizeFit
@@ -105,11 +100,12 @@ function buildRigVis(i){
       const cable=new THREE.Mesh(new THREE.TubeGeometry(curve,14,0.012,5),
         new THREE.MeshStandardMaterial({color:0x101322,roughness:.6,metalness:.3}));
       g.add(cable);
-      /* Cooling upgrade => an RGB fan IN FRONT OF THIS CARD, resting on the
-         same rail the card sits on (ring radius 0.16+0.028 => center +0.19). */
+      /* Cooling upgrade => an RGB fan IN FRONT OF THIS CARD, its BOTTOM resting
+         on the same rail the card sits on (ring outer radius 0.188 => center
+         gy+0.20 puts the ring bottom just on the rail). */
       if(S.upg&&S.upg.cooling>0){
         const fan=makeRGBFan();
-        fan.position.set(gx, gy+0.19, gz+0.30);
+        fan.position.set(gx, gy+0.20, gz+0.24);
         g.add(fan); fanMs.push(fan);
       }
     });
