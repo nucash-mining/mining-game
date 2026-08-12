@@ -3051,7 +3051,9 @@ function toast(txt, cls='', dur=4200){
   setTimeout(()=>{ d.style.transition='opacity .5s'; d.style.opacity='0'; setTimeout(()=>d.remove(),500); },dur);
 }
 function renderHud(){
-  $('v-watt').textContent=fmt(S.watt);
+  // Live mode: the HUD WATT is your REAL on-chain WATTv2 balance (0 until a
+  // wallet is connected), not the demo sim counter.
+  $('v-watt').textContent = (typeof isLive==='function' && isLive()) ? fmt(W3.watt||0) : fmt(S.watt);
   $('v-hash').textContent=fmt(totHash());
   const draw=Math.round(totWatt()), cap=powerCap();
   $('v-pow').textContent=`${draw}/${cap}`;
