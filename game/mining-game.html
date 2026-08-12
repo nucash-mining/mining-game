@@ -1339,13 +1339,21 @@ function buildRigVis(i){
     const FRAME_GPU_FLIP=false;      // true => rotate every card 180° on X together
     const gn=r.gpus.length, perRow=4, span=0.46, railGap=0.72, rowGap=0.62;
     const baseZ=-0.60, baseY=DESK.SHELF+0.22;
+    /* Per-model pose correction to reach the shared fans-out pose. The gen1
+       GLBs (tx120/gp50) are authored fans=+z so identity is right; the gen2
+       bundle's scenes each carry their own baked orientation — tx190/gp720 are
+       authored LYING FLAT fans-down (why the old `flip` flag existed) and
+       gpx880 stands on end. Determined empirically in-browser 2026-08-11 by
+       bbox-scanning + visual confirm of the fan side. */
+    const RACK_POSE={ tx190:[-Math.PI/2,0,0], gp720:[-Math.PI/2,0,0], gpx880:[0,-Math.PI/2,0] };
     // riser-board PCB material (shared)
     const pcbMat=new THREE.MeshStandardMaterial({color:0x0b3d1e,roughness:.75,metalness:.1});
     const riserGeo=new THREE.BoxGeometry(0.20,0.02,0.085);
     r.gpus.forEach((gid,k)=>{
       const it=ITEMS[gid];
       const raw=instOf(it.key);
-      raw.rotation.set(FRAME_GPU_FLIP?Math.PI:0, 0, 0); // identity = fans OUT (+z), uniform
+      const pose=RACK_POSE[it.key]||[0,0,0];
+      raw.rotation.set(pose[0]+(FRAME_GPU_FLIP?Math.PI:0), pose[1], pose[2]); // uniform fans OUT (+z)
       const m=normalizeFit(raw,0.56); // ~25cm card at 2.25u/m
       const rail=Math.floor(k/perRow)%2;          // 0 = bottom rail, 1 = top rail
       const depth=Math.floor(k/(perRow*2));       // >8 cards: next pair of rails behind
