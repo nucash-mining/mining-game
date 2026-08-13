@@ -553,10 +553,19 @@ const CFG = {
   pcBasePrice: 500, pcPriceGrowth: 1.45,     // extra PCs
   consumePerWatt: 0.02,                       // WATT/s per wattage point
   stakePerSW: 0.05,                           // WATT/s per stake weight
-  powerBase: 60, powerPerLvl: 70, powerMax: 8,
-  coolBase: 0.55, coolPerLvl: 0.115, coolMax: 8,
+  powerBase: 60,
+  // WATT capacity ADDED at each power-supply level (increasing increments = bigger PSUs).
+  // cumulative cap at level L = powerBase + sum(powerCapAdd[0..L-1]). L8=620 (unchanged), L16≈22,120W.
+  powerCapAdd:[70,70,70,70,70,70,70,70, 150,300,550,1000,1800,3200,5500,9000],
+  // heat coefficient per COOLING level (0 = no cooling). tempTarget = 24 + totWatt*coolCoeff[lvl].
+  // Levels 0-8 match the old curve; 9-16 add stronger cooling so a full tier-2/3 farm stays <85°C.
+  coolCoeff:[0.55,0.487,0.4235,0.360,0.297,0.234,0.1705,0.107,0.044, 0.033,0.025,0.019,0.014,0.011,0.008,0.006,0.0045],
+  powerMax: 16, coolMax: 16,
   rackMax: 2,                                 // +3 slots each
-  upPrice:{power:[400,1100,2600,6000,14000,32000,70000,160000], cooling:[350,900,2200,5200,12000,28000,60000,130000], rack:[1500,9000]},
+  upPrice:{
+    power:  [400,1100,2600,6000,14000,32000,70000,160000, 368000,850000,1950000,4500000,10000000,24000000,55000000,125000000],
+    cooling:[350,900,2200,5200,12000,28000,60000,130000, 300000,700000,1600000,3700000,8500000,20000000,45000000,100000000],
+    rack:[1500,9000] },
   towerStakeMult: 1.2,
   chairPrice: 2500,
   containerPrice: 250000, containerMax: 2,        // 20ft container · 6 rack slots · PRO farm
@@ -658,7 +667,7 @@ function totSWStake(){ return S.rigs.reduce((a,r)=>a+rigSW(r)*(r.on?0.25:1),0) +
 function rigValue(r){ let v=ITEMS[1].price; if(r.cpu) v+=ITEMS[r.cpu].price; if(r.asic) v+=ITEMS[r.asic].price; if(r.frame) v+=ITEMS[14].price; for(const g of r.gpus) v+=ITEMS[g].price; return v; }
 function repairCost(r){ return Math.ceil(rigValue(r)*0.18*(r.wear||0)/100); }
 function stakeMult(){ return S.tower?CFG.towerStakeMult:1; }
-function powerCap(){ return CFG.powerBase + S.upg.power*CFG.powerPerLvl; }
+function powerCap(){ let c=CFG.powerBase; for(let i=0;i<S.upg.power;i++) c+=CFG.powerCapAdd[i]||CFG.powerCapAdd[CFG.powerCapAdd.length-1]; return c; }
 function eligibleSlots(){ const out=[];
   for(let i=0;i<3+S.upg.rack*3;i++) out.push(i);                       // garage desks
   for(let i=0;i<S.containers*6;i++) out.push(9+i);                     // container racks
@@ -671,7 +680,7 @@ function effMult(){ return S.badge?0.90:1; }
 function pcPrice(){ return Math.round(CFG.pcBasePrice*Math.pow(CFG.pcPriceGrowth,Math.max(0,S.pcCount-1))); }
 function difficulty(){ return 1 + S.blocks/CFG.diffSoft; }
 function powerFactor(){ const d=totWatt(); return d<=powerCap()?1:powerCap()/d; }
-function tempTarget(){ return 24 + totWatt()*CFG.coolBase*(1-S.upg.cooling*CFG.coolPerLvl); }
+function tempTarget(){ const cc=CFG.coolCoeff[Math.min(S.upg.cooling,CFG.coolCoeff.length-1)]; return 24 + totWatt()*cc; }
 function heatFactor(){ return S.temp>=100?0.25 : S.temp>=85?0.6 : 1; }
 function farmStatus(){ return S.warehouse?'ELITE':S.containers?'PRO':'GARAGE'; }
 function netWorth(){ return S.watt + S.stakedWatt + S.usdt + S.dai + (S.pol+S.pend.pol)*S.price.pol + (S.alt+S.pend.alt+S.altLocked)*S.price.alt + (S.wtx+S.pend.wtx)*S.price.wtx; }
@@ -2134,7 +2143,7 @@ const WEB3CFG={
       classicNft:'0x970a8b10147e3459d3cbf56329b76ac18d329728', oldWatt:'0xE960d5076cd3169C343Ee287A2c3380A222e5839',
       nftV2:null, wattV2:null,
       pools:{ registry:'0xCe347180C3A45151C10366Da43fD822289ebB075', hub:'0x6f8330bB06D93A8932618EC1Fbb2818323EC3bf5',
-              engine:'0x85Dbfc41f745301fe2feE6F2307a28beF6dcEBfB', rigNft:'0xf9F94e9fa744DE1209EF28321604a0Aa3B21a884', stakingPool:'0x07ef3eCDB4e4fd9D914787031b6cB746340bF661', migrator:'0xf2DbF910aD1cA08c3879C72AE6277fA903E058c4' },
+              engine:'0x782585f15E75b76C4bE33Ae31c47Bc437C9Bbfe0', rigNft:'0xf9F94e9fa744DE1209EF28321604a0Aa3B21a884', stakingPool:'0x07ef3eCDB4e4fd9D914787031b6cB746340bF661', migrator:'0xf2DbF910aD1cA08c3879C72AE6277fA903E058c4' },
       economy:{ items:'0x0CDbf4926a8EdFFaa803B96f8fa90B065DE19Eb2', shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', stakingPool:'0x7E8FC9d7D7588F410E1399aC690F901268B08a8d', wattV2:'0x387693eCEC037C61943404F03c097d2ADA15ae3f' },
       /* QuickSwap V2 — real WPOL/WATT pool 0xEC54584a…Bef. Sell POL→WATT native-in. */
       dex:{ kind:'univ2', router:'0xa5E0829CaCED8fFDD4De3c43696c57F7D7A678ff', weth:'0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',
@@ -2148,7 +2157,7 @@ const WEB3CFG={
       classicNft:'0xf9670e5D46834561813CA79854B3d7147BBbFfb2', oldWatt:'0x6645143e49B3a15d8F205658903a55E520444698',
       nftV2:null, wattV2:null,
       pools:{ registry:'0x0f1e3C2336fBf35148FdbA21F81fA3B57a1DF254', hub:'0xfbc6168D4c4f112275713B976612891E432e265e',
-              engine:'0x5B48e36A3FF8Dc6AA0388807a553eb45609c14Be', rigNft:'0x131A875e1bfEB2B3735E5d9Ad5e8871fF6CE9381', stakingPool:'0x62fC935400104371777aD36B78CF73f2c48dcD24', migrator:'0xdB13ecc87960632b8aAe93640F246CdAE1675B78' },
+              engine:'0xB0A142d97225AD61682d77A30a2eC7144826F487', rigNft:'0x131A875e1bfEB2B3735E5d9Ad5e8871fF6CE9381', stakingPool:'0x62fC935400104371777aD36B78CF73f2c48dcD24', migrator:'0xdB13ecc87960632b8aAe93640F246CdAE1675B78' },
       economy:{ items:'0x851fd0205348783444Fc9EDe99Ca2321681EC99b', shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', stakingPool:'0xa3f8B04310380cD13Ec85B11420d1fc848af36C4', wattV2:'0xB7635E386283CAE6FB1A710f19CaA8220beF630D' },
       /* SwapinDEX (original live venue) — WATT/wALT pool 0xb2F8e147…. Sell ALT→WATT native-in. */
       dex:{ kind:'univ2', router:'0xae168Ce47cebca9abbC5107a58df0532f1afa4d6', weth:'0x48721ADeFE5b97101722c0866c2AffCE797C32b6',

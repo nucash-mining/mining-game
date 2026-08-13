@@ -52,10 +52,19 @@ const CFG = {
   pcBasePrice: 500, pcPriceGrowth: 1.45,     // extra PCs
   consumePerWatt: 0.02,                       // WATT/s per wattage point
   stakePerSW: 0.05,                           // WATT/s per stake weight
-  powerBase: 60, powerPerLvl: 70, powerMax: 8,
-  coolBase: 0.55, coolPerLvl: 0.115, coolMax: 8,
+  powerBase: 60,
+  // WATT capacity ADDED at each power-supply level (increasing increments = bigger PSUs).
+  // cumulative cap at level L = powerBase + sum(powerCapAdd[0..L-1]). L8=620 (unchanged), L16≈22,120W.
+  powerCapAdd:[70,70,70,70,70,70,70,70, 150,300,550,1000,1800,3200,5500,9000],
+  // heat coefficient per COOLING level (0 = no cooling). tempTarget = 24 + totWatt*coolCoeff[lvl].
+  // Levels 0-8 match the old curve; 9-16 add stronger cooling so a full tier-2/3 farm stays <85°C.
+  coolCoeff:[0.55,0.487,0.4235,0.360,0.297,0.234,0.1705,0.107,0.044, 0.033,0.025,0.019,0.014,0.011,0.008,0.006,0.0045],
+  powerMax: 16, coolMax: 16,
   rackMax: 2,                                 // +3 slots each
-  upPrice:{power:[400,1100,2600,6000,14000,32000,70000,160000], cooling:[350,900,2200,5200,12000,28000,60000,130000], rack:[1500,9000]},
+  upPrice:{
+    power:  [400,1100,2600,6000,14000,32000,70000,160000, 368000,850000,1950000,4500000,10000000,24000000,55000000,125000000],
+    cooling:[350,900,2200,5200,12000,28000,60000,130000, 300000,700000,1600000,3700000,8500000,20000000,45000000,100000000],
+    rack:[1500,9000] },
   towerStakeMult: 1.2,
   chairPrice: 2500,
   containerPrice: 250000, containerMax: 2,        // 20ft container · 6 rack slots · PRO farm
@@ -157,7 +166,7 @@ function totSWStake(){ return S.rigs.reduce((a,r)=>a+rigSW(r)*(r.on?0.25:1),0) +
 function rigValue(r){ let v=ITEMS[1].price; if(r.cpu) v+=ITEMS[r.cpu].price; if(r.asic) v+=ITEMS[r.asic].price; if(r.frame) v+=ITEMS[14].price; for(const g of r.gpus) v+=ITEMS[g].price; return v; }
 function repairCost(r){ return Math.ceil(rigValue(r)*0.18*(r.wear||0)/100); }
 function stakeMult(){ return S.tower?CFG.towerStakeMult:1; }
-function powerCap(){ return CFG.powerBase + S.upg.power*CFG.powerPerLvl; }
+function powerCap(){ let c=CFG.powerBase; for(let i=0;i<S.upg.power;i++) c+=CFG.powerCapAdd[i]||CFG.powerCapAdd[CFG.powerCapAdd.length-1]; return c; }
 function eligibleSlots(){ const out=[];
   for(let i=0;i<3+S.upg.rack*3;i++) out.push(i);                       // garage desks
   for(let i=0;i<S.containers*6;i++) out.push(9+i);                     // container racks
@@ -170,7 +179,7 @@ function effMult(){ return S.badge?0.90:1; }
 function pcPrice(){ return Math.round(CFG.pcBasePrice*Math.pow(CFG.pcPriceGrowth,Math.max(0,S.pcCount-1))); }
 function difficulty(){ return 1 + S.blocks/CFG.diffSoft; }
 function powerFactor(){ const d=totWatt(); return d<=powerCap()?1:powerCap()/d; }
-function tempTarget(){ return 24 + totWatt()*CFG.coolBase*(1-S.upg.cooling*CFG.coolPerLvl); }
+function tempTarget(){ const cc=CFG.coolCoeff[Math.min(S.upg.cooling,CFG.coolCoeff.length-1)]; return 24 + totWatt()*cc; }
 function heatFactor(){ return S.temp>=100?0.25 : S.temp>=85?0.6 : 1; }
 function farmStatus(){ return S.warehouse?'ELITE':S.containers?'PRO':'GARAGE'; }
 function netWorth(){ return S.watt + S.stakedWatt + S.usdt + S.dai + (S.pol+S.pend.pol)*S.price.pol + (S.alt+S.pend.alt+S.altLocked)*S.price.alt + (S.wtx+S.pend.wtx)*S.price.wtx; }
