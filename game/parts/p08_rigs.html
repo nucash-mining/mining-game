@@ -66,7 +66,7 @@ function buildRigVis(i){
        are authored long-axis=x, fans=+z, so IDENTITY rotation is exactly this
        pose; ignore the per-item `flip` flag (it's what mixed the old cards). */
     const FRAME_GPU_FLIP=false;      // true => rotate every card 180° on X together
-    const gn=r.gpus.length, perRow=4, span=0.46, railGap=0.72, rowGap=0.62;
+    const gn=r.gpus.length, perRow=gn>16?5:4, span=0.46, railGap=0.72, rowGap=0.62;   // 17-19 cards: 5-wide rails so it stays 2 rows deep
     const baseZ=-0.60, baseY=DESK.SHELF+0.22;
     /* Per-model pose correction to reach the shared fans-out pose. The gen1
        GLBs (tx120/gp50) are authored fans=+z so identity is right; the gen2

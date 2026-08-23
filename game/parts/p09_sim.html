@@ -223,7 +223,7 @@ function installPart(ri,id){
   if(it.comp==='Processor'){ if(r.cpu){SFX.err();return;} r.cpu=id; }
   else if(it.comp==='ASIC'){ if(r.asic){SFX.err();return;} r.asic=id; }
   else if(it.comp==='Frame'){ if(r.frame){SFX.err();return;} r.frame=1; }
-  else { if(r.gpus.length>=gpuCap(r)){SFX.err();toast(r.frame?'GPU slots full':'GPU slots full — install a Mining Rig Frame for 8 slots','red');return;} r.gpus.push(id); }
+  else { if(r.gpus.length>=gpuCap(r)){SFX.err();toast(r.frame?(S.upg.rackgpu<CFG.rackGpuCap.length-1?`GPU slots full — buy Rack Expansion (🔧 UPGRADES) for more GPUs per rack`:'GPU slots full — this rack is maxed at '+framedCap()+' GPUs'):`GPU slots full — install a Mining Rig Frame for ${framedCap()} slots`,'red');return;} r.gpus.push(id); }
   S.inv[id]--;
   SFX.install(); buildRigVis(ri);
   burst(new THREE.Vector3(SLOTS[r.slot][0],2.0,SLOTS[r.slot][1]),14,partMatCyan,2);
@@ -234,7 +234,7 @@ function removePart(ri,id,gk){
   if(it&&it.comp==='Processor'){ if(r.cpu!==id) return; r.cpu=0; S.inv[id]++; }
   else if(it&&it.comp==='ASIC'){ if(r.asic!==id) return; r.asic=0; S.inv[id]++; }
   else if(it&&it.comp==='Frame'){ if(!r.frame) return;
-    if(r.gpus.length>2){ SFX.err(); toast('Remove GPUs first — frame holds slots 3 & 4','red'); return; }
+    if(r.gpus.length>2){ SFX.err(); toast(`Remove GPUs first — frame holds slots 3–${gpuCap(r)}`,'red'); return; }
     r.frame=0; S.inv[14]++; }
   else { const ix=gk!==undefined?gk:r.gpus.indexOf(id); if(ix<0) return; r.gpus.splice(ix,1); S.inv[id]++; }
   SFX.click(); buildRigVis(ri); renderHud(); renderRigPanel(); save();
@@ -249,15 +249,17 @@ function switchNet(){
   renderHud(); save();
 }
 function buyUpgrade(k){
-  const lv=S.upg[k]; const arr=CFG.upPrice[k];
-  if(lv>=arr.length){ SFX.err(); return; }
-  const p=arr[lv];
+  const lv=S.upg[k]||0, max=upgMax(k);
+  if(lv>=max){ SFX.err(); return; }
+  const p=upgPrice(k,lv);
   if(S.watt<p){ SFX.err(); toast('Not enough WATT','red'); return; }
-  S.watt-=p; S.shopPool+=p; S.upg[k]++;
+  S.watt-=p; S.shopPool+=p; S.upg[k]=lv+1;
   SFX.buy();
-  const names={power:'⚡ Power grid upgraded',cooling:'❄ Cooling upgraded',rack:'🗄 Rack expansion built — 3 new slots'};
+  const names={power:`⚡ Power grid upgraded — capacity ${fmt(powerCap())}W`,cooling:`❄ Cooling upgraded — ambient ${Math.round(tempTarget())}°C target`,
+    rack:'🏠 Garage expansion built — 3 new rig slots',rackgpu:`🗄 Rack expansion — every framed rack now holds ${framedCap()} GPUs`};
   toast(names[k]+` (Lv ${S.upg[k]})`,'grn');
   if(k==='rack') refreshRings();
+  if(k==='rackgpu'&&selRig!=null&&S.rigs[selRig]) renderRigPanel();   // new empty GPU slots show up immediately
   if(k==='cooling'&&S.upg.cooling===1&&rebuildAllRigs) rebuildAllRigs(); // first cooling => RGB fans appear on the frames
   renderHud(); renderUpg(); save();
 }

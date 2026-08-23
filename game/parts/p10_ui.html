@@ -135,9 +135,9 @@ function renderRigPanel(){
     else { rows+=slotRowEmpty(`GPU slot ${k+1} — buy a GPU in shop`,'',''); }
   }
   // frame slot
-  rows+=r.frame?slotRow(14,'✓ installed · 4 GPU slots',`data-rm="14"`,'REMOVE')
-    :S.inv[14]>0?slotRowEmpty(`Rig frame — unlocks GPU slots 3 & 4`,`data-in="14"`,'INSTALL ⚙')
-    :slotRowEmpty('Rig frame slot — 2 extra GPU slots (shop)','','');
+  rows+=r.frame?slotRow(14,`✓ installed · ${cap} GPU slots${rackGpuLv()<CFG.rackGpuCap.length-1?' · Rack Expansion adds more':''}`,`data-rm="14"`,'REMOVE')
+    :S.inv[14]>0?slotRowEmpty(`Rig frame — unlocks GPU slots 3–${framedCap()}`,`data-in="14"`,'INSTALL ⚙')
+    :slotRowEmpty(`Rig frame slot — ${framedCap()-2} extra GPU slots (shop)`,'','');
   // ASIC slot (gen2)
   rows+=r.asic?slotRow(r.asic,'✓ installed',`data-rm="${r.asic}"`,'REMOVE')
     :S.inv[13]>0?slotRowEmpty('ASIC slot — Bit Hammer ×'+S.inv[13],`data-in="13"`,'INSTALL ⚙')
@@ -184,16 +184,18 @@ function slotRowEmpty(label,attr,btn){
 }
 /* upgrades */
 function renderUpg(){
+  const rgLv=rackGpuLv(), rgMax=CFG.rackGpuCap.length-1;
   const defs=[
-    ['power','🔌','Power Grid',`Capacity ${powerCap()}W. Rigs beyond capacity mine slower.`,CFG.upPrice.power],
-    ['cooling','❄️','Cooling',`Ambient ${Math.round(tempTarget())}°C target. Heat above 85° throttles hashpower.`,CFG.upPrice.cooling],
-    ['rack','🗄️','Rack Expansion',`${slotCount()} rig slots. Each expansion adds 3.`,CFG.upPrice.rack],
+    ['power','🔌','Power Grid',`Capacity ${fmt(powerCap())}W (next level +${fmt(powerCapAddAt(S.upg.power||0))}W). Rigs beyond capacity mine slower. No max level — you can always power more miners.`],
+    ['cooling','❄️','Cooling',`Ambient ${Math.round(tempTarget())}°C target. Heat above 85° throttles hashpower. No max level — you can always cool more miners.`],
+    ['rackgpu','🗄️','Rack Expansion',`${framedCap()} GPUs per rack on every framed rig${rgLv<rgMax?` → ${framedCap(rgLv+1)} at the next level, up to ${CFG.rackGpuCap[rgMax]}`:' — maxed (19-GPU open-air rigs)'}.`],
+    ['rack','🏠','Garage Expansion',`${slotCount()} rig slots. Each expansion adds 3 desks.`],
   ];
-  $('upgrows').innerHTML=defs.map(([k,ic,nm,ds,arr])=>{
-    const lv=S.upg[k], max=arr.length, p=arr[lv];
+  $('upgrows').innerHTML=defs.map(([k,ic,nm,ds])=>{
+    const lv=S.upg[k]||0, max=upgMax(k), p=upgPrice(k,lv), inf=!isFinite(max), pipsN=inf?16:max;
     return `<div class="uprow"><div class="uic">${ic}</div>
-      <div class="ubody"><h3>${nm} <small style="color:var(--dim)">Lv ${lv}/${max}</small></h3><p>${ds}</p>
-      <div class="pips">${Array.from({length:max},(_,i)=>`<span class="pip ${i<lv?'on':''}"></span>`).join('')}</div></div>
+      <div class="ubody"><h3>${nm} <small style="color:var(--dim)">Lv ${lv}${inf?' · ∞':'/'+max}</small></h3><p>${ds}</p>
+      <div class="pips">${Array.from({length:pipsN},(_,i)=>`<span class="pip ${i<lv?'on':''}"></span>`).join('')}${inf&&lv>pipsN?`<small style="color:var(--cyan);margin-left:4px">+${lv-pipsN}</small>`:''}</div></div>
       <button class="ubuy" data-up="${k}" ${lv>=max||S.watt<p?'disabled':''}>${lv>=max?'MAX':fmt(p)+' ⚡'}</button></div>`;
   }).join('');
   document.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>buyUpgrade(b.dataset.up));

@@ -557,15 +557,20 @@ const CFG = {
   // WATT capacity ADDED at each power-supply level (increasing increments = bigger PSUs).
   // cumulative cap at level L = powerBase + sum(powerCapAdd[0..L-1]). L8=620 (unchanged), L16≈22,120W.
   powerCapAdd:[70,70,70,70,70,70,70,70, 150,300,550,1000,1800,3200,5500,9000],
+  powerCapGrowth: 1.65,                       // past the table every level adds ×1.65 the previous increment — NO max level
   // heat coefficient per COOLING level (0 = no cooling). tempTarget = 24 + totWatt*coolCoeff[lvl].
   // Levels 0-8 match the old curve; 9-16 add stronger cooling so a full tier-2/3 farm stays <85°C.
   coolCoeff:[0.55,0.487,0.4235,0.360,0.297,0.234,0.1705,0.107,0.044, 0.033,0.025,0.019,0.014,0.011,0.008,0.006,0.0045],
-  powerMax: 16, coolMax: 16,
-  rackMax: 2,                                 // +3 slots each
+  coolGrowth: 0.75,                           // past the table every level keeps ×0.75 of the previous coefficient — NO max level
+  powerMax: Infinity, coolMax: Infinity,      // power grid + cooling are ENDLESS: however many miners run, you can always upgrade enough
+  rackMax: 2,                                 // garage expansion: +3 desk slots each (9 garage desks total)
+  rackGpuCap:[8,10,12,14,16,19],              // GPUs per FRAMED rack at Rack Expansion level 0..5 — 19-GPU open-air rig is the max
   upPrice:{
     power:  [400,1100,2600,6000,14000,32000,70000,160000, 368000,850000,1950000,4500000,10000000,24000000,55000000,125000000],
     cooling:[350,900,2200,5200,12000,28000,60000,130000, 300000,700000,1600000,3700000,8500000,20000000,45000000,100000000],
-    rack:[1500,9000] },
+    rack:[1500,9000],
+    rackgpu:[12000,30000,75000,180000,420000] },
+  upGrowth:{power:2.25, cooling:2.25},        // price multiplier per level past the tables (same ~2.3x curve as the tables)
   towerStakeMult: 1.2,
   chairPrice: 2500,
   containerPrice: 250000, containerMax: 2,        // 20ft container · 6 rack slots · PRO farm
@@ -616,7 +621,7 @@ let S=null;
 function freshState(){ const inv={},bought={2:0,17:0,18:0,19:0,23:0}; INV_IDS.forEach(i=>{inv[i]=0;bought[i]=0;}); return {
   watt:CFG.startWatt, lifeWatt:0, pol:0, alt:0, wtx:0, price:{pol:CFG.nets.polygon.p0, alt:CFG.nets.alt.p0, wtx:CFG.nets.wattx.p0},
   net:'polygon', rigs:[], inv, badge:0, bought, pcCount:0, periph:{17:0,18:0,23:0}, tower:0, payoutAddr:null,
-  upg:{power:0,cooling:0,rack:0}, gen:1, blocks:0, blocksNet:{pol:0,alt:0,wtx:0}, lucky:0,
+  upg:{power:0,cooling:0,rack:0,rackgpu:0}, gen:1, blocks:0, blocksNet:{pol:0,alt:0,wtx:0}, lucky:0,
   temp:24, muted:false, tut:0, created:now(), lastSeen:now(), sold:{pol:0,alt:0,wtx:0}, netSwitchT:0,
   payCur:'watt', w3claim:{}, ocRigs:[], mode:'demo', monSize:27, chair:0,
   usdt:0, dai:0, containers:0, warehouse:0,
@@ -658,8 +663,18 @@ function rigHash(r){ if(r.crashT>0||!r.on||r.wear>=100) return 0;
 function rigWatt(r){ if(!r.on) return 0; let w=ITEMS[1].watt; if(r.cpu) w+=ITEMS[r.cpu].watt; if(r.asic) w+=ITEMS[r.asic].watt; for(const g of r.gpus) w+=ITEMS[g].watt;
   return (r.crashT>0||r.wear>=100) ? w*0.25 : w*ocWattMult(r); }
 function rigSW(r){ let s=ITEMS[1].sw; if(r.cpu) s+=ITEMS[r.cpu].sw; if(r.asic) s+=ITEMS[r.asic].sw; if(r.frame) s+=ITEMS[14].sw; for(const g of r.gpus) s+=ITEMS[g].sw; return s; }
-/* frame = open-air rack: 4-wide rows on BOTH rails (bottom + top) = 8 cards */
-function gpuCap(r){ return r.frame?8:2; }
+/* frame = open-air rack: 4-wide rows on BOTH rails (bottom + top) = 8 cards; Rack Expansion
+   (S.upg.rackgpu) grows every framed rack up to CFG.rackGpuCap's last entry (19 GPUs). */
+function rackGpuLv(){ return Math.min(S.upg.rackgpu||0, CFG.rackGpuCap.length-1); }
+function framedCap(lv){ return CFG.rackGpuCap[Math.min(lv===undefined?rackGpuLv():lv, CFG.rackGpuCap.length-1)]; }
+function gpuCap(r){ return r.frame?framedCap():2; }
+/* upgrade ladders: power + cooling are open-ended (formula past the tables), rack ladders are finite */
+function upgMax(k){ return (k==='power'||k==='cooling')?Infinity:CFG.upPrice[k].length; }
+function upgPrice(k,lv){ const arr=CFG.upPrice[k]; if(lv<arr.length) return arr[lv];
+  const g=(CFG.upGrowth&&CFG.upGrowth[k])||2.25, v=arr[arr.length-1]*Math.pow(g,lv-arr.length+1);
+  const mag=Math.pow(10,Math.floor(Math.log10(v))-2); return Math.round(v/mag)*mag; }   // 3 significant figures
+function powerCapAddAt(i){ const a=CFG.powerCapAdd; return i<a.length?a[i]:Math.round(a[a.length-1]*Math.pow(CFG.powerCapGrowth||1.65,i-a.length+1)); }
+function coolCoeffAt(lv){ const a=CFG.coolCoeff; return lv<a.length?a[lv]:a[a.length-1]*Math.pow(CFG.coolGrowth||0.75,lv-a.length+1); }
 function totHash(){ return S.rigs.reduce((a,r)=>a+rigHash(r),0) * Math.pow(CFG.gen2Mult,S.gen-1); }
 function totWatt(){ return S.rigs.reduce((a,r)=>a+rigWatt(r),0); }
 function totSW(){ return S.rigs.reduce((a,r)=>a+rigSW(r),0) + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
@@ -667,7 +682,7 @@ function totSWStake(){ return S.rigs.reduce((a,r)=>a+rigSW(r)*(r.on?0.25:1),0) +
 function rigValue(r){ let v=ITEMS[1].price; if(r.cpu) v+=ITEMS[r.cpu].price; if(r.asic) v+=ITEMS[r.asic].price; if(r.frame) v+=ITEMS[14].price; for(const g of r.gpus) v+=ITEMS[g].price; return v; }
 function repairCost(r){ return Math.ceil(rigValue(r)*0.18*(r.wear||0)/100); }
 function stakeMult(){ return S.tower?CFG.towerStakeMult:1; }
-function powerCap(){ let c=CFG.powerBase; for(let i=0;i<S.upg.power;i++) c+=CFG.powerCapAdd[i]||CFG.powerCapAdd[CFG.powerCapAdd.length-1]; return c; }
+function powerCap(){ let c=CFG.powerBase; for(let i=0;i<(S.upg.power||0);i++) c+=powerCapAddAt(i); return c; }
 function eligibleSlots(){ const out=[];
   for(let i=0;i<3+S.upg.rack*3;i++) out.push(i);                       // garage desks
   for(let i=0;i<S.containers*6;i++) out.push(9+i);                     // container racks
@@ -680,7 +695,7 @@ function effMult(){ return S.badge?0.90:1; }
 function pcPrice(){ return Math.round(CFG.pcBasePrice*Math.pow(CFG.pcPriceGrowth,Math.max(0,S.pcCount-1))); }
 function difficulty(){ return 1 + S.blocks/CFG.diffSoft; }
 function powerFactor(){ const d=totWatt(); return d<=powerCap()?1:powerCap()/d; }
-function tempTarget(){ const cc=CFG.coolCoeff[Math.min(S.upg.cooling,CFG.coolCoeff.length-1)]; return 24 + totWatt()*cc; }
+function tempTarget(){ return 24 + totWatt()*coolCoeffAt(S.upg.cooling||0); }
 function heatFactor(){ return S.temp>=100?0.25 : S.temp>=85?0.6 : 1; }
 function farmStatus(){ return S.warehouse?'ELITE':S.containers?'PRO':'GARAGE'; }
 function netWorth(){ return S.watt + S.stakedWatt + S.usdt + S.dai + (S.pol+S.pend.pol)*S.price.pol + (S.alt+S.pend.alt+S.altLocked)*S.price.alt + (S.wtx+S.pend.wtx)*S.price.wtx; }
@@ -1381,7 +1396,7 @@ function buildRigVis(i){
        are authored long-axis=x, fans=+z, so IDENTITY rotation is exactly this
        pose; ignore the per-item `flip` flag (it's what mixed the old cards). */
     const FRAME_GPU_FLIP=false;      // true => rotate every card 180° on X together
-    const gn=r.gpus.length, perRow=4, span=0.46, railGap=0.72, rowGap=0.62;
+    const gn=r.gpus.length, perRow=gn>16?5:4, span=0.46, railGap=0.72, rowGap=0.62;   // 17-19 cards: 5-wide rails so it stays 2 rows deep
     const baseZ=-0.60, baseY=DESK.SHELF+0.22;
     /* Per-model pose correction to reach the shared fans-out pose. The gen1
        GLBs (tx120/gp50) are authored fans=+z so identity is right; the gen2
@@ -1633,9 +1648,11 @@ function benchSlotDefs(r){
   const cap=gpuCap(r), onBoard=Math.min(cap,4);
   for(let k=0;k<onBoard;k++)
     defs.push({kind:'gpu', idx:k, x:0, z:0.12+k*0.26, label:'PCIe x16 · '+(k+1), filled:!!r.gpus[k]});
-  /* frame owned: GPUs 5-8 hang on the open-air rack via PCI-e risers */
+  /* frame owned: GPUs 5+ hang on the open-air rack via PCI-e risers (2 columns for an 8-slot
+     rack, 3 columns once Rack Expansion grows it — up to 19 cards) */
+  const rcols=cap>8?3:2;
   for(let k=onBoard;k<cap;k++)
-    defs.push({kind:'gpu', idx:k, floor:true, x:2.15+((k-4)%2)*0.8, z:0.6+Math.floor((k-4)/2)*0.6,
+    defs.push({kind:'gpu', idx:k, floor:true, x:2.15+((k-4)%rcols)*0.8, z:0.6+Math.floor((k-4)/rcols)*0.6,
       label:'RACK RISER · '+(k-3), filled:!!r.gpus[k]});
   defs.push({kind:'asic', x:-2.6, z:0.4, floor:true, label:'FLOOR PAD', filled:!!r.asic});
   defs.push({kind:'frame', x:2.6, z:0.4, floor:true, label:'RACK ZONE', filled:!!r.frame});
@@ -1702,10 +1719,10 @@ function benchSync(){
       bMountG.add(m);
     } else {
       /* overflow cards live on the open-air rack, wired back with risers */
-      const col=(k-4)%2, lvl=Math.floor((k-4)/2);
+      const rcols=gpuCap(r2)>8?3:2, col=(k-4)%rcols, lvl=Math.floor((k-4)/rcols);
       const rg=new THREE.Group(); rg.position.set(2.75,0,-0.3); rg.rotation.y=-0.55;
       const m=benchCompMesh('gpu',gid); m.scale.multiplyScalar(0.48);   // fit the 1.7u frame
-      m.position.set(-0.4+col*0.8, 0.32+lvl*0.55, 0.25);
+      m.position.set(-(rcols-1)*0.4+col*0.8, 0.32+lvl*0.55, 0.25);
       rg.add(m); bScene.add(rg); bSceneBits.push(rg);
       /* PCI-e riser cable: card -> board edge, sagging between */
       rg.updateMatrixWorld(true);
@@ -2081,7 +2098,7 @@ function installPart(ri,id){
   if(it.comp==='Processor'){ if(r.cpu){SFX.err();return;} r.cpu=id; }
   else if(it.comp==='ASIC'){ if(r.asic){SFX.err();return;} r.asic=id; }
   else if(it.comp==='Frame'){ if(r.frame){SFX.err();return;} r.frame=1; }
-  else { if(r.gpus.length>=gpuCap(r)){SFX.err();toast(r.frame?'GPU slots full':'GPU slots full — install a Mining Rig Frame for 8 slots','red');return;} r.gpus.push(id); }
+  else { if(r.gpus.length>=gpuCap(r)){SFX.err();toast(r.frame?(S.upg.rackgpu<CFG.rackGpuCap.length-1?`GPU slots full — buy Rack Expansion (🔧 UPGRADES) for more GPUs per rack`:'GPU slots full — this rack is maxed at '+framedCap()+' GPUs'):`GPU slots full — install a Mining Rig Frame for ${framedCap()} slots`,'red');return;} r.gpus.push(id); }
   S.inv[id]--;
   SFX.install(); buildRigVis(ri);
   burst(new THREE.Vector3(SLOTS[r.slot][0],2.0,SLOTS[r.slot][1]),14,partMatCyan,2);
@@ -2092,7 +2109,7 @@ function removePart(ri,id,gk){
   if(it&&it.comp==='Processor'){ if(r.cpu!==id) return; r.cpu=0; S.inv[id]++; }
   else if(it&&it.comp==='ASIC'){ if(r.asic!==id) return; r.asic=0; S.inv[id]++; }
   else if(it&&it.comp==='Frame'){ if(!r.frame) return;
-    if(r.gpus.length>2){ SFX.err(); toast('Remove GPUs first — frame holds slots 3 & 4','red'); return; }
+    if(r.gpus.length>2){ SFX.err(); toast(`Remove GPUs first — frame holds slots 3–${gpuCap(r)}`,'red'); return; }
     r.frame=0; S.inv[14]++; }
   else { const ix=gk!==undefined?gk:r.gpus.indexOf(id); if(ix<0) return; r.gpus.splice(ix,1); S.inv[id]++; }
   SFX.click(); buildRigVis(ri); renderHud(); renderRigPanel(); save();
@@ -2107,15 +2124,17 @@ function switchNet(){
   renderHud(); save();
 }
 function buyUpgrade(k){
-  const lv=S.upg[k]; const arr=CFG.upPrice[k];
-  if(lv>=arr.length){ SFX.err(); return; }
-  const p=arr[lv];
+  const lv=S.upg[k]||0, max=upgMax(k);
+  if(lv>=max){ SFX.err(); return; }
+  const p=upgPrice(k,lv);
   if(S.watt<p){ SFX.err(); toast('Not enough WATT','red'); return; }
-  S.watt-=p; S.shopPool+=p; S.upg[k]++;
+  S.watt-=p; S.shopPool+=p; S.upg[k]=lv+1;
   SFX.buy();
-  const names={power:'⚡ Power grid upgraded',cooling:'❄ Cooling upgraded',rack:'🗄 Rack expansion built — 3 new slots'};
+  const names={power:`⚡ Power grid upgraded — capacity ${fmt(powerCap())}W`,cooling:`❄ Cooling upgraded — ambient ${Math.round(tempTarget())}°C target`,
+    rack:'🏠 Garage expansion built — 3 new rig slots',rackgpu:`🗄 Rack expansion — every framed rack now holds ${framedCap()} GPUs`};
   toast(names[k]+` (Lv ${S.upg[k]})`,'grn');
   if(k==='rack') refreshRings();
+  if(k==='rackgpu'&&selRig!=null&&S.rigs[selRig]) renderRigPanel();   // new empty GPU slots show up immediately
   if(k==='cooling'&&S.upg.cooling===1&&rebuildAllRigs) rebuildAllRigs(); // first cooling => RGB fans appear on the frames
   renderHud(); renderUpg(); save();
 }
@@ -3230,9 +3249,9 @@ function renderRigPanel(){
     else { rows+=slotRowEmpty(`GPU slot ${k+1} — buy a GPU in shop`,'',''); }
   }
   // frame slot
-  rows+=r.frame?slotRow(14,'✓ installed · 4 GPU slots',`data-rm="14"`,'REMOVE')
-    :S.inv[14]>0?slotRowEmpty(`Rig frame — unlocks GPU slots 3 & 4`,`data-in="14"`,'INSTALL ⚙')
-    :slotRowEmpty('Rig frame slot — 2 extra GPU slots (shop)','','');
+  rows+=r.frame?slotRow(14,`✓ installed · ${cap} GPU slots${rackGpuLv()<CFG.rackGpuCap.length-1?' · Rack Expansion adds more':''}`,`data-rm="14"`,'REMOVE')
+    :S.inv[14]>0?slotRowEmpty(`Rig frame — unlocks GPU slots 3–${framedCap()}`,`data-in="14"`,'INSTALL ⚙')
+    :slotRowEmpty(`Rig frame slot — ${framedCap()-2} extra GPU slots (shop)`,'','');
   // ASIC slot (gen2)
   rows+=r.asic?slotRow(r.asic,'✓ installed',`data-rm="${r.asic}"`,'REMOVE')
     :S.inv[13]>0?slotRowEmpty('ASIC slot — Bit Hammer ×'+S.inv[13],`data-in="13"`,'INSTALL ⚙')
@@ -3279,16 +3298,18 @@ function slotRowEmpty(label,attr,btn){
 }
 /* upgrades */
 function renderUpg(){
+  const rgLv=rackGpuLv(), rgMax=CFG.rackGpuCap.length-1;
   const defs=[
-    ['power','🔌','Power Grid',`Capacity ${powerCap()}W. Rigs beyond capacity mine slower.`,CFG.upPrice.power],
-    ['cooling','❄️','Cooling',`Ambient ${Math.round(tempTarget())}°C target. Heat above 85° throttles hashpower.`,CFG.upPrice.cooling],
-    ['rack','🗄️','Rack Expansion',`${slotCount()} rig slots. Each expansion adds 3.`,CFG.upPrice.rack],
+    ['power','🔌','Power Grid',`Capacity ${fmt(powerCap())}W (next level +${fmt(powerCapAddAt(S.upg.power||0))}W). Rigs beyond capacity mine slower. No max level — you can always power more miners.`],
+    ['cooling','❄️','Cooling',`Ambient ${Math.round(tempTarget())}°C target. Heat above 85° throttles hashpower. No max level — you can always cool more miners.`],
+    ['rackgpu','🗄️','Rack Expansion',`${framedCap()} GPUs per rack on every framed rig${rgLv<rgMax?` → ${framedCap(rgLv+1)} at the next level, up to ${CFG.rackGpuCap[rgMax]}`:' — maxed (19-GPU open-air rigs)'}.`],
+    ['rack','🏠','Garage Expansion',`${slotCount()} rig slots. Each expansion adds 3 desks.`],
   ];
-  $('upgrows').innerHTML=defs.map(([k,ic,nm,ds,arr])=>{
-    const lv=S.upg[k], max=arr.length, p=arr[lv];
+  $('upgrows').innerHTML=defs.map(([k,ic,nm,ds])=>{
+    const lv=S.upg[k]||0, max=upgMax(k), p=upgPrice(k,lv), inf=!isFinite(max), pipsN=inf?16:max;
     return `<div class="uprow"><div class="uic">${ic}</div>
-      <div class="ubody"><h3>${nm} <small style="color:var(--dim)">Lv ${lv}/${max}</small></h3><p>${ds}</p>
-      <div class="pips">${Array.from({length:max},(_,i)=>`<span class="pip ${i<lv?'on':''}"></span>`).join('')}</div></div>
+      <div class="ubody"><h3>${nm} <small style="color:var(--dim)">Lv ${lv}${inf?' · ∞':'/'+max}</small></h3><p>${ds}</p>
+      <div class="pips">${Array.from({length:pipsN},(_,i)=>`<span class="pip ${i<lv?'on':''}"></span>`).join('')}${inf&&lv>pipsN?`<small style="color:var(--cyan);margin-left:4px">+${lv-pipsN}</small>`:''}</div></div>
       <button class="ubuy" data-up="${k}" ${lv>=max||S.watt<p?'disabled':''}>${lv>=max?'MAX':fmt(p)+' ⚡'}</button></div>`;
   }).join('');
   document.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>buyUpgrade(b.dataset.up));
@@ -4095,6 +4116,7 @@ async function init(){
     joinPool, hostPool, closePool, buyValidator, exitValidators, repairRig, togglePower, openPoolHub, switchNet, POOLS,
     stakeShop, unstakeShop, buildFarm, sitDown, standUp, eligibleSlots, farmStatus,
     WALK, tickWalk, walkStop, walkBlocked,
+    get SIT(){return SIT;},                       // live seated state for the netcode
     state:()=>JSON.parse(JSON.stringify(S)) };
 }
 function forceBlock(lucky=false){

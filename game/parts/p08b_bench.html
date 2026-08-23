@@ -56,9 +56,11 @@ function benchSlotDefs(r){
   const cap=gpuCap(r), onBoard=Math.min(cap,4);
   for(let k=0;k<onBoard;k++)
     defs.push({kind:'gpu', idx:k, x:0, z:0.12+k*0.26, label:'PCIe x16 · '+(k+1), filled:!!r.gpus[k]});
-  /* frame owned: GPUs 5-8 hang on the open-air rack via PCI-e risers */
+  /* frame owned: GPUs 5+ hang on the open-air rack via PCI-e risers (2 columns for an 8-slot
+     rack, 3 columns once Rack Expansion grows it — up to 19 cards) */
+  const rcols=cap>8?3:2;
   for(let k=onBoard;k<cap;k++)
-    defs.push({kind:'gpu', idx:k, floor:true, x:2.15+((k-4)%2)*0.8, z:0.6+Math.floor((k-4)/2)*0.6,
+    defs.push({kind:'gpu', idx:k, floor:true, x:2.15+((k-4)%rcols)*0.8, z:0.6+Math.floor((k-4)/rcols)*0.6,
       label:'RACK RISER · '+(k-3), filled:!!r.gpus[k]});
   defs.push({kind:'asic', x:-2.6, z:0.4, floor:true, label:'FLOOR PAD', filled:!!r.asic});
   defs.push({kind:'frame', x:2.6, z:0.4, floor:true, label:'RACK ZONE', filled:!!r.frame});
@@ -125,10 +127,10 @@ function benchSync(){
       bMountG.add(m);
     } else {
       /* overflow cards live on the open-air rack, wired back with risers */
-      const col=(k-4)%2, lvl=Math.floor((k-4)/2);
+      const rcols=gpuCap(r2)>8?3:2, col=(k-4)%rcols, lvl=Math.floor((k-4)/rcols);
       const rg=new THREE.Group(); rg.position.set(2.75,0,-0.3); rg.rotation.y=-0.55;
       const m=benchCompMesh('gpu',gid); m.scale.multiplyScalar(0.48);   // fit the 1.7u frame
-      m.position.set(-0.4+col*0.8, 0.32+lvl*0.55, 0.25);
+      m.position.set(-(rcols-1)*0.4+col*0.8, 0.32+lvl*0.55, 0.25);
       rg.add(m); bScene.add(rg); bSceneBits.push(rg);
       /* PCI-e riser cable: card -> board edge, sagging between */
       rg.updateMatrixWorld(true);
