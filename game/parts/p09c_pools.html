@@ -214,14 +214,17 @@ const POOL_ABI={
   'function pending(address,uint256) view returns (uint256)',
   'function payoutAddressFor(uint256,address) view returns (string)',
   'function setPayoutAddress(uint256,string)'],
- engine:[
+ engine:[ /* V3 multi-coin: a pool offers a MENU of payout coins; each rig picks one */
   'function poolCount() view returns (uint256)',
-  'function createPool(uint256,uint8,uint16,uint16,string,string) returns (uint256)',
-  'function getPool(uint256) view returns (tuple(address owner,uint256 targetId,uint8 requiredAlgo,uint16 rewardFeeBps,uint16 wattCutBps,string name,string nodeEndpoint,bool active,uint256 hashRate,uint256 minersActive,uint256 feesEarned,uint256 wattEarned))',
-  'function startMining(address,uint256,uint256,uint256)',
+  'function createPool(uint256[],uint8,uint16,uint16,string,string) returns (uint256)',
+  'function addPoolTarget(uint256,uint256)',
+  'function poolTargets(uint256) view returns (uint256[])',
+  'function getPool(uint256) view returns (tuple(address owner,uint256[] targetIds,uint8 requiredAlgo,uint16 rewardFeeBps,uint16 wattCutBps,string name,string nodeEndpoint,bool active,uint256 hashRate,uint256 minersActive,uint256 wattEarned,uint256 totalPower))',
+  'function startMining(address,uint256,uint256,uint256,uint256)',
   'function stopMining(address,uint256)',
+  'function claim(address,uint256)',
   'function pendingRewards(address,uint256) view returns (uint256)',
-  'function getSession(address,uint256) view returns (tuple(address owner,address nftContract,uint256 rigId,uint256 poolId,uint256 startTime,uint256 lastClaimTime,uint256 wattDeposited,uint256 wattSettled,uint256 earned,uint256 owed,bool active))'],
+  'function getSession(address,uint256) view returns (tuple(address owner,address nftContract,uint256 rigId,uint256 poolId,uint256 targetId,uint256 startTime,uint256 lastClaimTime,uint256 wattDeposited,uint256 wattSettled,uint256 earned,uint256 owed,bool active,uint256 power,uint256 rewardDebt))'],
  rig:[
   'function mint() payable returns (uint256)','function mintPrice() view returns (uint256)',
   'function balanceOf(address) view returns (uint256)',
@@ -328,6 +331,69 @@ async function onchainSell(coin, amtCoin){
     return true;
   }catch(e){ SFX.err(); toast('swap failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); return false; }
 }
+/* ===== live wallet balances + price-aggregated SELL popup ================ */
+/* Prices come from the desk's aggregator (QuickSwap + Uniswap v3 on Polygon;
+   ALT via its Polygon bridge contract's pools, WATT-anchored fallback until a
+   Polygon ALT pool is seeded; WTX via the bridge's supply-ratio mint). */
+const PRICE_API='https://bridge.wattxchange.app/api/prices';
+let _px=null;
+async function ocPrices(force){
+  if(!force&&_px&&Date.now()-(_px._at||0)<60000) return _px;
+  try{ const r=await fetch(PRICE_API); _px=await r.json(); _px._at=Date.now(); }catch(e){ _px=_px||{usd:{}}; }
+  return _px;
+}
+const usdFmt=(v)=>v==null?'—':(v<0.01?'$'+Number(v).toPrecision(3):'$'+Number(v).toLocaleString(undefined,{maximumFractionDigits:2}));
+async function ocRenderWallet(){
+  const el=$('ocwallet'); if(!el) return;
+  if(!W3.addr){ el.innerHTML=''; return; }
+  el.innerHTML=`<div class="valbox" style="border-color:#3dff8a44"><b>💰 WALLET</b><small> reading balances…</small></div>`;
+  try{
+    const E=await poolEthers();
+    const px=await ocPrices();
+    const rows=[]; let wattTot=0;
+    for(const key of ['polygon','alt','wattx']){
+      const c=WEB3CFG.chains[key]; if(!c?.rpc) continue;
+      const pxSym={polygon:'POL',alt:'ALT',wattx:'WTX'}[key];
+      try{
+        const p=new E.JsonRpcProvider(c.rpc,c.chainId,{staticNetwork:true});
+        const [nat,watt]=await Promise.all([
+          p.getBalance(W3.addr),
+          new E.Contract(c.watt,POOL_ABI.erc20,p).balanceOf(W3.addr).catch(()=>0n)]);
+        const natN=Number(nat)/1e18, wattN=Number(watt)/1e18; wattTot+=wattN;
+        const usd=px.usd?.[pxSym];
+        rows.push(`<span style="margin-right:14px"><b>${c.sym}</b> ${natN.toLocaleString(undefined,{maximumFractionDigits:3})}${usd?` <i style="opacity:.65">${usdFmt(natN*usd)}</i>`:''} · ⚡ ${wattN.toLocaleString(undefined,{maximumFractionDigits:0})}</span>`);
+      }catch(e){ rows.push(`<span style="margin-right:14px;opacity:.5"><b>${c.sym}</b> unreachable</span>`); }
+    }
+    const wUsd=px.usd?.WATT;
+    el.innerHTML=`<div class="valbox" style="border-color:#3dff8a44"><b>💰 WALLET — live on-chain balances</b>
+      <small>${rows.join('')}<br>WATT v2 total <b>${wattTot.toLocaleString(undefined,{maximumFractionDigits:0})}</b>${wUsd?` <i style="opacity:.65">${usdFmt(wattTot*wUsd)}</i>`:''}
+      &nbsp;·&nbsp; WATT ${usdFmt(px.usd?.WATT)} · POL ${usdFmt(px.usd?.POL)} · ALT ${usdFmt(px.usd?.ALT)} · WTX ${usdFmt(px.usd?.WTX)} <i style="opacity:.55">QuickSwap/Uniswap agg</i></small></div>`;
+  }catch(e){ el.innerHTML=''; }
+}
+/* SELL popup: pick what to receive, see the aggregated price, execute the rail
+   that exists (native→WATT via chain DEX; WTX→WATT via the bridge mint). */
+async function ocSellPopup(cn){
+  const px=await ocPrices(true);
+  const from={alt:'ALT',pol:'POL',wtx:'WTX'}[cn]||cn.toUpperCase();
+  const uFrom=px.usd?.[from];
+  const mk=(sym,rail,en,note)=>{
+    const uTo=px.usd?.[sym];
+    const rate=(uFrom&&uTo)?(uFrom/uTo):null;
+    return {value:sym, disabled:!en,
+      label:`<b>${sym}</b>${rate?` — 1 ${from} ≈ ${rate<0.01?rate.toPrecision(3):rate.toLocaleString(undefined,{maximumFractionDigits:3})} ${sym}`:''} <small style="opacity:.7">${en?('via '+rail):(note||'no route yet')}</small>`};
+  };
+  const opts=cn==='wtx'
+    ? [mk('WATT','bridge (supply-ratio mint)',true), mk('POL',null,false), mk('ALT',null,false)]
+    : [mk('WATT',cn==='alt'?'SwapinDEX':'QuickSwap',true), mk('WTX',null,false), mk(cn==='alt'?'POL':'ALT',null,false)];
+  const pick=await ocChoose(`💱 SELL ${from} — what do you want for it? <small style="opacity:.6">(1 ${from} ≈ ${usdFmt(uFrom)})</small>`,opts);
+  if(!pick) return false;
+  const raw=prompt(`How much ${from} to sell for ${pick}?\n(from your connected wallet — leaves gas)`,'');
+  if(raw===null) return false;
+  const a=parseFloat(raw);
+  if(!(a>0)){ SFX.err(); toast('Enter a positive amount','red'); return false; }
+  if(pick==='WATT') return cn==='wtx'?bridgeSellWtx(a):onchainSell(cn,a);
+  toast('No route for that pair yet','red'); return false;
+}
 function poolCfg(){ return (W3.addr&&W3.chain&&W3.chain.pools)?W3.chain:null; }
 async function poolCtr(kind,write){
   const c=poolCfg(); if(!c) return null;
@@ -347,8 +413,9 @@ async function ocHostPool(){
   const name=($('oc-name')?.value||'').trim(), stratum=($('oc-stratum')?.value||'').trim(),
         rpc=($('oc-rpc')?.value||'').trim(), p2p=($('oc-p2p')?.value||'').trim(),
         feeBps=Math.round(clamp(+($('oc-fee')?.value||1),0,10)*100),
-        targetId=+($('oc-target')?.value||0);
+        targetIds=WEB3CFG.targets.filter(t=>$('oc-tgt-'+t.id)?.checked).map(t=>t.id);
   if(!name||!stratum||!rpc||!p2p){ SFX.err(); toast('Fill in pool name + stratum + node RPC + node P2P endpoints','red'); return; }
+  if(!targetIds.length){ SFX.err(); toast('Tick at least one payout coin for the pool menu','red'); return; }
   try{
     const E=await poolEthers();
     const stake=E.parseEther('100000');
@@ -366,8 +433,9 @@ async function ocHostPool(){
     }
     toast('TX 3/3 — createPool on the mining engine…','gold',8000);
     const eng=await poolCtr('engine',true);
-    await (await eng.createPool(targetId,255,feeBps,100,name,stratum)).wait();
-    SFX.mint(); toast(`⛓ ON-CHAIN POOL LIVE on ${c.name} — 100k WATT locked, fee ${(feeBps/100).toFixed(1)}%, payouts in ${WEB3CFG.targets[targetId].sym}`,'gold',12000);
+    await (await eng.createPool(targetIds,255,feeBps,100,name,stratum)).wait();
+    const menu=targetIds.map(t=>WEB3CFG.targets[t].sym).join(' + ');
+    SFX.mint(); toast(`⛓ ON-CHAIN POOL LIVE on ${c.name} — 100k WATT locked, fee ${(feeBps/100).toFixed(1)}%, coin menu: ${menu}`,'gold',12000);
   }catch(e){ SFX.err(); toast('host tx failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
   fillChainPools();
 }
@@ -398,19 +466,48 @@ async function ocMintRig(){
   }catch(e){ SFX.err(); toast('mint failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',8000); }
   fillChainPools();
 }
+/* Generic small chooser overlay: returns a Promise of the picked value (or null). */
+function ocChoose(title, options){
+  return new Promise((res)=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:#000a;z-index:9999;display:flex;align-items:center;justify-content:center';
+    ov.innerHTML=`<div style="background:#111826;border:1px solid #ffb14566;border-radius:12px;padding:18px;max-width:340px;width:90%">
+      <b style="color:#ffb145">${title}</b><div id="occ-opts" style="margin-top:10px;display:flex;flex-direction:column;gap:6px"></div>
+      <button class="hbtn" id="occ-x" style="margin-top:10px;width:100%">cancel</button></div>`;
+    document.body.appendChild(ov);
+    const done=(v)=>{ ov.remove(); res(v); };
+    for(const o of options){
+      const b=document.createElement('button'); b.className='hbtn '+(o.cls||'accent');
+      b.style.cssText='text-align:left'; b.innerHTML=o.label;
+      if(o.disabled){ b.disabled=true; b.style.opacity=.4; }
+      else b.onclick=()=>done(o.value);
+      ov.querySelector('#occ-opts').appendChild(b);
+    }
+    ov.querySelector('#occ-x').onclick=()=>done(null);
+    ov.onclick=(e)=>{ if(e.target===ov) done(null); };
+  });
+}
 async function ocMine(rigId,poolId){
   const c=poolCfg(); if(!c) return;
   try{
     const E=await poolEthers();
     const rig=await poolCtr('rig',true), watt=await poolCtr('erc20',true), eng=await poolCtr('engine',true);
+    /* the pool's coin MENU — the miner picks which coin this rig mines */
+    const menu=(await eng.poolTargets(poolId)).map(Number);
+    let targetId=menu[0];
+    if(menu.length>1){
+      targetId=await ocChoose(`⛏ RIG #${rigId} — pick the coin to mine in pool #${poolId}`,
+        menu.map(t=>({value:t,label:`${WEB3CFG.targets[t]?.sym||'#'+t} — ${WEB3CFG.targets[t]?.name||''}`})));
+      if(targetId==null) return;
+    }
     const perHour=await rig.getWattPerHour(rigId);
     const dep=perHour*24n; // 24h of WATT
     if((await watt.balanceOf(W3.addr))<dep){ SFX.err(); toast(`Mining deposits 24h of WATT up front — need ${ocFmt(dep)}`,'red',8000); return; }
     if((await watt.allowance(W3.addr,c.pools.engine))<dep)
       await (await watt.approve(c.pools.engine,dep)).wait();
     await (await rig.approve(c.pools.engine,rigId)).wait();
-    await (await eng.startMining(c.pools.rigNft,rigId,dep,poolId)).wait();
-    SFX.gen2(); toast(`⛓ RIG #${rigId} MINING on-chain — 24h WATT deposited (50% burns, host keeps 1%)`,'gold',10000);
+    await (await eng.startMining(c.pools.rigNft,rigId,dep,poolId,targetId)).wait();
+    SFX.gen2(); toast(`⛓ RIG #${rigId} MINING ${WEB3CFG.targets[targetId]?.sym||''} on-chain — 24h WATT deposited (99% burns, host keeps 1%)`,'gold',10000);
   }catch(e){ SFX.err(); toast('startMining failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
   fillChainPools();
 }
@@ -519,12 +616,13 @@ async function ocUnstakeRig(rigId){
 /* async fill of the #chainpools box inside the Pool Hub */
 let _ocBusy=false;
 async function fillChainPools(){
+  ocRenderWallet(); // live balances strip, independent of the pools contracts
   const el=$('chainpools'); if(!el) return;
   if(!W3.addr){ el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS</b>
-    <small>Connect a wallet (🦊 WALLET) to host a real pool: <b>100,000 WATT</b> locked in the PoolRegistry host contract, real miner fees + WATT-burn cut, payouts in ALT / WTX / POL / <b>WATT on BSV</b>. Live on Altcoinchain.</small></div>`; return; }
+    <small>Connect a wallet (🦊 WALLET) to host a real pool: <b>100,000 WATT v2</b> locked in the PoolRegistry host contract. ONE pool offers a MENU of coins (ALT / WTX / BSV / HTH / BITN …) — every miner picks which coin each rig mines.</small></div>`; return; }
   const c=poolCfg();
   if(!c){ el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS</b>
-    <small>${W3.chain?W3.chain.name+' pool contracts are pending deploy — switch the wallet to <b>Altcoinchain</b> to host a real pool now.':'Switch the wallet to Altcoinchain.'}</small></div>`; return; }
+    <small>${W3.chain?W3.chain.name+' V3 pool contracts are pending deploy — switch the wallet to <b>Polygon</b> once the V3 set lands there.':'Switch the wallet to Polygon.'}</small></div>`; return; }
   if(_ocBusy) return; _ocBusy=true;
   el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS — ${c.name}</b><small>reading chain…</small></div>`;
   try{
@@ -569,7 +667,7 @@ async function fillChainPools(){
     for(let i=0;i<Number(rigN);i++){
       const id=await rig.tokenOfOwnerByIndex(W3.addr,i);
       const t=await rig.getRigTraits(id);
-      const opts=engPools.map((p,pi)=>p.active?`<option value="${pi}">#${pi} ${p.name} → ${WEB3CFG.targets[Number(p.targetId)]?.sym||'?'} (fee ${(Number(p.rewardFeeBps)/100).toFixed(1)}%)</option>`:'').join('');
+      const opts=engPools.map((p,pi)=>p.active?`<option value="${pi}">#${pi} ${p.name} → ${(p.targetIds||[]).map(t=>WEB3CFG.targets[Number(t)]?.sym||'?').join('+')} (fee ${(Number(p.rewardFeeBps)/100).toFixed(1)}%)</option>`:'').join('');
       const stakeBtn = c.pools.stakingPool?`<button class="hbtn gold" data-ocstake="${id}" title="Power off + stake on-chain: earn 100% stake weight from the WATT drip">🥩 STAKE</button>`:'';
       rigRows+=`<div class="prow"><div class="pi"><b>⛏ RIG #${id}</b><small>${t.hashRate} H · eff ${t.efficiency} · ${t.wattConsumption} ⚡/h · algo ${t.algorithm}</small></div>
         ${opts?`<select id="oc-pool-${id}" class="hbtn">${opts}</select><button class="hbtn accent" data-ocmine="${id}">MINE</button>`:''}${stakeBtn}${!opts&&!stakeBtn?'<small style="color:var(--dim)">no active pools</small>':''}</div>`;
@@ -581,20 +679,25 @@ async function fillChainPools(){
       try{ const s=await eng.getSession(c.pools.rigNft,rid);
         if(s.active&&s.owner.toLowerCase()===W3.addr.toLowerCase()){
           const pr=await eng.pendingRewards(c.pools.rigNft,rid);
-          sesRows+=`<div class="prow sel"><div class="pi"><b>⛏ RIG #${rid} — MINING</b><small>pool #${s.poolId} · earned ${ocFmt(s.earned,4)} + pending ${ocFmt(pr,4)}</small></div>
+          const csym=WEB3CFG.targets[Number(s.targetId)]?.sym||'?';
+          sesRows+=`<div class="prow sel"><div class="pi"><b>⛏ RIG #${rid} — MINING ${csym}</b><small>pool #${s.poolId} · earned ${ocFmt(s.earned,4)} + pending ${ocFmt(pr,4)} ${csym}</small></div>
             <button class="hbtn" data-ocstop="${rid}">STOP + CLAIM</button></div>`;
         }
       }catch(e){}
     }
-    const tgtOpts=WEB3CFG.targets.map(t=>`<option value="${t.id}">${t.sym} — ${t.name}</option>`).join('');
+    /* Coin MENU for a new pool: check every coin your nodes actually earn.
+       POL stays disabled until a Polygon validator exists to back it. */
+    const tgtChecks=WEB3CFG.targets.map(t=>{ const dis=t.sym==='POL';
+      return `<label class="hbtn" style="display:inline-flex;align-items:center;gap:4px${dis?';opacity:.4' :''}" title="${dis?'no Polygon validator yet':t.name}">
+        <input type="checkbox" id="oc-tgt-${t.id}" ${dis?'disabled':''}> ${t.sym}</label>`; }).join('');
     el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS — ${c.name}</b>
       ${pendRows?`<small>unpaid rewards (operator daemon pays these out): ${pendRows}</small>`:''}
       ${hostRow}${poolRows}
       ${regd?'':`<div class="hostbox" style="margin-top:8px"><b>🏗 HOST A REAL POOL — lock 100,000 ⚡WATT on-chain</b>
-        <small>Stake sits in the PoolRegistry (90-day unstake hold). Your pool earns your fee % of every miner's rewards + 1% of the WATT they burn. Payouts land in the coin you pick — incl. WATT on BSV via the treasury bridge.</small>
+        <small>Stake sits in the PoolRegistry (30-day unstake hold). ONE pool can offer MANY coins — tick every coin your nodes earn; each miner picks which coin their rig mines. Your pool earns your fee % of every miner's rewards + 1% of the WATT they burn. You can add more pools or coins and change fees any time.</small>
         <div class="rowbtns" style="margin-top:6px;flex-wrap:wrap">
           <input id="oc-name" class="hbtn" placeholder="pool name" style="flex:1;min-width:110px">
-          <select id="oc-target" class="hbtn">${tgtOpts}</select>
+          ${tgtChecks}
           FEE <input id="oc-fee" type="range" min="0" max="10" value="1" step="0.5" style="flex:1;min-width:80px"> <b id="oc-feev">1.0%</b></div>
         <div class="rowbtns" style="margin-top:6px;flex-wrap:wrap">
           <input id="oc-stratum" class="hbtn" placeholder="stratum+tcp://host:3333" style="flex:1;min-width:150px">
@@ -689,7 +792,7 @@ function renderPoolHub(){
       <span>your payout address: <b class="mono">${S.payoutAddr?(S.payoutAddr.slice(0,8)+'…'+S.payoutAddr.slice(-6)):'— none (generate in a rig OS → 👛 Wallet)'}</b></span>
       ${S.payoutAddr&&isLive()&&W3.addr?'<button class="hbtn gold" id="valreg">REGISTER ON-CHAIN</button>':''}
     </div></div>`;
-  $('poolbody').innerHTML=`<div id="chainpools"></div>${stakeBox}
+  $('poolbody').innerHTML=`<div id="ocwallet"></div><div id="chainpools"></div>${stakeBox}
     ${isLive()&&econ?`<p style="color:var(--dim);font-size:10.5px;margin:2px 0 8px;line-height:1.5">⛓ ${nx.name}: ${econ}.</p>`:''}
     <p style="color:var(--dim);font-size:11px;margin:2px 0 10px">Network: <b style="color:var(--txt)">${CFG.nets[S.net].name}</b> (switch on the HUD pill) · pending payout <b>${fmt(S.pend[coin])} ${sym}</b> · threshold ${S.payThresh}× reward
     <button class="hbtn" id="thresh" style="padding:2px 8px;font-size:10px">TH ${S.payThresh}×</button></p>

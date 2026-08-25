@@ -10,12 +10,16 @@ const WEB3CFG={
       shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', mg:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f', vault:'0x72A716F62aCfF960f6F097B4c7909B2368eD3acA', migrator:'0x97BcC99ff34FA2cde929c97074011E8929F59679',
       classicNft:'0x970a8b10147e3459d3cbf56329b76ac18d329728', oldWatt:'0xE960d5076cd3169C343Ee287A2c3380A222e5839',
       nftV2:null, wattV2:null,
-      pools:{ registry:'0xCe347180C3A45151C10366Da43fD822289ebB075', hub:'0x6f8330bB06D93A8932618EC1Fbb2818323EC3bf5',
-              engine:'0x782585f15E75b76C4bE33Ae31c47Bc437C9Bbfe0', rigNft:'0xf9F94e9fa744DE1209EF28321604a0Aa3B21a884', stakingPool:'0x07ef3eCDB4e4fd9D914787031b6cB746340bF661', migrator:'0xf2DbF910aD1cA08c3879C72AE6277fA903E058c4' },
+      /* pools: V3 multi-coin set (WATT v2 stake, coin-menu pools) — hub deployed
+         0x8eC1Fa15…; registry+engine fill from deployments-pools-v3-137.json when
+         the deploy lands. The old v1-stake set (deployments-pools-137.json) is
+         RETIRED — its single-target engine no longer matches this client's ABI. */
+      pools:null,
       economy:{ items:'0x0CDbf4926a8EdFFaa803B96f8fa90B065DE19Eb2', shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', stakingPool:'0x7E8FC9d7D7588F410E1399aC690F901268B08a8d', wattV2:'0x387693eCEC037C61943404F03c097d2ADA15ae3f' },
-      /* QuickSwap V2 — real WPOL/WATT pool 0xEC54584a…Bef. Sell POL→WATT native-in. */
+      /* QuickSwap V2 — WATTv2/WPOL pool 0x823a6484… (v2 has its own pool now).
+         Sell POL→WATT v2 native-in via the same router. */
       dex:{ kind:'univ2', router:'0xa5E0829CaCED8fFDD4De3c43696c57F7D7A678ff', weth:'0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',
-            wattOut:'0xE960d5076cd3169C343Ee287A2c3380A222e5839' } },
+            wattOut:'0x387693eCEC037C61943404F03c097d2ADA15ae3f' } },
     /* rpc: rpc0.altcoinchain.org is dead — rpc.wattxchange.app is the live node.
        pools: the ON-CHAIN pool-hosting set, deployed+verified 2026-08-09
        (deployments-pools-2330.json). 100k WATT host stake lives in registry. */
@@ -24,8 +28,9 @@ const WEB3CFG={
       shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', mg:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f', vault:'0x72A716F62aCfF960f6F097B4c7909B2368eD3acA', migrator:'0x97BcC99ff34FA2cde929c97074011E8929F59679',
       classicNft:'0xf9670e5D46834561813CA79854B3d7147BBbFfb2', oldWatt:'0x6645143e49B3a15d8F205658903a55E520444698',
       nftV2:null, wattV2:null,
-      pools:{ registry:'0x0f1e3C2336fBf35148FdbA21F81fA3B57a1DF254', hub:'0xfbc6168D4c4f112275713B976612891E432e265e',
-              engine:'0xB0A142d97225AD61682d77A30a2eC7144826F487', rigNft:'0x131A875e1bfEB2B3735E5d9Ad5e8871fF6CE9381', stakingPool:'0x62fC935400104371777aD36B78CF73f2c48dcD24', migrator:'0xdB13ecc87960632b8aAe93640F246CdAE1675B78' },
+      /* pools: RETIRED v1-stake set (ABI mismatch with the V3 client) — the V3
+         multi-coin deploy fills this slot when it lands on ALT. */
+      pools:null,
       economy:{ items:'0x851fd0205348783444Fc9EDe99Ca2321681EC99b', shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', stakingPool:'0xa3f8B04310380cD13Ec85B11420d1fc848af36C4', wattV2:'0xB7635E386283CAE6FB1A710f19CaA8220beF630D' },
       /* SwapinDEX (original live venue) — WATT/wALT pool 0xb2F8e147…. Sell ALT→WATT native-in. */
       dex:{ kind:'univ2', router:'0xae168Ce47cebca9abbC5107a58df0532f1afa4d6', weth:'0x48721ADeFE5b97101722c0866c2AffCE797C32b6',
@@ -41,8 +46,9 @@ const WEB3CFG={
       shop:'0x0239f289Cca84E7Bb899Fe065ba452293D501355',
       classicNft:'0x566808D0747662d0a0eeC68A854b695C01BE76a6', oldWatt:'0x99B5503c7144dcf241551aDabFbb58e88829BD3a',
       nftV2:null, wattV2:null,
-      pools:{ registry:'0x3a02971ceAF9B817e770c36e393A95542bC65Df2', hub:'0x9fAb0fBa9b458A7A0c9D60a26BC33f6E2695F179',
-              engine:'0xE2D4eC76dFFAC5215a03332B4A01ce0AFF9A91c1', rigNft:'0x5f9be9282E29fCE419cE2e424ED3fd0be842C7e7', stakingPool:'0x0176566fe72E5733008Bfc68439FB2F3Eb43901B', migrator:'0x2301Fc735d7770f955c47B21d0FE2a66E3A195f9' },
+      /* pools: RETIRED v1-stake set (ABI mismatch with the V3 client) — the V3
+         multi-coin deploy fills this slot when it lands on WATTx. */
+      pools:null,
       economy:{ items:'0x9baaFDE958d0dE13043CBb4292e467EB00ED06B4', shop:'0x0239f289Cca84E7Bb899Fe065ba452293D501355', stakingPool:'0xe9000a1ba29c3e87B4F964E9514eA4e8fd5d5749', wattV2:'0xc4603E2582aE320857379819123dFbFd3093dcfa' } },
   },
   /* PayoutHub target ids, in deploy-script registration order (identical on

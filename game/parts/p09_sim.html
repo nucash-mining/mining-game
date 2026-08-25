@@ -100,6 +100,9 @@ function sellCoin(cn, amt, recv){
      ask how much wallet coin to swap (never dump the whole native balance —
      that would strand gas) and hand off to onchainSell. */
   if(typeof isLive==='function' && isLive() && (recv===undefined||recv==='watt') && dexChainForCoin(cn)){
+    /* price-aggregated popup: pick the receive coin, see the real rate, then
+       the rail executes (chain DEX / bridge). Falls back to the old prompt. */
+    if(typeof ocSellPopup==='function'){ ocSellPopup(cn); return true; }
     const sym=cn.toUpperCase();
     const raw=prompt(`LIVE swap — how much ${sym} to sell for WATT?\n(from your connected wallet, leaves gas)`, '');
     if(raw===null) return false;
@@ -242,7 +245,8 @@ function removePart(ri,id,gk){
 function switchNet(){
   const t=now(); if(t-S.netSwitchT<8000){ toast('Network sync in progress…','red'); return; }
   S.netSwitchT=t;
-  S.net=S.net==='polygon'?'alt':S.net==='alt'?'wattx':'polygon';
+  // Only mineable chains rotate here — Polygon is swapOnly (sell/settle, not mine).
+  S.net = S.net==='alt' ? 'wattx' : 'alt';
   SFX.swap();
   const n=CFG.nets[S.net];
   toast(`🔗 Switched to ${n.name}${n.sim?' (testnet sim — mainnet soon™)':''} — reward ${n.reward} ${n.sym}/block`, S.net==='alt'?'gold':'cyan');
