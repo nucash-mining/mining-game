@@ -377,7 +377,8 @@ async function ocUnstake(fn){
   catch(e){ SFX.err(); toast((''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',8000); }
   fillChainPools();
 }
-/* off-EVM payout addresses: target 3 = BSV (WATT on BSV), target 4 = HTH (masternode rewards) —
+/* off-EVM payout addresses: target 3 = BSV (WATT on BSV), target 4 = HTH (masternode rewards),
+   target 5 = BITN (Bitnet PoS stake rewards) —
    the hub keys the declaration to msg.sender; the operator daemon reads it when it settles */
 async function ocSaveAddr(tid,inputId,label){
   const a=($(inputId)?.value||'').trim();
@@ -387,7 +388,7 @@ async function ocSaveAddr(tid,inputId,label){
   }catch(e){ SFX.err(); toast((''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',8000); }
   fillChainPools();
 }
-const ocSaveBsv=()=>ocSaveAddr(3,'oc-bsv','BSV'), ocSaveHth=()=>ocSaveAddr(4,'oc-hth','HTH');
+const ocSaveBsv=()=>ocSaveAddr(3,'oc-bsv','BSV'), ocSaveHth=()=>ocSaveAddr(4,'oc-hth','HTH'), ocSaveBitn=()=>ocSaveAddr(5,'oc-bitn','BITN');
 async function ocMintRig(){
   try{ const rig=await poolCtr('rig',true);
     const price=await rig.mintPrice();
@@ -529,9 +530,10 @@ async function fillChainPools(){
   try{
     const E=await poolEthers();
     const reg=await poolCtr('registry'), hub=await poolCtr('hub'), eng=await poolCtr('engine'), rig=await poolCtr('rig');
-    const [regd, actRes, engN, rigN, bsvAddr, hthAddr]=await Promise.all([
+    const [regd, actRes, engN, rigN, bsvAddr, hthAddr, bitnAddr]=await Promise.all([
       reg.isRegistered(W3.addr), reg.getActivePools(), eng.poolCount(), rig.balanceOf(W3.addr),
       hub.payoutAddressFor(3,W3.addr), hub.payoutAddressFor(4,W3.addr).catch(()=>''),
+      hub.payoutAddressFor(5,W3.addr).catch(()=>''),
     ]);
     /* pending payouts across targets */
     const pend=await Promise.all(WEB3CFG.targets.map(t=>hub.pending(W3.addr,t.id).catch(()=>0n)));
@@ -605,7 +607,9 @@ async function fillChainPools(){
         <input id="oc-bsv" class="hbtn" placeholder="BSV payout address (for WATT-on-BSV rewards)" value="${bsvAddr||''}" style="flex:1;min-width:180px">
         <button class="hbtn" id="oc-savebsv">SAVE BSV ADDR</button>
         <input id="oc-hth" class="hbtn" placeholder="HTH payout address (HTH masternode-reward pools)" value="${hthAddr||''}" style="flex:1;min-width:180px">
-        <button class="hbtn" id="oc-savehth">SAVE HTH ADDR</button></div>
+        <button class="hbtn" id="oc-savehth">SAVE HTH ADDR</button>
+        <input id="oc-bitn" class="hbtn" placeholder="BITN payout address (Bitnet PoS-reward pools)" value="${bitnAddr||''}" style="flex:1;min-width:180px">
+        <button class="hbtn" id="oc-savebitn">SAVE BITN ADDR</button></div>
       ${rigRows}${sesRows}</div>`;
     /* wire */
     $('oc-host')?.addEventListener('click',ocHostPool);
@@ -613,6 +617,7 @@ async function fillChainPools(){
     $('oc-claimrig')?.addEventListener('click',ocClaimRig);
     $('oc-savebsv')?.addEventListener('click',ocSaveBsv);
     $('oc-savehth')?.addEventListener('click',ocSaveHth);
+    $('oc-savebitn')?.addEventListener('click',ocSaveBitn);
     $('oc-unstake')?.addEventListener('click',()=>ocUnstake('requestUnstake'));
     $('oc-cancelun')?.addEventListener('click',()=>ocUnstake('cancelUnstake'));
     $('oc-doneun')?.addEventListener('click',()=>ocUnstake('completeUnstake'));
