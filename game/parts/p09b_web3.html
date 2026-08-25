@@ -10,11 +10,11 @@ const WEB3CFG={
       shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', mg:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f', vault:'0x72A716F62aCfF960f6F097B4c7909B2368eD3acA', migrator:'0x97BcC99ff34FA2cde929c97074011E8929F59679',
       classicNft:'0x970a8b10147e3459d3cbf56329b76ac18d329728', oldWatt:'0xE960d5076cd3169C343Ee287A2c3380A222e5839',
       nftV2:null, wattV2:null,
-      /* pools: V3 multi-coin set (WATT v2 stake, coin-menu pools) — hub deployed
-         0x8eC1Fa15…; registry+engine fill from deployments-pools-v3-137.json when
-         the deploy lands. The old v1-stake set (deployments-pools-137.json) is
-         RETIRED — its single-target engine no longer matches this client's ABI. */
-      pools:null,
+      /* pools: V3 multi-coin set (WATT v2 stake, coin-menu pools) — deployed +
+         verified 2026-08-25 (deployments-pools-v3-137.json). rigNft + staking
+         + migrator carry over from the v1 set (same NFT, re-authorized). */
+      pools:{ registry:'0xC65E46645EF9d7Bf1F7D526c9Fb4F4B54704d1DE', hub:'0x8eC1Fa15A1DFB038396176a122ED2D385Ee04339',
+              engine:'0x8d372e3e1fbB82e707D09f782a1e3959DC447354', rigNft:'0xf9F94e9fa744DE1209EF28321604a0Aa3B21a884', stakingPool:'0x07ef3eCDB4e4fd9D914787031b6cB746340bF661', migrator:'0xf2DbF910aD1cA08c3879C72AE6277fA903E058c4' },
       economy:{ items:'0x0CDbf4926a8EdFFaa803B96f8fa90B065DE19Eb2', shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', stakingPool:'0x7E8FC9d7D7588F410E1399aC690F901268B08a8d', wattV2:'0x387693eCEC037C61943404F03c097d2ADA15ae3f' },
       /* QuickSwap V2 — WATTv2/WPOL pool 0x823a6484… (v2 has its own pool now).
          Sell POL→WATT v2 native-in via the same router. */
