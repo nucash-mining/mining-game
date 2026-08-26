@@ -73,6 +73,38 @@ const encA=a=>a.replace(/^0x/,'').toLowerCase().padStart(64,'0');
 function fromWei(hx,dp=3){ try{ if(!hx||hx==='0x') return 0; const w=BigInt(hx); return Number(w/10n**12n)/1e6; }catch(e){ return 0; } }
 async function w3Req(method,params){ return w3Eth().request({method,params}); }
 async function w3CallRaw(to,data){ return w3Req('eth_call',[{to,data},'latest']); }
+/* Wallet-free JSON-RPC (public chain RPCs) — used for cross-chain balance reads
+   that must work no matter which chain the wallet itself is connected to. */
+async function rpcFetch(url,method,params){
+  const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})});
+  const j=await r.json(); if(j.error) throw new Error(j.error.message||'rpc error');
+  return j.result;
+}
+/* LIVE cross-chain balances for the CONNECTED wallet: native + WATT v2 on
+   Polygon / Altcoinchain / WATTxchain, via the chains' public RPCs. The HUD
+   coin rows and ⚡ total render from this in Live mode, so what every player
+   sees is THEIR wallet's real balances — refreshed every 30s and on demand. */
+W3.live={};
+let _liveBalT=0,_liveBalBusy=false;
+async function w3LiveBalances(force){
+  if(!W3.addr||!(typeof isLive==='function'&&isLive())) return;
+  if(_liveBalBusy||(!force&&Date.now()-_liveBalT<30000)) return;
+  _liveBalBusy=true;
+  try{
+    await Promise.all([['polygon','pol'],['alt','alt'],['wattx','wtx']].map(async([key,cn])=>{
+      const c=WEB3CFG.chains[key]; if(!c?.rpc) return;
+      try{
+        const [nat,watt]=await Promise.all([
+          rpcFetch(c.rpc,'eth_getBalance',[W3.addr,'latest']),
+          c.watt?rpcFetch(c.rpc,'eth_call',[{to:c.watt,data:WEB3CFG.sel.balErc20+encA(W3.addr)},'latest']):'0x0']);
+        W3.live[cn]={nat:fromWei(nat),watt:fromWei(watt),at:Date.now()};
+      }catch(e){ /* keep the previous reading on a transient RPC failure */ }
+    }));
+    _liveBalT=Date.now();
+  }finally{ _liveBalBusy=false; try{ renderHud&&renderHud(); }catch(e){} }
+}
+setInterval(()=>{ try{ w3LiveBalances(); }catch(e){} },30000);
 function w3ChainByHexId(id){ const n=typeof id==='string'?parseInt(id,16):id;
   for(const k in WEB3CFG.chains){ if(WEB3CFG.chains[k].chainId===n) return WEB3CFG.chains[k]; } return null; }
 
@@ -129,6 +161,7 @@ async function w3Refresh(){
     await Promise.allSettled(jobs);
     w3GrantOwned();
   }catch(e){ W3.err=(''+(e&&e.message||e)).slice(0,120); }
+  w3LiveBalances(true).catch(()=>{});  // cross-chain balances for the HUD rows
   renderWallet(); renderHud&&renderHud();  // reflect fresh on-chain WATT in the HUD immediately
 }
 /* Live mode: the installable inventory MIRRORS your current on-chain holdings.

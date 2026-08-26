@@ -8,9 +8,16 @@ function toast(txt, cls='', dur=4200){
   setTimeout(()=>{ d.style.transition='opacity .5s'; d.style.opacity='0'; setTimeout(()=>d.remove(),500); },dur);
 }
 function renderHud(){
-  // Live mode: the HUD WATT is your REAL on-chain WATTv2 balance (0 until a
-  // wallet is connected), not the demo sim counter.
-  $('v-watt').textContent = (typeof isLive==='function' && isLive()) ? fmt(W3.watt||0) : fmt(S.watt);
+  // Live mode: every HUD balance is the CONNECTED WALLET's real on-chain
+  // holding — WATT v2 summed across Polygon+ALT+WATTx, and each coin row that
+  // chain's native balance — read via public RPCs (W3.live, 30s refresh), so
+  // each player sees their own wallet, whatever chain the wallet sits on.
+  const live=(typeof isLive==='function' && isLive());
+  const L=live?(W3.live||{}):null;
+  if(live){
+    const wsum=(L.pol?.watt||0)+(L.alt?.watt||0)+(L.wtx?.watt||0);
+    $('v-watt').textContent = fmt(wsum || W3.watt || 0);
+  } else $('v-watt').textContent = fmt(S.watt);
   $('v-hash').textContent=fmt(totHash());
   const draw=Math.round(totWatt()), cap=powerCap();
   $('v-pow').textContent=`${draw}/${cap}`;
@@ -18,13 +25,25 @@ function renderHud(){
   const tp=$('s-temp'); tp.classList.toggle('hot',S.temp>=85&&S.temp<100); tp.classList.toggle('crit',S.temp>=100);
   $('v-temp').textContent=Math.round(S.temp)+'°';
   $('v-blk').textContent=fmtInt(S.blocks);
-  $('v-pol').textContent=fmt(S.pol); $('v-alt').textContent=fmt(S.alt);
-  $('v-wtx').textContent=fmt(S.wtx);
+  $('v-pol').textContent=fmt(live?(L.pol?.nat||0):S.pol);
+  $('v-alt').textContent=fmt(live?(L.alt?.nat||0):S.alt);
+  $('v-wtx').textContent=fmt(live?(L.wtx?.nat||0):S.wtx);
   const pp=$('p-pol'), pa=$('p-alt'), pw=$('p-wtx');
-  pp.textContent='@'+S.price.pol.toFixed(1); pa.textContent='@'+S.price.alt.toFixed(1); pw.textContent='@'+S.price.wtx.toFixed(2);
-  pp.className='pr '+(S.price.pol>=CFG.nets.polygon.p0?'up':'dn');
-  pa.className='pr '+(S.price.alt>=CFG.nets.alt.p0?'up':'dn');
-  pw.className='pr '+(S.price.wtx>=CFG.nets.wattx.p0?'up':'dn');
+  const px=(live && typeof ocPrices==='function' && _px && _px.usd) ? _px.usd : null;
+  if(px){
+    /* Live: real aggregated USD prices (QuickSwap/Uniswap via the bridge desk) */
+    pp.textContent=px.POL!=null?'$'+Number(px.POL).toFixed(3):'—';
+    pa.textContent=px.ALT!=null?'$'+Number(px.ALT).toPrecision(2):'—';
+    pw.textContent=px.WTX!=null?'$'+Number(px.WTX).toPrecision(2):'—';
+    pp.className=pa.className=pw.className='pr';
+    ocPrices().catch(()=>{}); // background refresh for the next render
+  } else {
+    pp.textContent='@'+S.price.pol.toFixed(1); pa.textContent='@'+S.price.alt.toFixed(1); pw.textContent='@'+S.price.wtx.toFixed(2);
+    pp.className='pr '+(S.price.pol>=CFG.nets.polygon.p0?'up':'dn');
+    pa.className='pr '+(S.price.alt>=CFG.nets.alt.p0?'up':'dn');
+    pw.className='pr '+(S.price.wtx>=CFG.nets.wattx.p0?'up':'dn');
+    if(live && typeof ocPrices==='function') ocPrices().catch(()=>{}); // warm the cache
+  }
   /* SELL sells the WHOLE balance, so dim it at zero and say so on hover —
      it used to look identical whether or not you had anything to sell. */
   const liveMode=S.mode==='live';
