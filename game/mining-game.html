@@ -615,7 +615,10 @@ const SLOTS = [ // rig positions [x,z,shelfY] — 0-8 garage desks, 9-20 contain
   [-9,27,0.55],[-9,27,1.9],[-9,27,3.25],[-3,27,0.55],[-3,27,1.9],[-3,27,3.25],
   [ 3,27,0.55],[ 3,27,1.9],[ 3,27,3.25],[ 9,27,0.55],[ 9,27,1.9],[ 9,27,3.25],
 ];
-const SAVEKEY='tmg3d_v1';
+const SAVEKEY='tmg3d_v1';          // DEMO world save (unchanged key — old saves keep working)
+const LIVEKEY='tmg3d_live_v1';     // LIVE world save — a separate world holding ONLY wallet-backed state
+const MODEKEY='tmg3d_mode';        // which world to boot into next visit
+const keyForMode=m=>m==='live'?LIVEKEY:SAVEKEY;
 const now=()=>Date.now();
 let S=null;
 function freshState(){ const inv={},bought={2:0,17:0,18:0,19:0,23:0}; INV_IDS.forEach(i=>{inv[i]=0;bought[i]=0;}); return {
@@ -629,8 +632,14 @@ function freshState(){ const inv={},bought={2:0,17:0,18:0,19:0,23:0}; INV_IDS.fo
   pool:{pol:'nucash',alt:'nucash',wtx:'genesis'}, myPools:{}, pend:{pol:0,alt:0,wtx:0}, payThresh:3,
   shares:0, burned:0, altH:6998800, altHybrid:0, altNodes:0, altLocked:0, valEarn:0, poolEarnW:0, poolEarnC:{pol:0,alt:0,wtx:0},
 };}
-function save(){ if(!S) return; S.lastSeen=now(); try{localStorage.setItem(SAVEKEY,JSON.stringify(S));}catch(e){} }
-function load(){ try{ const r=localStorage.getItem(SAVEKEY); if(r){ const o=JSON.parse(r); if(o&&o.rigs){
+/* LIVE world: starts EMPTY — no free demo WATT, no sim rigs. Inventory and
+   rigs mirror the connected wallet (w3GrantOwned); the HUD coin rows read the
+   wallet's real balances (W3.live). Demo progress never leaks in. */
+function freshLiveState(){ const st=freshState(); st.mode='live'; st.watt=0; st.shopPool=0; return st; }
+function save(){ if(!S) return; S.lastSeen=now();
+  try{ localStorage.setItem(keyForMode(S.mode),JSON.stringify(S)); localStorage.setItem(MODEKEY,S.mode); }catch(e){} }
+function load(mode){ mode=mode==='live'?'live':'demo';
+  try{ const r=localStorage.getItem(keyForMode(mode)); if(r){ const o=JSON.parse(r); if(o&&o.rigs){
   const f=freshState();
   const inv=Object.assign({},f.inv,o.inv||{}), bought=Object.assign({},f.bought,o.bought||{});
   const st=Object.assign(f,o);
@@ -644,6 +653,9 @@ function load(){ try{ const r=localStorage.getItem(SAVEKEY); if(r){ const o=JSON
   st.myPools=o.myPools||{}; st.pend=Object.assign({pol:0,alt:0,wtx:0},o.pend||{});
   for(const c of ['pol','alt','wtx']) if(st.pool[c]==='solo'&&!st.myPools[c]) st.pool[c]=c==='wtx'?'genesis':'nucash';
   st.poolEarnC=Object.assign({pol:0,alt:0,wtx:0},o.poolEarnC||{});
+  /* the slot decides the mode — a pre-split save that stored mode:'live' in the
+     demo slot must NOT drag demo rigs/balances into the live world */
+  st.mode=mode;
   return st; } } }catch(e){} return null; }
 /* number formatting */
 function fmt(n){ n=Number(n)||0; const a=Math.abs(n);
@@ -1060,6 +1072,12 @@ function buildFarm(){
       pad.rotation.x=-Math.PI/2; pad.position.set(0,0.01,27); scene.add(pad); farmG.pads[1]=pad; }
     farmG.warehouse=makeWarehouse();
   }
+  // farm can also SHRINK now (demo/live are separate worlds) — structures are
+  // kept but hidden when the loaded state doesn't own them
+  farmG.containers.forEach((c,i)=>{ c.visible=i<S.containers; });
+  if(farmG.warehouse) farmG.warehouse.visible=!!S.warehouse;
+  if(farmG.pads[0]) farmG.pads[0].visible=S.containers>0;
+  if(farmG.pads[1]) farmG.pads[1].visible=!!S.warehouse;
   // widen the world as the farm grows
   const far=S.warehouse?46:S.containers?38:24;
   controls.maxDistance=far; scene.fog.far=S.warehouse?95:S.containers?75:40;
@@ -1975,6 +1993,9 @@ function sellCoin(cn, amt, recv){
      ask how much wallet coin to swap (never dump the whole native balance —
      that would strand gas) and hand off to onchainSell. */
   if(typeof isLive==='function' && isLive() && (recv===undefined||recv==='watt') && dexChainForCoin(cn)){
+    /* price-aggregated popup: pick the receive coin, see the real rate, then
+       the rail executes (chain DEX / bridge). Falls back to the old prompt. */
+    if(typeof ocSellPopup==='function'){ ocSellPopup(cn); return true; }
     const sym=cn.toUpperCase();
     const raw=prompt(`LIVE swap — how much ${sym} to sell for WATT?\n(from your connected wallet, leaves gas)`, '');
     if(raw===null) return false;
@@ -2064,7 +2085,15 @@ function curPay(cur,amt){
 }
 function buyItem(id){
   const it=ITEMS[id];
-  if(id===1){ if(mintPC(S.pcCount===0)) renderShop(); return; }
+  if(id===1){
+    /* LIVE: the Gaming PC is a REAL free mint (CaseFreeMint, one per wallet) —
+       never a sim rig, or the desk would have no NFT behind it */
+    if(typeof isLive==='function' && isLive()){
+      if(typeof ocFreeMintPC==='function' && W3.addr) ocFreeMintPC();
+      else toast('Connect a wallet (🦊) on Polygon or Altcoinchain to claim the free Gaming PC','gold',9000);
+      return;
+    }
+    if(mintPC(S.pcCount===0)) renderShop(); return; }
   /* LIVE mode: buy the item as a REAL NFT through the on-chain ItemShop instead
      of the sim shop. ocBuyItem handles payment (WATT→staking pool, or native at
      WATT value→treasury), mint, and messaging; the sim inventory is untouched. */
@@ -2117,7 +2146,8 @@ function removePart(ri,id,gk){
 function switchNet(){
   const t=now(); if(t-S.netSwitchT<8000){ toast('Network sync in progress…','red'); return; }
   S.netSwitchT=t;
-  S.net=S.net==='polygon'?'alt':S.net==='alt'?'wattx':'polygon';
+  // Only mineable chains rotate here — Polygon is swapOnly (sell/settle, not mine).
+  S.net = S.net==='alt' ? 'wattx' : 'alt';
   SFX.swap();
   const n=CFG.nets[S.net];
   toast(`🔗 Switched to ${n.name}${n.sim?' (testnet sim — mainnet soon™)':''} — reward ${n.reward} ${n.sym}/block`, S.net==='alt'?'gold':'cyan');
@@ -2160,13 +2190,18 @@ const WEB3CFG={
       nft:'0x0CDbf4926a8EdFFaa803B96f8fa90B065DE19Eb2', watt:'0x387693eCEC037C61943404F03c097d2ADA15ae3f', staking:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f',
       shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', mg:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f', vault:'0x72A716F62aCfF960f6F097B4c7909B2368eD3acA', migrator:'0x97BcC99ff34FA2cde929c97074011E8929F59679',
       classicNft:'0x970a8b10147e3459d3cbf56329b76ac18d329728', oldWatt:'0xE960d5076cd3169C343Ee287A2c3380A222e5839',
+      freeMint:'0xc75504Cb57b26041655dDd739414C240Dd628e7a', /* CaseFreeMint — free Gaming PC (id 1), one per wallet, open since 2026-08-24 */
       nftV2:null, wattV2:null,
-      pools:{ registry:'0xCe347180C3A45151C10366Da43fD822289ebB075', hub:'0x6f8330bB06D93A8932618EC1Fbb2818323EC3bf5',
-              engine:'0x782585f15E75b76C4bE33Ae31c47Bc437C9Bbfe0', rigNft:'0xf9F94e9fa744DE1209EF28321604a0Aa3B21a884', stakingPool:'0x07ef3eCDB4e4fd9D914787031b6cB746340bF661', migrator:'0xf2DbF910aD1cA08c3879C72AE6277fA903E058c4' },
+      /* pools: V3 multi-coin set (WATT v2 stake, coin-menu pools) — deployed +
+         verified 2026-08-25 (deployments-pools-v3-137.json). rigNft + staking
+         + migrator carry over from the v1 set (same NFT, re-authorized). */
+      pools:{ registry:'0xC65E46645EF9d7Bf1F7D526c9Fb4F4B54704d1DE', hub:'0x8eC1Fa15A1DFB038396176a122ED2D385Ee04339',
+              engine:'0x8d372e3e1fbB82e707D09f782a1e3959DC447354', rigNft:'0xf9F94e9fa744DE1209EF28321604a0Aa3B21a884', stakingPool:'0x07ef3eCDB4e4fd9D914787031b6cB746340bF661', migrator:'0xf2DbF910aD1cA08c3879C72AE6277fA903E058c4' },
       economy:{ items:'0x0CDbf4926a8EdFFaa803B96f8fa90B065DE19Eb2', shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', stakingPool:'0x7E8FC9d7D7588F410E1399aC690F901268B08a8d', wattV2:'0x387693eCEC037C61943404F03c097d2ADA15ae3f' },
-      /* QuickSwap V2 — real WPOL/WATT pool 0xEC54584a…Bef. Sell POL→WATT native-in. */
+      /* QuickSwap V2 — WATTv2/WPOL pool 0x823a6484… (v2 has its own pool now).
+         Sell POL→WATT v2 native-in via the same router. */
       dex:{ kind:'univ2', router:'0xa5E0829CaCED8fFDD4De3c43696c57F7D7A678ff', weth:'0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',
-            wattOut:'0xE960d5076cd3169C343Ee287A2c3380A222e5839' } },
+            wattOut:'0x387693eCEC037C61943404F03c097d2ADA15ae3f' } },
     /* rpc: rpc0.altcoinchain.org is dead — rpc.wattxchange.app is the live node.
        pools: the ON-CHAIN pool-hosting set, deployed+verified 2026-08-09
        (deployments-pools-2330.json). 100k WATT host stake lives in registry. */
@@ -2174,9 +2209,13 @@ const WEB3CFG={
       nft:'0x851fd0205348783444Fc9EDe99Ca2321681EC99b', watt:'0xB7635E386283CAE6FB1A710f19CaA8220beF630D', staking:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f',
       shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', mg:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f', vault:'0x72A716F62aCfF960f6F097B4c7909B2368eD3acA', migrator:'0x97BcC99ff34FA2cde929c97074011E8929F59679',
       classicNft:'0xf9670e5D46834561813CA79854B3d7147BBbFfb2', oldWatt:'0x6645143e49B3a15d8F205658903a55E520444698',
+      freeMint:'0x91Ae9eDe6016AdF84c643F9Ce5Bb60A9438D792f', /* CaseFreeMint — free Gaming PC (id 1), one per wallet, open since 2026-08-23 */
       nftV2:null, wattV2:null,
-      pools:{ registry:'0x0f1e3C2336fBf35148FdbA21F81fA3B57a1DF254', hub:'0xfbc6168D4c4f112275713B976612891E432e265e',
-              engine:'0xB0A142d97225AD61682d77A30a2eC7144826F487', rigNft:'0x131A875e1bfEB2B3735E5d9Ad5e8871fF6CE9381', stakingPool:'0x62fC935400104371777aD36B78CF73f2c48dcD24', migrator:'0xdB13ecc87960632b8aAe93640F246CdAE1675B78' },
+      /* pools: V3 multi-coin set (WATT v2 stake, coin-menu pools) — deployed +
+         verified 2026-08-25 (deployments-pools-v3-2330.json). Hosts can lock
+         their 100k on ALT or Polygon; rigNft/staking/migrator carry over. */
+      pools:{ registry:'0x88beBed99cb45D81F5DEd708682C55a2b26a221C', hub:'0x7Cee30E196Cb298e4634D7192C527dA37f2C7d57',
+              engine:'0x755dCf18b521BC7e42f88fdfEBa2C910809AF09F', rigNft:'0x131A875e1bfEB2B3735E5d9Ad5e8871fF6CE9381', stakingPool:'0x62fC935400104371777aD36B78CF73f2c48dcD24', migrator:'0xdB13ecc87960632b8aAe93640F246CdAE1675B78' },
       economy:{ items:'0x851fd0205348783444Fc9EDe99Ca2321681EC99b', shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', stakingPool:'0xa3f8B04310380cD13Ec85B11420d1fc848af36C4', wattV2:'0xB7635E386283CAE6FB1A710f19CaA8220beF630D' },
       /* SwapinDEX (original live venue) — WATT/wALT pool 0xb2F8e147…. Sell ALT→WATT native-in. */
       dex:{ kind:'univ2', router:'0xae168Ce47cebca9abbC5107a58df0532f1afa4d6', weth:'0x48721ADeFE5b97101722c0866c2AffCE797C32b6',
@@ -2192,8 +2231,9 @@ const WEB3CFG={
       shop:'0x0239f289Cca84E7Bb899Fe065ba452293D501355',
       classicNft:'0x566808D0747662d0a0eeC68A854b695C01BE76a6', oldWatt:'0x99B5503c7144dcf241551aDabFbb58e88829BD3a',
       nftV2:null, wattV2:null,
-      pools:{ registry:'0x3a02971ceAF9B817e770c36e393A95542bC65Df2', hub:'0x9fAb0fBa9b458A7A0c9D60a26BC33f6E2695F179',
-              engine:'0xE2D4eC76dFFAC5215a03332B4A01ce0AFF9A91c1', rigNft:'0x5f9be9282E29fCE419cE2e424ED3fd0be842C7e7', stakingPool:'0x0176566fe72E5733008Bfc68439FB2F3Eb43901B', migrator:'0x2301Fc735d7770f955c47B21d0FE2a66E3A195f9' },
+      /* pools: RETIRED v1-stake set (ABI mismatch with the V3 client) — the V3
+         multi-coin deploy fills this slot when it lands on WATTx. */
+      pools:null,
       economy:{ items:'0x9baaFDE958d0dE13043CBb4292e467EB00ED06B4', shop:'0x0239f289Cca84E7Bb899Fe065ba452293D501355', stakingPool:'0xe9000a1ba29c3e87B4F964E9514eA4e8fd5d5749', wattV2:'0xc4603E2582aE320857379819123dFbFd3093dcfa' } },
   },
   /* PayoutHub target ids, in deploy-script registration order (identical on
@@ -2204,6 +2244,7 @@ const WEB3CFG={
     {id:2, sym:'POL', name:'Polygon'},
     {id:3, sym:'BSV', name:'WATT on BSV'},
     {id:4, sym:'HTH', name:'HTH masternode'},
+    {id:5, sym:'BITN', name:'Bitnet PoS'},
   ],
   sel:{ bal1155:'0x00fdd58e', balErc20:'0x70a08231', freemint:'0xaf2de086', buyWithWatt:'0x663e0d4c', rates:'0xdd418ae2', rewards:'0xe8a31bdc' },
   ids:[1,2,3,4,5,8,9,10,11,12,13,14,17,18,19,23], // V3 collection component ids
@@ -2217,6 +2258,59 @@ const encA=a=>a.replace(/^0x/,'').toLowerCase().padStart(64,'0');
 function fromWei(hx,dp=3){ try{ if(!hx||hx==='0x') return 0; const w=BigInt(hx); return Number(w/10n**12n)/1e6; }catch(e){ return 0; } }
 async function w3Req(method,params){ return w3Eth().request({method,params}); }
 async function w3CallRaw(to,data){ return w3Req('eth_call',[{to,data},'latest']); }
+/* Wallet-free JSON-RPC (public chain RPCs) — used for cross-chain balance reads
+   that must work no matter which chain the wallet itself is connected to. */
+async function rpcFetch(url,method,params){
+  const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})});
+  const j=await r.json(); if(j.error) throw new Error(j.error.message||'rpc error');
+  return j.result;
+}
+/* LIVE cross-chain balances for the CONNECTED wallet: native + WATT v2 on
+   Polygon / Altcoinchain / WATTxchain, via the chains' public RPCs. The HUD
+   coin rows and ⚡ total render from this in Live mode, so what every player
+   sees is THEIR wallet's real balances — refreshed every 30s and on demand. */
+W3.live={};
+/* WTX lives on the UTXO layer: the connected EVM address only sees its own
+   UTXOs, so players can DECLARE their real WATTx wallet address (W…) and the
+   WTX row reads that instead — janus eth_getBalance resolves a hash160
+   address's UTXO balance. Stored per device (localStorage mgWtxAddr). */
+function wtxAddrToHex(a){
+  try{
+    a=String(a||'').trim(); if(!a) return null;
+    if(/^0x[0-9a-fA-F]{40}$/.test(a)) return a.toLowerCase();
+    if(!/^W[1-9A-HJ-NP-Za-km-z]{25,40}$/.test(a)) return null;
+    const A='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    let n=0n; for(const ch of a){ const i=A.indexOf(ch); if(i<0) return null; n=n*58n+BigInt(i); }
+    let h=n.toString(16); if(h.length%2) h='0'+h;
+    let zeros=0; for(const ch of a){ if(ch==='1') zeros++; else break; }
+    h='00'.repeat(zeros)+h;
+    if(h.length!==50) return null;           // version(1)+hash160(20)+checksum(4)
+    return '0x'+h.slice(2,42);
+  }catch(e){ return null; }
+}
+function wtxDeclared(){ try{ return localStorage.getItem('mgWtxAddr')||''; }catch(e){ return ''; } }
+function wtxBalanceAddr(){ return wtxAddrToHex(wtxDeclared())||W3.addr; }
+let _liveBalT=0,_liveBalBusy=false;
+async function w3LiveBalances(force){
+  if(!W3.addr||!(typeof isLive==='function'&&isLive())) return;
+  if(_liveBalBusy||(!force&&Date.now()-_liveBalT<30000)) return;
+  _liveBalBusy=true;
+  try{
+    await Promise.all([['polygon','pol'],['alt','alt'],['wattx','wtx']].map(async([key,cn])=>{
+      const c=WEB3CFG.chains[key]; if(!c?.rpc) return;
+      try{
+        const natAddr=cn==='wtx'?wtxBalanceAddr():W3.addr; // WTX: declared UTXO wallet
+        const [nat,watt]=await Promise.all([
+          rpcFetch(c.rpc,'eth_getBalance',[natAddr,'latest']),
+          c.watt?rpcFetch(c.rpc,'eth_call',[{to:c.watt,data:WEB3CFG.sel.balErc20+encA(W3.addr)},'latest']):'0x0']);
+        W3.live[cn]={nat:fromWei(nat),watt:fromWei(watt),at:Date.now()};
+      }catch(e){ /* keep the previous reading on a transient RPC failure */ }
+    }));
+    _liveBalT=Date.now();
+  }finally{ _liveBalBusy=false; try{ renderHud&&renderHud(); }catch(e){} }
+}
+setInterval(()=>{ try{ w3LiveBalances(); }catch(e){} },30000);
 function w3ChainByHexId(id){ const n=typeof id==='string'?parseInt(id,16):id;
   for(const k in WEB3CFG.chains){ if(WEB3CFG.chains[k].chainId===n) return WEB3CFG.chains[k]; } return null; }
 
@@ -2273,6 +2367,7 @@ async function w3Refresh(){
     await Promise.allSettled(jobs);
     w3GrantOwned();
   }catch(e){ W3.err=(''+(e&&e.message||e)).slice(0,120); }
+  w3LiveBalances(true).catch(()=>{});  // cross-chain balances for the HUD rows
   renderWallet(); renderHud&&renderHud();  // reflect fresh on-chain WATT in the HUD immediately
 }
 /* Live mode: the installable inventory MIRRORS your current on-chain holdings.
@@ -2289,8 +2384,10 @@ function w3GrantOwned(){
     if(r.frame) inst[14]=(inst[14]||0)+1;
     for(const g of r.gpus) inst[g]=(inst[g]||0)+1;
   }
-  // Gaming PC → ensure a rig exists if you own one on-chain
-  if((W3.nfts[1]||0)>0 && S.rigs.length===0) mintPC(true);
+  // Gaming PC → one desk rig per PC you own on-chain (live rigs only — live
+  // mode is its own world, so demo desks can no longer absorb these)
+  const pcs=W3.nfts[1]||0;
+  while(S.rigs.length<pcs && mintPC(true)){}
   // Genesis Badge
   if((W3.nfts[2]||0)>0 && !S.badge){ S.badge=1; setBadgeOwned(true); }
   // every other component: set inventory to (owned − installed)
@@ -2605,14 +2702,17 @@ const POOL_ABI={
   'function pending(address,uint256) view returns (uint256)',
   'function payoutAddressFor(uint256,address) view returns (string)',
   'function setPayoutAddress(uint256,string)'],
- engine:[
+ engine:[ /* V3 multi-coin: a pool offers a MENU of payout coins; each rig picks one */
   'function poolCount() view returns (uint256)',
-  'function createPool(uint256,uint8,uint16,uint16,string,string) returns (uint256)',
-  'function getPool(uint256) view returns (tuple(address owner,uint256 targetId,uint8 requiredAlgo,uint16 rewardFeeBps,uint16 wattCutBps,string name,string nodeEndpoint,bool active,uint256 hashRate,uint256 minersActive,uint256 feesEarned,uint256 wattEarned))',
-  'function startMining(address,uint256,uint256,uint256)',
+  'function createPool(uint256[],uint8,uint16,uint16,string,string) returns (uint256)',
+  'function addPoolTarget(uint256,uint256)',
+  'function poolTargets(uint256) view returns (uint256[])',
+  'function getPool(uint256) view returns (tuple(address owner,uint256[] targetIds,uint8 requiredAlgo,uint16 rewardFeeBps,uint16 wattCutBps,string name,string nodeEndpoint,bool active,uint256 hashRate,uint256 minersActive,uint256 wattEarned,uint256 totalPower))',
+  'function startMining(address,uint256,uint256,uint256,uint256)',
   'function stopMining(address,uint256)',
+  'function claim(address,uint256)',
   'function pendingRewards(address,uint256) view returns (uint256)',
-  'function getSession(address,uint256) view returns (tuple(address owner,address nftContract,uint256 rigId,uint256 poolId,uint256 startTime,uint256 lastClaimTime,uint256 wattDeposited,uint256 wattSettled,uint256 earned,uint256 owed,bool active))'],
+  'function getSession(address,uint256) view returns (tuple(address owner,address nftContract,uint256 rigId,uint256 poolId,uint256 targetId,uint256 startTime,uint256 lastClaimTime,uint256 wattDeposited,uint256 wattSettled,uint256 earned,uint256 owed,bool active,uint256 power,uint256 rewardDebt))'],
  rig:[
   'function mint() payable returns (uint256)','function mintPrice() view returns (uint256)',
   'function balanceOf(address) view returns (uint256)',
@@ -2627,7 +2727,11 @@ const POOL_ABI={
  staking:[
   'function stake(address,uint256)','function unstake(address,uint256)',
   'function earned(address) view returns (uint256)',
-  'function pendingRewards(address) view returns (uint256)'],
+  'function pendingRewards(address) view returns (uint256)',
+  'function getUserStakedRigs(address) view returns (address[],uint256[])',
+  'function getPendingRewards(address,uint256) view returns (uint256)',
+  'function getAllPendingRewards(address) view returns (uint256)',
+  'function claimRewards(address,uint256)','function claimAllRewards()'],
  migrator:[
   'function claim(uint256[],uint256[]) returns (uint256)',
   'function reclaim(uint256)'],
@@ -2644,14 +2748,32 @@ async function poolEthers(){ if(!_E6) _E6=import('https://cdn.jsdelivr.net/npm/e
    real DEX pools, earning reflects real rewards (validator wiring lands in a later
    pass), on-chain pool hosting. Live requires a wallet on a supported chain. */
 function isLive(){ return S && S.mode==='live'; }
+/* DEMO and LIVE are SEPARATE WORLDS with separate saves. Switching stashes the
+   world you leave and loads (or creates) the other: live starts empty and is
+   filled from the wallet, so demo rigs/balances never show in live and demo
+   desks can never absorb your real on-chain components. */
 function setMode(m){
-  S.mode=m; SFX.swap();
-  if(m==='live'&&!W3.addr){ toast('🔗 LIVE MODE — connect a wallet (🦊) to sell into real pools and mine on-chain','gold',9000); }
-  else toast(m==='live'?'🔗 LIVE MODE — sells are REAL swaps into on-chain WATT pools':'🎮 DEMO MODE — simulated economy, nothing on-chain','cyan',7000);
+  if(!S||S.mode===m) return;
+  save();                                              // stash the world we're leaving
+  S=load(m)||(m==='live'?freshLiveState():freshState());
+  SFX.swap();
+  /* rebuild the 3D world from the new state */
+  if(typeof closeBench==='function'&&benchOpen) closeBench();
+  setBadgeOwned(!!S.badge); setTowerOwned(!!S.tower);
+  rebuildAllRigs(); buildFarm(); refreshRings();
+  selRig=-1; renderRigPanel&&renderRigPanel();
+  if(m==='live'&&!W3.addr){ toast('🔗 LIVE MODE — connect a wallet (🦊): your NFTs become your rigs, balances and pools are real','gold',9000); }
+  else toast(m==='live'?'🔗 LIVE MODE — your wallet IS the game: real NFTs, real balances, real on-chain pools':'🎮 DEMO MODE — simulated economy, nothing on-chain','cyan',7000);
+  if(m==='live'&&W3.addr) w3Refresh().catch(()=>{});    // mirror wallet NFTs -> rigs + inventory
   renderHud&&renderHud(); if($('m-pool')&&$('m-pool').classList.contains('open')) renderPoolHub();
-  if($('m-web3')&&$('m-web3').classList.contains('open')) renderWallet(); save();
+  if($('m-web3')&&$('m-web3').classList.contains('open')) renderWallet();
+  if($('m-shop')&&$('m-shop').classList.contains('open')&&typeof renderShop==='function') renderShop();
+  save();
 }
 function toggleMode(){ setMode(isLive()?'demo':'live'); }
+/* the wallet panel's DEMO/LIVE buttons are inline onclick= handlers, which
+   resolve against window — without this they were dead in the module build */
+window.setMode=setMode; window.toggleMode=toggleMode;
 
 /* ===== WTX -> WATT via the live bridge desk (bridge.wattxchange.app) ===== */
 const WATT_BRIDGE_API='https://bridge.wattxchange.app';
@@ -2719,6 +2841,122 @@ async function onchainSell(coin, amtCoin){
     return true;
   }catch(e){ SFX.err(); toast('swap failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); return false; }
 }
+/* ===== live wallet balances + price-aggregated SELL popup ================ */
+/* Prices come from the desk's aggregator (QuickSwap + Uniswap v3 on Polygon;
+   ALT via its Polygon bridge contract's pools, WATT-anchored fallback until a
+   Polygon ALT pool is seeded; WTX via the bridge's supply-ratio mint). */
+const PRICE_API='https://bridge.wattxchange.app/api/prices';
+let _px=null;
+async function ocPrices(force){
+  if(!force&&_px&&Date.now()-(_px._at||0)<60000) return _px;
+  try{ const r=await fetch(PRICE_API); _px=await r.json(); _px._at=Date.now(); }catch(e){ _px=_px||{usd:{}}; }
+  return _px;
+}
+const usdFmt=(v)=>v==null?'—':(v<0.01?'$'+Number(v).toPrecision(3):'$'+Number(v).toLocaleString(undefined,{maximumFractionDigits:2}));
+async function ocRenderWallet(){
+  const el=$('ocwallet'); if(!el) return;
+  if(!W3.addr){ el.innerHTML=''; return; }
+  el.innerHTML=`<div class="valbox" style="border-color:#3dff8a44"><b>💰 WALLET</b><small> reading balances…</small></div>`;
+  try{
+    const E=await poolEthers();
+    const px=await ocPrices();
+    const rows=[]; let wattTot=0;
+    for(const key of ['polygon','alt','wattx']){
+      const c=WEB3CFG.chains[key]; if(!c?.rpc) continue;
+      const pxSym={polygon:'POL',alt:'ALT',wattx:'WTX'}[key];
+      try{
+        const p=new E.JsonRpcProvider(c.rpc,c.chainId,{staticNetwork:true});
+        const [nat,watt]=await Promise.all([
+          p.getBalance(W3.addr),
+          new E.Contract(c.watt,POOL_ABI.erc20,p).balanceOf(W3.addr).catch(()=>0n)]);
+        const natN=Number(nat)/1e18, wattN=Number(watt)/1e18; wattTot+=wattN;
+        const usd=px.usd?.[pxSym];
+        rows.push(`<span style="margin-right:14px"><b>${c.sym}</b> ${natN.toLocaleString(undefined,{maximumFractionDigits:3})}${usd?` <i style="opacity:.65">${usdFmt(natN*usd)}</i>`:''} · ⚡ ${wattN.toLocaleString(undefined,{maximumFractionDigits:0})}</span>`);
+      }catch(e){ rows.push(`<span style="margin-right:14px;opacity:.5"><b>${c.sym}</b> unreachable</span>`); }
+    }
+    const wUsd=px.usd?.WATT;
+    const nftN=Object.values(W3.nfts||{}).reduce((a,b)=>a+(b||0),0);
+    el.innerHTML=`<div class="valbox" style="border-color:#3dff8a44"><b>💰 WALLET — live on-chain balances</b>
+      <small>${rows.join('')}<br>WATT v2 total <b>${wattTot.toLocaleString(undefined,{maximumFractionDigits:0})}</b>${wUsd?` <i style="opacity:.65">${usdFmt(wattTot*wUsd)}</i>`:''}
+      &nbsp;·&nbsp; WATT ${usdFmt(px.usd?.WATT)} · POL ${usdFmt(px.usd?.POL)} · ALT ${usdFmt(px.usd?.ALT)} · WTX ${usdFmt(px.usd?.WTX)} <i style="opacity:.55">QuickSwap/Uniswap agg</i><br>
+      🖼 NFTs on ${W3.chain?.name||'—'}: <b>${nftN}</b> component NFT${nftN===1?'':'s'} (auto-unlocked in your rigs · full list in 🦊 WALLET) — rig NFTs, staking &amp; mining live in the pools box below</small>
+      <div class="rowbtns" style="margin-top:6px;flex-wrap:wrap">
+        <input id="oc-wtxwallet" class="hbtn" placeholder="your WATTx wallet address (W…) — the WTX row reads this" value="${wtxDeclared()}" style="flex:1;min-width:220px">
+        <button class="hbtn" id="oc-savewtxwallet">SAVE WTX WALLET</button></div></div>`;
+    $('oc-savewtxwallet')?.addEventListener('click',()=>{
+      const a=($('oc-wtxwallet')?.value||'').trim();
+      if(a&&!wtxAddrToHex(a)){ SFX.err(); toast('Not a valid WATTx address (W… base58 or 0x… hex)','red',8000); return; }
+      try{ localStorage.setItem('mgWtxAddr',a); }catch(e){}
+      SFX.buy(); toast(a?'⚡ WTX wallet saved — the WTX balance row now reads '+a.slice(0,10)+'…':'WTX wallet cleared — reading the connected EVM address','gold',8000);
+      _liveBalT=0; w3LiveBalances(true).catch(()=>{}); ocRenderWallet();
+    });
+  }catch(e){ el.innerHTML=''; }
+}
+/* SELL popup: pick what to receive, see the aggregated price. Single-leg rails
+   execute one-click (native→WATT via chain DEX; WTX→WATT via the bridge mint);
+   MULTI-HOP pairs are quoted live by the desk's route engine (/api/route —
+   pools + migrator + both bridges) and open a step-by-step route map. Pairs
+   with no live path say exactly which missing pool blocks them. */
+async function ocRouteQuote(from,to,amount){
+  try{ const r=await fetch(`https://bridge.wattxchange.app/api/route?from=${from}&to=${to}&amount=${amount}`);
+    return await r.json(); }catch(e){ return null; }
+}
+function ocShowRoute(from,to,q){
+  const steps=(q.steps||[]).map((s,i)=>({value:null,disabled:true,
+    label:`<b>${i+1}.</b> ${s.venue} <small style="opacity:.7">(${s.chain}) ${fmt(s.in)} → ${fmt(s.out)}</small>`}));
+  const links=[];
+  if(q.steps?.some(s=>s.leg==='swapin_alt_wattv1')) links.push({value:'sellalt',label:'▶ do leg 1 here — SELL ALT → WATT <small style="opacity:.7">(in-game, SwapinDEX)</small>'});
+  if(q.steps?.some(s=>s.leg==='migrate_v1_v2')) links.push({value:'migrate',label:'▶ migrate v1 → v2 <small style="opacity:.7">(stake.mining-game… /swap.html)</small>'});
+  if(q.steps?.some(s=>s.kind==='desk')) links.push({value:'bridge',label:'▶ bridge legs — wattxchange.app DeFi Hub / bridge.wattxchange.app'});
+  ocChoose(`🗺 ROUTE ${from} → ${to}: ${fmt(q.amountIn)} → ≈ <b>${fmt(q.amountOut)}</b> ${to}${q.capacityWarning?`<br><small style="color:#ffb145">${q.capacityWarning}</small>`:''}`,
+    [...steps,...links]).then(v=>{
+      if(v==='sellalt') onchainSell('alt', q.amountIn);
+      else if(v==='migrate') window.open('https://stake.mining-game.wattxchange.app/swap.html','_blank');
+      else if(v==='bridge') window.open('https://bridge.wattxchange.app','_blank');
+    });
+}
+async function ocSellPopup(cn){
+  const px=await ocPrices(true);
+  const from={alt:'ALT',pol:'POL',wtx:'WTX'}[cn]||cn.toUpperCase();
+  const uFrom=px.usd?.[from];
+  const others=cn==='wtx'?['POL','ALT']:cn==='alt'?['WTX','POL']:['WTX','ALT'];
+  /* quote the multi-hop pairs live (per 1 unit for the rate display) */
+  const routed={};
+  await Promise.all(others.map(async sym=>{ routed[sym]=await ocRouteQuote(from,sym,1); }));
+  const mk=(sym,rail,en)=>{
+    const uTo=px.usd?.[sym];
+    const rate=(uFrom&&uTo)?(uFrom/uTo):null;
+    return {value:sym, disabled:!en,
+      label:`<b>${sym}</b>${rate?` — 1 ${from} ≈ ${rate<0.01?rate.toPrecision(3):rate.toLocaleString(undefined,{maximumFractionDigits:3})} ${sym}`:''} <small style="opacity:.7">via ${rail}</small>`};
+  };
+  const mkRoute=(sym)=>{
+    const q=routed[sym];
+    if(q?.available){
+      const hops=q.steps.length;
+      return {value:'route:'+sym,
+        label:`<b>${sym}</b> — 1 ${from} ≈ ${q.amountOut<0.01?q.amountOut.toPrecision(3):q.amountOut.toLocaleString(undefined,{maximumFractionDigits:3})} ${sym} <small style="opacity:.7">via ${hops}-leg route (${q.steps.map(s=>s.venue.split(' ')[0]).join(' → ')})</small>`};
+    }
+    const why=q?.blocked?.[0]?.note||'no route yet';
+    return {value:sym,disabled:true,label:`<b>${sym}</b> <small style="opacity:.6">${why}</small>`};
+  };
+  const opts=cn==='wtx'
+    ? [mk('WATT','bridge (supply-ratio mint)',true), mkRoute('POL'), mkRoute('ALT')]
+    : [mk('WATT',cn==='alt'?'SwapinDEX':'QuickSwap',true), mkRoute('WTX'), mkRoute(others[1])];
+  const pick=await ocChoose(`💱 SELL ${from} — what do you want for it? <small style="opacity:.6">(1 ${from} ≈ ${usdFmt(uFrom)})</small>`,opts);
+  if(!pick) return false;
+  const raw=prompt(`How much ${from} to sell for ${pick.replace('route:','')}?\n(from your connected wallet — leaves gas)`,'');
+  if(raw===null) return false;
+  const a=parseFloat(raw);
+  if(!(a>0)){ SFX.err(); toast('Enter a positive amount','red'); return false; }
+  if(pick==='WATT') return cn==='wtx'?bridgeSellWtx(a):onchainSell(cn,a);
+  if(pick.startsWith('route:')){
+    const sym=pick.slice(6);
+    const q=await ocRouteQuote(from,sym,a);
+    if(q?.available){ ocShowRoute(from,sym,q); return true; }
+    toast('Route unavailable right now: '+(q?.blocked?.[0]?.note||'quote failed'),'red',9000); return false;
+  }
+  toast('No route for that pair yet','red'); return false;
+}
 function poolCfg(){ return (W3.addr&&W3.chain&&W3.chain.pools)?W3.chain:null; }
 async function poolCtr(kind,write){
   const c=poolCfg(); if(!c) return null;
@@ -2735,11 +2973,17 @@ const REG_STATUS=['—','ACTIVE','PAUSED','UNSTAKING','CLOSED'];
 /* HOST: approve 100k WATT -> registerPoolWithNode -> engine.createPool */
 async function ocHostPool(){
   const c=poolCfg(); if(!c) return;
-  const name=($('oc-name')?.value||'').trim(), stratum=($('oc-stratum')?.value||'').trim(),
-        rpc=($('oc-rpc')?.value||'').trim(), p2p=($('oc-p2p')?.value||'').trim(),
+  /* Endpoints are DESCRIPTIVE metadata (shown on the pool row) — an NFT-mining
+     pool has no stratum, so blanks auto-fill; the registry just requires
+     non-empty strings. Hosts fronting real nodes can list theirs. */
+  const name=($('oc-name')?.value||'').trim(),
+        stratum=($('oc-stratum')?.value||'').trim()||'nft-mining (no stratum)',
+        rpc=($('oc-rpc')?.value||'').trim()||'n/a',
+        p2p=($('oc-p2p')?.value||'').trim()||'n/a',
         feeBps=Math.round(clamp(+($('oc-fee')?.value||1),0,10)*100),
-        targetId=+($('oc-target')?.value||0);
-  if(!name||!stratum||!rpc||!p2p){ SFX.err(); toast('Fill in pool name + stratum + node RPC + node P2P endpoints','red'); return; }
+        targetIds=WEB3CFG.targets.filter(t=>$('oc-tgt-'+t.id)?.checked).map(t=>t.id);
+  if(!name){ SFX.err(); toast('Give your pool a name','red'); return; }
+  if(!targetIds.length){ SFX.err(); toast('Tick at least one payout coin for the pool menu','red'); return; }
   try{
     const E=await poolEthers();
     const stake=E.parseEther('100000');
@@ -2757,8 +3001,9 @@ async function ocHostPool(){
     }
     toast('TX 3/3 — createPool on the mining engine…','gold',8000);
     const eng=await poolCtr('engine',true);
-    await (await eng.createPool(targetId,255,feeBps,100,name,stratum)).wait();
-    SFX.mint(); toast(`⛓ ON-CHAIN POOL LIVE on ${c.name} — 100k WATT locked, fee ${(feeBps/100).toFixed(1)}%, payouts in ${WEB3CFG.targets[targetId].sym}`,'gold',12000);
+    await (await eng.createPool(targetIds,255,feeBps,100,name,stratum)).wait();
+    const menu=targetIds.map(t=>WEB3CFG.targets[t].sym).join(' + ');
+    SFX.mint(); toast(`⛓ ON-CHAIN POOL LIVE on ${c.name} — 100k WATT locked, fee ${(feeBps/100).toFixed(1)}%, coin menu: ${menu}`,'gold',12000);
   }catch(e){ SFX.err(); toast('host tx failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
   fillChainPools();
 }
@@ -2768,7 +3013,8 @@ async function ocUnstake(fn){
   catch(e){ SFX.err(); toast((''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',8000); }
   fillChainPools();
 }
-/* off-EVM payout addresses: target 3 = BSV (WATT on BSV), target 4 = HTH (masternode rewards) —
+/* off-EVM payout addresses: target 3 = BSV (WATT on BSV), target 4 = HTH (masternode rewards),
+   target 5 = BITN (Bitnet PoS stake rewards) —
    the hub keys the declaration to msg.sender; the operator daemon reads it when it settles */
 async function ocSaveAddr(tid,inputId,label){
   const a=($(inputId)?.value||'').trim();
@@ -2778,7 +3024,7 @@ async function ocSaveAddr(tid,inputId,label){
   }catch(e){ SFX.err(); toast((''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',8000); }
   fillChainPools();
 }
-const ocSaveBsv=()=>ocSaveAddr(3,'oc-bsv','BSV'), ocSaveHth=()=>ocSaveAddr(4,'oc-hth','HTH');
+const ocSaveBsv=()=>ocSaveAddr(3,'oc-bsv','BSV'), ocSaveHth=()=>ocSaveAddr(4,'oc-hth','HTH'), ocSaveBitn=()=>ocSaveAddr(5,'oc-bitn','BITN');
 async function ocMintRig(){
   try{ const rig=await poolCtr('rig',true);
     const price=await rig.mintPrice();
@@ -2788,19 +3034,48 @@ async function ocMintRig(){
   }catch(e){ SFX.err(); toast('mint failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',8000); }
   fillChainPools();
 }
+/* Generic small chooser overlay: returns a Promise of the picked value (or null). */
+function ocChoose(title, options){
+  return new Promise((res)=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:#000a;z-index:9999;display:flex;align-items:center;justify-content:center';
+    ov.innerHTML=`<div style="background:#111826;border:1px solid #ffb14566;border-radius:12px;padding:18px;max-width:340px;width:90%">
+      <b style="color:#ffb145">${title}</b><div id="occ-opts" style="margin-top:10px;display:flex;flex-direction:column;gap:6px"></div>
+      <button class="hbtn" id="occ-x" style="margin-top:10px;width:100%">cancel</button></div>`;
+    document.body.appendChild(ov);
+    const done=(v)=>{ ov.remove(); res(v); };
+    for(const o of options){
+      const b=document.createElement('button'); b.className='hbtn '+(o.cls||'accent');
+      b.style.cssText='text-align:left'; b.innerHTML=o.label;
+      if(o.disabled){ b.disabled=true; b.style.opacity=.4; }
+      else b.onclick=()=>done(o.value);
+      ov.querySelector('#occ-opts').appendChild(b);
+    }
+    ov.querySelector('#occ-x').onclick=()=>done(null);
+    ov.onclick=(e)=>{ if(e.target===ov) done(null); };
+  });
+}
 async function ocMine(rigId,poolId){
   const c=poolCfg(); if(!c) return;
   try{
     const E=await poolEthers();
     const rig=await poolCtr('rig',true), watt=await poolCtr('erc20',true), eng=await poolCtr('engine',true);
+    /* the pool's coin MENU — the miner picks which coin this rig mines */
+    const menu=(await eng.poolTargets(poolId)).map(Number);
+    let targetId=menu[0];
+    if(menu.length>1){
+      targetId=await ocChoose(`⛏ RIG #${rigId} — pick the coin to mine in pool #${poolId}`,
+        menu.map(t=>({value:t,label:`${WEB3CFG.targets[t]?.sym||'#'+t} — ${WEB3CFG.targets[t]?.name||''}`})));
+      if(targetId==null) return;
+    }
     const perHour=await rig.getWattPerHour(rigId);
     const dep=perHour*24n; // 24h of WATT
     if((await watt.balanceOf(W3.addr))<dep){ SFX.err(); toast(`Mining deposits 24h of WATT up front — need ${ocFmt(dep)}`,'red',8000); return; }
     if((await watt.allowance(W3.addr,c.pools.engine))<dep)
       await (await watt.approve(c.pools.engine,dep)).wait();
     await (await rig.approve(c.pools.engine,rigId)).wait();
-    await (await eng.startMining(c.pools.rigNft,rigId,dep,poolId)).wait();
-    SFX.gen2(); toast(`⛓ RIG #${rigId} MINING on-chain — 24h WATT deposited (50% burns, host keeps 1%)`,'gold',10000);
+    await (await eng.startMining(c.pools.rigNft,rigId,dep,poolId,targetId)).wait();
+    SFX.gen2(); toast(`⛓ RIG #${rigId} MINING ${WEB3CFG.targets[targetId]?.sym||''} on-chain — 24h WATT deposited (99% burns, host keeps 1%)`,'gold',10000);
   }catch(e){ SFX.err(); toast('startMining failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
   fillChainPools();
 }
@@ -2853,6 +3128,24 @@ async function ocBuyItem(id){
   return true;
 }
 
+/* LIVE free Gaming PC: the real CaseFreeMint contract — mint(proof) with an
+   empty proof while the mint is open to all; one per wallet forever. The desk
+   appears via w3GrantOwned as soon as the wallet re-syncs. */
+async function ocFreeMintPC(){
+  const c=ecoCfg();
+  if(!c||!c.freeMint){ SFX.err(); toast('Free Gaming PC mint lives on Polygon and Altcoinchain — switch your wallet there','gold',9000); return; }
+  try{
+    const E=await poolEthers();
+    const prov=new E.BrowserProvider(w3Eth()); const signer=await prov.getSigner();
+    const fm=new E.Contract(c.freeMint,['function mint(bytes32[] proof)','function freeMinted(address) view returns (bool)'],signer);
+    if(await fm.freeMinted(W3.addr).catch(()=>false)){ SFX.err(); toast('This wallet already claimed its free Gaming PC — one per wallet, forever','gold',9000); return; }
+    toast('⛓ Claiming your FREE Gaming PC on '+c.name+' — you pay only gas…','gold',9000);
+    await (await fm.mint([])).wait();
+    SFX.mint(); toast('⛓ FREE Gaming PC minted — your desk appears as the wallet syncs','gold',12000);
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('free mint failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
+}
+
 /* CLAIM RIG — turn the classic Mining Game NFTs you already own (ERC-1155
    components) into an engine-compatible rig via the RigClaimMigrator. Escrows
    your components (reclaim anytime by returning the rig). */
@@ -2897,6 +3190,14 @@ async function ocStakeRig(rigId){
   }catch(e){ SFX.err(); toast('stake failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
   fillChainPools();
 }
+async function ocClaimStakeRewards(rigId){
+  const c=poolCfg(); if(!c||!c.pools.stakingPool) return;
+  try{ const sp=await poolCtr('staking',true);
+    await (await sp.claimRewards(c.pools.rigNft,rigId)).wait();
+    SFX.buy(); toast(`⛓ staking rewards claimed for RIG #${rigId}`,'grn',8000);
+  }catch(e){ SFX.err(); toast('claim failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',8000); }
+  fillChainPools();
+}
 async function ocUnstakeRig(rigId){
   const c=poolCfg(); if(!c||!c.pools.stakingPool) return;
   try{ const sp=await poolCtr('staking',true);
@@ -2909,20 +3210,22 @@ async function ocUnstakeRig(rigId){
 /* async fill of the #chainpools box inside the Pool Hub */
 let _ocBusy=false;
 async function fillChainPools(){
+  ocRenderWallet(); // live balances strip, independent of the pools contracts
   const el=$('chainpools'); if(!el) return;
   if(!W3.addr){ el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS</b>
-    <small>Connect a wallet (🦊 WALLET) to host a real pool: <b>100,000 WATT</b> locked in the PoolRegistry host contract, real miner fees + WATT-burn cut, payouts in ALT / WTX / POL / <b>WATT on BSV</b>. Live on Altcoinchain.</small></div>`; return; }
+    <small>Connect a wallet (🦊 WALLET) to host a real pool: <b>100,000 WATT v2</b> locked in the PoolRegistry host contract. ONE pool offers a MENU of coins (ALT / WTX / BSV / HTH / BITN …) — every miner picks which coin each rig mines.</small></div>`; return; }
   const c=poolCfg();
   if(!c){ el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS</b>
-    <small>${W3.chain?W3.chain.name+' pool contracts are pending deploy — switch the wallet to <b>Altcoinchain</b> to host a real pool now.':'Switch the wallet to Altcoinchain.'}</small></div>`; return; }
+    <small>${W3.chain?W3.chain.name+' V3 pool contracts are pending deploy — switch the wallet to <b>Polygon</b> or <b>Altcoinchain</b> to host or mine now.':'Switch the wallet to Polygon or Altcoinchain.'}</small></div>`; return; }
   if(_ocBusy) return; _ocBusy=true;
   el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS — ${c.name}</b><small>reading chain…</small></div>`;
   try{
     const E=await poolEthers();
     const reg=await poolCtr('registry'), hub=await poolCtr('hub'), eng=await poolCtr('engine'), rig=await poolCtr('rig');
-    const [regd, actRes, engN, rigN, bsvAddr, hthAddr]=await Promise.all([
+    const [regd, actRes, engN, rigN, bsvAddr, hthAddr, bitnAddr]=await Promise.all([
       reg.isRegistered(W3.addr), reg.getActivePools(), eng.poolCount(), rig.balanceOf(W3.addr),
       hub.payoutAddressFor(3,W3.addr), hub.payoutAddressFor(4,W3.addr).catch(()=>''),
+      hub.payoutAddressFor(5,W3.addr).catch(()=>''),
     ]);
     /* pending payouts across targets */
     const pend=await Promise.all(WEB3CFG.targets.map(t=>hub.pending(W3.addr,t.id).catch(()=>0n)));
@@ -2958,10 +3261,26 @@ async function fillChainPools(){
     for(let i=0;i<Number(rigN);i++){
       const id=await rig.tokenOfOwnerByIndex(W3.addr,i);
       const t=await rig.getRigTraits(id);
-      const opts=engPools.map((p,pi)=>p.active?`<option value="${pi}">#${pi} ${p.name} → ${WEB3CFG.targets[Number(p.targetId)]?.sym||'?'} (fee ${(Number(p.rewardFeeBps)/100).toFixed(1)}%)</option>`:'').join('');
+      const opts=engPools.map((p,pi)=>p.active?`<option value="${pi}">#${pi} ${p.name} → ${(p.targetIds||[]).map(t=>WEB3CFG.targets[Number(t)]?.sym||'?').join('+')} (fee ${(Number(p.rewardFeeBps)/100).toFixed(1)}%)</option>`:'').join('');
       const stakeBtn = c.pools.stakingPool?`<button class="hbtn gold" data-ocstake="${id}" title="Power off + stake on-chain: earn 100% stake weight from the WATT drip">🥩 STAKE</button>`:'';
       rigRows+=`<div class="prow"><div class="pi"><b>⛏ RIG #${id}</b><small>${t.hashRate} H · eff ${t.efficiency} · ${t.wattConsumption} ⚡/h · algo ${t.algorithm}</small></div>
         ${opts?`<select id="oc-pool-${id}" class="hbtn">${opts}</select><button class="hbtn accent" data-ocmine="${id}">MINE</button>`:''}${stakeBtn}${!opts&&!stakeBtn?'<small style="color:var(--dim)">no active pools</small>':''}</div>`;
+    }
+    /* STAKED rigs — escrowed in the StakingPool so they leave the wallet list;
+       read them back from the pool with pending WATT, unstake + claim inline. */
+    let stakedRows='';
+    if(c.pools.stakingPool){
+      try{
+        const sp=await poolCtr('staking');
+        const [nftCs,stkIds]=await sp.getUserStakedRigs(W3.addr);
+        for(let i=0;i<stkIds.length;i++){
+          const rid=Number(stkIds[i]);
+          const pend=await sp.getPendingRewards(nftCs[i],rid).catch(()=>0n);
+          stakedRows+=`<div class="prow"><div class="pi"><b>🥩 RIG #${rid} — STAKED</b><small>full stake weight · pending ${ocFmt(pend,4)} ⚡</small></div>
+            <button class="hbtn gold" data-ocstkclaim="${rid}">CLAIM ⚡</button>
+            <button class="hbtn" data-ocunstake="${rid}">UNSTAKE</button></div>`;
+        }
+      }catch(e){}
     }
     /* rigs currently in sessions are owned by the engine — check my recent ones via events is heavy; keep a local note */
     const mySessions=(S.ocRigs||[]).filter(Boolean);
@@ -2970,25 +3289,30 @@ async function fillChainPools(){
       try{ const s=await eng.getSession(c.pools.rigNft,rid);
         if(s.active&&s.owner.toLowerCase()===W3.addr.toLowerCase()){
           const pr=await eng.pendingRewards(c.pools.rigNft,rid);
-          sesRows+=`<div class="prow sel"><div class="pi"><b>⛏ RIG #${rid} — MINING</b><small>pool #${s.poolId} · earned ${ocFmt(s.earned,4)} + pending ${ocFmt(pr,4)}</small></div>
+          const csym=WEB3CFG.targets[Number(s.targetId)]?.sym||'?';
+          sesRows+=`<div class="prow sel"><div class="pi"><b>⛏ RIG #${rid} — MINING ${csym}</b><small>pool #${s.poolId} · earned ${ocFmt(s.earned,4)} + pending ${ocFmt(pr,4)} ${csym}</small></div>
             <button class="hbtn" data-ocstop="${rid}">STOP + CLAIM</button></div>`;
         }
       }catch(e){}
     }
-    const tgtOpts=WEB3CFG.targets.map(t=>`<option value="${t.id}">${t.sym} — ${t.name}</option>`).join('');
+    /* Coin MENU for a new pool: check every coin your nodes actually earn.
+       POL stays disabled until a Polygon validator exists to back it. */
+    const tgtChecks=WEB3CFG.targets.map(t=>{ const dis=t.sym==='POL';
+      return `<label class="hbtn" style="display:inline-flex;align-items:center;gap:4px${dis?';opacity:.4' :''}" title="${dis?'no Polygon validator yet':t.name}">
+        <input type="checkbox" id="oc-tgt-${t.id}" ${dis?'disabled':''}> ${t.sym}</label>`; }).join('');
     el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS — ${c.name}</b>
       ${pendRows?`<small>unpaid rewards (operator daemon pays these out): ${pendRows}</small>`:''}
       ${hostRow}${poolRows}
       ${regd?'':`<div class="hostbox" style="margin-top:8px"><b>🏗 HOST A REAL POOL — lock 100,000 ⚡WATT on-chain</b>
-        <small>Stake sits in the PoolRegistry (90-day unstake hold). Your pool earns your fee % of every miner's rewards + 1% of the WATT they burn. Payouts land in the coin you pick — incl. WATT on BSV via the treasury bridge.</small>
+        <small>Stake sits in the PoolRegistry (30-day unstake hold). ONE pool can offer MANY coins — tick every coin your nodes earn; each miner picks which coin their rig mines. Your pool earns your fee % of every miner's rewards + 1% of the WATT they burn. You can add more pools or coins and change fees any time.</small>
         <div class="rowbtns" style="margin-top:6px;flex-wrap:wrap">
           <input id="oc-name" class="hbtn" placeholder="pool name" style="flex:1;min-width:110px">
-          <select id="oc-target" class="hbtn">${tgtOpts}</select>
+          ${tgtChecks}
           FEE <input id="oc-fee" type="range" min="0" max="10" value="1" step="0.5" style="flex:1;min-width:80px"> <b id="oc-feev">1.0%</b></div>
         <div class="rowbtns" style="margin-top:6px;flex-wrap:wrap">
-          <input id="oc-stratum" class="hbtn" placeholder="stratum+tcp://host:3333" style="flex:1;min-width:150px">
-          <input id="oc-rpc" class="hbtn" placeholder="node RPC http://…" style="flex:1;min-width:120px">
-          <input id="oc-p2p" class="hbtn" placeholder="enode://… or addnode ip:port" style="flex:1;min-width:120px">
+          <input id="oc-stratum" class="hbtn" placeholder="stratum (optional — NFT pools need none)" style="flex:1;min-width:150px">
+          <input id="oc-rpc" class="hbtn" placeholder="node RPC (optional)" style="flex:1;min-width:120px">
+          <input id="oc-p2p" class="hbtn" placeholder="node P2P (optional)" style="flex:1;min-width:120px">
           <button class="hbtn gold" id="oc-host">🏊 LOCK 100k + LAUNCH</button></div></div>`}
       <div class="rowbtns" style="margin-top:8px;flex-wrap:wrap">
         <button class="hbtn accent" id="oc-mintrig">⛏ MINT ON-CHAIN RIG</button>
@@ -2996,14 +3320,17 @@ async function fillChainPools(){
         <input id="oc-bsv" class="hbtn" placeholder="BSV payout address (for WATT-on-BSV rewards)" value="${bsvAddr||''}" style="flex:1;min-width:180px">
         <button class="hbtn" id="oc-savebsv">SAVE BSV ADDR</button>
         <input id="oc-hth" class="hbtn" placeholder="HTH payout address (HTH masternode-reward pools)" value="${hthAddr||''}" style="flex:1;min-width:180px">
-        <button class="hbtn" id="oc-savehth">SAVE HTH ADDR</button></div>
-      ${rigRows}${sesRows}</div>`;
+        <button class="hbtn" id="oc-savehth">SAVE HTH ADDR</button>
+        <input id="oc-bitn" class="hbtn" placeholder="BITN payout address (Bitnet PoS-reward pools)" value="${bitnAddr||''}" style="flex:1;min-width:180px">
+        <button class="hbtn" id="oc-savebitn">SAVE BITN ADDR</button></div>
+      ${rigRows}${stakedRows}${sesRows}</div>`;
     /* wire */
     $('oc-host')?.addEventListener('click',ocHostPool);
     $('oc-mintrig')?.addEventListener('click',ocMintRig);
     $('oc-claimrig')?.addEventListener('click',ocClaimRig);
     $('oc-savebsv')?.addEventListener('click',ocSaveBsv);
     $('oc-savehth')?.addEventListener('click',ocSaveHth);
+    $('oc-savebitn')?.addEventListener('click',ocSaveBitn);
     $('oc-unstake')?.addEventListener('click',()=>ocUnstake('requestUnstake'));
     $('oc-cancelun')?.addEventListener('click',()=>ocUnstake('cancelUnstake'));
     $('oc-doneun')?.addEventListener('click',()=>ocUnstake('completeUnstake'));
@@ -3013,6 +3340,8 @@ async function fillChainPools(){
       ocMine(id, +($('oc-pool-'+id)?.value||0)); });
     el.querySelectorAll('[data-ocstop]').forEach(b=>b.onclick=()=>ocStop(+b.dataset.ocstop));
     el.querySelectorAll('[data-ocstake]').forEach(b=>b.onclick=()=>ocStakeRig(+b.dataset.ocstake));
+    el.querySelectorAll('[data-ocunstake]').forEach(b=>b.onclick=()=>ocUnstakeRig(+b.dataset.ocunstake));
+    el.querySelectorAll('[data-ocstkclaim]').forEach(b=>b.onclick=()=>ocClaimStakeRewards(+b.dataset.ocstkclaim));
   }catch(e){
     el.innerHTML=`<div class="valbox" style="border-color:#ff5b5b44"><b>⛓ REAL ON-CHAIN POOLS</b><small>chain read failed: ${(''+(e&&e.message||e)).slice(0,110)}</small></div>`;
   }
@@ -3022,7 +3351,14 @@ async function fillChainPools(){
 /* ---------- Pool Hub UI ---------- */
 function renderPoolHub(){
   const coin=CFG.nets[S.net].coin, sym=CFG.nets[S.net].sym, mine=S.myPools[coin];
-  const rows=POOLS[coin].map(p=>{
+  /* LIVE: the fictional demo pools (PolyHash, MaticWorks…) are sim-only. The
+     available pools are the REAL registry pools read from the chain — they
+     render in the ⛓ REAL ON-CHAIN POOLS box (fillChainPools), which also
+     carries hosting, rig staking and per-rig MINE. */
+  const live=isLive();
+  const rows=live?`<div class="prow"><div class="pi"><b>⛓ LIVE — real pools only</b>
+      <small>The pools above are read straight from the on-chain PoolRegistry — anyone who locks 100k ⚡WATT appears there automatically. Demo pools are hidden in live mode.</small></div></div>`
+    :POOLS[coin].map(p=>{
     const sel=S.pool[coin]===p.id;
     const soloLocked=p.solo&&!mine;
     return `<div class="prow ${sel?'sel':''}${p.official?' off':''}">
@@ -3031,7 +3367,7 @@ function renderPoolHub(){
       <div class="pf">x${p.speed}<small>payout freq</small></div>
       <button class="hbtn ${sel?'':'accent'}" data-join="${p.id}" ${sel?'disabled':''}>${sel?'CONNECTED':soloLocked?'🔒 JOIN':'JOIN'}</button></div>`;
   }).join('');
-  const mineRow = mine?`<div class="prow sel host">
+  const mineRow = live?'':mine?`<div class="prow sel host">
       <div class="pi"><b>${mine.solo?'⛏':'🏊'} ${mine.name}</b><small>${mine.solo?'YOUR private node · solo mining · power-free':'YOUR pool · fee '+(mine.fee*100).toFixed(1)+'% · NPC hashrate '+fmtInt(mine.npc||0)+' H'}</small></div>
       ${mine.solo?'':`<div class="pf">+${fmt(mine.earnC||0)}<small>${sym} earned</small></div>
       <div class="pf">+${fmt(mine.earnW||0)}<small>⚡ from burn</small></div>`}
@@ -3042,7 +3378,7 @@ function renderPoolHub(){
       <div class="rowbtns" style="margin-top:8px">FEE <input id="hostfee" type="range" min="0" max="12" value="3" step="0.5" style="flex:1"> <b id="hostfeev">3.0%</b>
       <button class="hbtn gold" id="hostgo">🏊 PUBLIC POOL</button>
       <button class="hbtn accent" id="hostsolo">⛏ PRIVATE NODE</button></div></div>`;
-  const alt=`<div class="valbox"><b>⛓ ALTCOINCHAIN HYBRID PoS ${S.altHybrid?'<span style="color:var(--grn)">— LIVE</span>':''}</b>
+  const alt=live?'':`<div class="valbox"><b>⛓ ALTCOINCHAIN HYBRID PoS ${S.altHybrid?'<span style="color:var(--grn)">— LIVE</span>':''}</b>
       <small>height <b>${fmtInt(S.altH)}</b> / 7.00M ${S.altHybrid?'· reward split 1/1 miners : stakers':'· hybrid fork at block 7,000,000'}</small>
       ${S.altHybrid?`<div class="rowbtns" style="margin-top:8px">
         <span>🛰 nodes: <b>${S.altNodes}</b> · locked <b>${fmt(S.altLocked)} ALT</b> · earned <b>${fmt(S.valEarn)} ALT</b></span>
@@ -3075,7 +3411,7 @@ function renderPoolHub(){
       <span>your payout address: <b class="mono">${S.payoutAddr?(S.payoutAddr.slice(0,8)+'…'+S.payoutAddr.slice(-6)):'— none (generate in a rig OS → 👛 Wallet)'}</b></span>
       ${S.payoutAddr&&isLive()&&W3.addr?'<button class="hbtn gold" id="valreg">REGISTER ON-CHAIN</button>':''}
     </div></div>`;
-  $('poolbody').innerHTML=`<div id="chainpools"></div>${stakeBox}
+  $('poolbody').innerHTML=`<div id="ocwallet"></div><div id="chainpools"></div>${stakeBox}
     ${isLive()&&econ?`<p style="color:var(--dim);font-size:10.5px;margin:2px 0 8px;line-height:1.5">⛓ ${nx.name}: ${econ}.</p>`:''}
     <p style="color:var(--dim);font-size:11px;margin:2px 0 10px">Network: <b style="color:var(--txt)">${CFG.nets[S.net].name}</b> (switch on the HUD pill) · pending payout <b>${fmt(S.pend[coin])} ${sym}</b> · threshold ${S.payThresh}× reward
     <button class="hbtn" id="thresh" style="padding:2px 8px;font-size:10px">TH ${S.payThresh}×</button></p>
@@ -3128,9 +3464,16 @@ function toast(txt, cls='', dur=4200){
   setTimeout(()=>{ d.style.transition='opacity .5s'; d.style.opacity='0'; setTimeout(()=>d.remove(),500); },dur);
 }
 function renderHud(){
-  // Live mode: the HUD WATT is your REAL on-chain WATTv2 balance (0 until a
-  // wallet is connected), not the demo sim counter.
-  $('v-watt').textContent = (typeof isLive==='function' && isLive()) ? fmt(W3.watt||0) : fmt(S.watt);
+  // Live mode: every HUD balance is the CONNECTED WALLET's real on-chain
+  // holding — WATT v2 summed across Polygon+ALT+WATTx, and each coin row that
+  // chain's native balance — read via public RPCs (W3.live, 30s refresh), so
+  // each player sees their own wallet, whatever chain the wallet sits on.
+  const live=(typeof isLive==='function' && isLive());
+  const L=live?(W3.live||{}):null;
+  if(live){
+    const wsum=(L.pol?.watt||0)+(L.alt?.watt||0)+(L.wtx?.watt||0);
+    $('v-watt').textContent = fmt(wsum || W3.watt || 0);
+  } else $('v-watt').textContent = fmt(S.watt);
   $('v-hash').textContent=fmt(totHash());
   const draw=Math.round(totWatt()), cap=powerCap();
   $('v-pow').textContent=`${draw}/${cap}`;
@@ -3138,13 +3481,25 @@ function renderHud(){
   const tp=$('s-temp'); tp.classList.toggle('hot',S.temp>=85&&S.temp<100); tp.classList.toggle('crit',S.temp>=100);
   $('v-temp').textContent=Math.round(S.temp)+'°';
   $('v-blk').textContent=fmtInt(S.blocks);
-  $('v-pol').textContent=fmt(S.pol); $('v-alt').textContent=fmt(S.alt);
-  $('v-wtx').textContent=fmt(S.wtx);
+  $('v-pol').textContent=fmt(live?(L.pol?.nat||0):S.pol);
+  $('v-alt').textContent=fmt(live?(L.alt?.nat||0):S.alt);
+  $('v-wtx').textContent=fmt(live?(L.wtx?.nat||0):S.wtx);
   const pp=$('p-pol'), pa=$('p-alt'), pw=$('p-wtx');
-  pp.textContent='@'+S.price.pol.toFixed(1); pa.textContent='@'+S.price.alt.toFixed(1); pw.textContent='@'+S.price.wtx.toFixed(2);
-  pp.className='pr '+(S.price.pol>=CFG.nets.polygon.p0?'up':'dn');
-  pa.className='pr '+(S.price.alt>=CFG.nets.alt.p0?'up':'dn');
-  pw.className='pr '+(S.price.wtx>=CFG.nets.wattx.p0?'up':'dn');
+  const px=(live && typeof ocPrices==='function' && _px && _px.usd) ? _px.usd : null;
+  if(px){
+    /* Live: real aggregated USD prices (QuickSwap/Uniswap via the bridge desk) */
+    pp.textContent=px.POL!=null?'$'+Number(px.POL).toFixed(3):'—';
+    pa.textContent=px.ALT!=null?'$'+Number(px.ALT).toPrecision(2):'—';
+    pw.textContent=px.WTX!=null?'$'+Number(px.WTX).toPrecision(2):'—';
+    pp.className=pa.className=pw.className='pr';
+    ocPrices().catch(()=>{}); // background refresh for the next render
+  } else {
+    pp.textContent='@'+S.price.pol.toFixed(1); pa.textContent='@'+S.price.alt.toFixed(1); pw.textContent='@'+S.price.wtx.toFixed(2);
+    pp.className='pr '+(S.price.pol>=CFG.nets.polygon.p0?'up':'dn');
+    pa.className='pr '+(S.price.alt>=CFG.nets.alt.p0?'up':'dn');
+    pw.className='pr '+(S.price.wtx>=CFG.nets.wattx.p0?'up':'dn');
+    if(live && typeof ocPrices==='function') ocPrices().catch(()=>{}); // warm the cache
+  }
   /* SELL sells the WHOLE balance, so dim it at zero and say so on hover —
      it used to look identical whether or not you had anything to sell. */
   const liveMode=S.mode==='live';
@@ -3223,7 +3578,9 @@ function renderShop(){
   [1,3,4,5,14,2].forEach(id=>shopCard(el,id,false));
   head('🖱 BATTLESTATION · permanent luck, survives prestige');
   [17,18,23].forEach(id=>shopCard(el,id,false));
-  const locked=S.gen<2;
+  /* Gen prestige is a SIM mechanic — in live mode the on-chain shop sells every
+     item, so gen2 hardware is never locked there */
+  const locked=S.gen<2 && !(typeof isLive==='function'&&isLive());
   head(`🚀 GEN 2 HARDWARE ${locked?'· <span style="color:var(--red)">locked — reach GENERATION 2 in 🔧 GARAGE</span>':'· unlocked'}`);
   [8,9,10,12,11,13,19].forEach(id=>shopCard(el,id,locked));
   el.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>buyItem(+b.dataset.buy));
@@ -3885,7 +4242,7 @@ $('net').onclick=switchNet;
 $('sell-pol').onclick=()=>sellCoin('pol');
 $('sell-alt').onclick=()=>sellCoin('alt');
 $('b-share').onclick=shareX;
-$('b-reset').onclick=()=>{ if(confirm('Wipe your entire garage and start over?')){ localStorage.removeItem(SAVEKEY); location.reload(); } };
+$('b-reset').onclick=()=>{ if(confirm('Wipe your entire garage and start over? (only the '+(S&&S.mode==='live'?'LIVE':'DEMO')+' world is wiped)')){ localStorage.removeItem(keyForMode(S?S.mode:'demo')); location.reload(); } };
 $('b-wallet').onclick=()=>{ openModal('m-web3'); renderWallet(); if(w3Has()&&!W3.addr) w3Connect(); };
 $('bench-close').onclick=()=>closeBench();
 $('bench-shop').onclick=()=>{ openModal('m-shop'); renderShop(); };
@@ -4099,17 +4456,22 @@ async function init(){
     await loadModels(p=>{ note.textContent=`loading 3D hardware… ${Math.round(p*100)}%`; });
   }catch(e){ note.textContent='model load failed — check connection & refresh'; console.error(e); return; }
   makeThumbs(); buildPosters(); buildBadgeDisplay();
-  const saved=load();
+  let bootMode='demo'; try{ if(localStorage.getItem(MODEKEY)==='live') bootMode='live'; }catch(e){}
+  const saved=load(bootMode)||(bootMode==='live'?freshLiveState():null);
   if(saved){ S=saved;
     $('mintbtn').textContent='⛏ RESUME MINING';
-    note.textContent=`welcome back — ${saved.rigs.length} rig(s) · ${fmt(saved.watt)} ⚡WATT`;
+    note.textContent=`welcome back — ${saved.mode==='live'?'🔗 LIVE · ':''}${saved.rigs.length} rig(s) · ${fmt(saved.watt)} ⚡WATT`;
   } else note.textContent='ready';
   $('mintbtn').onclick=()=>{
     $('splash').style.display='none';
     if(!S){ S=freshState(); }
     auInit(); setMuted(S.muted);
     setBadgeOwned(!!S.badge); setTowerOwned(!!S.tower);
-    if(S.rigs.length===0){ mintPC(true); S.tut=0; showTut(); }
+    if(S.mode==='live'){ /* LIVE: rigs come from the wallet, never a demo mint */
+      rebuildAllRigs(); showTut();
+      if(!W3.addr) toast('🔗 LIVE MODE — connect your wallet (🦊) to load your NFTs, or switch to 🎮 DEMO in the wallet panel','gold',10000);
+    }
+    else if(S.rigs.length===0){ mintPC(true); S.tut=0; showTut(); }
     else { rebuildAllRigs(); applyOffline(); showTut(); }
     buildFarm(); refreshRings(); renderHud(); drawScreen(); save();
     running=true;
@@ -4122,7 +4484,6 @@ async function init(){
     joinPool, hostPool, closePool, buyValidator, exitValidators, repairRig, togglePower, openPoolHub, switchNet, POOLS,
     stakeShop, unstakeShop, buildFarm, sitDown, standUp, eligibleSlots, farmStatus,
     WALK, tickWalk, walkStop, walkBlocked,
-    get SIT(){return SIT;},                       // live seated state for the netcode
     state:()=>JSON.parse(JSON.stringify(S)) };
 }
 function forceBlock(lucky=false){

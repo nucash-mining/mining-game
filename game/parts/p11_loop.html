@@ -80,7 +80,7 @@ $('net').onclick=switchNet;
 $('sell-pol').onclick=()=>sellCoin('pol');
 $('sell-alt').onclick=()=>sellCoin('alt');
 $('b-share').onclick=shareX;
-$('b-reset').onclick=()=>{ if(confirm('Wipe your entire garage and start over?')){ localStorage.removeItem(SAVEKEY); location.reload(); } };
+$('b-reset').onclick=()=>{ if(confirm('Wipe your entire garage and start over? (only the '+(S&&S.mode==='live'?'LIVE':'DEMO')+' world is wiped)')){ localStorage.removeItem(keyForMode(S?S.mode:'demo')); location.reload(); } };
 $('b-wallet').onclick=()=>{ openModal('m-web3'); renderWallet(); if(w3Has()&&!W3.addr) w3Connect(); };
 $('bench-close').onclick=()=>closeBench();
 $('bench-shop').onclick=()=>{ openModal('m-shop'); renderShop(); };
@@ -294,17 +294,22 @@ async function init(){
     await loadModels(p=>{ note.textContent=`loading 3D hardware… ${Math.round(p*100)}%`; });
   }catch(e){ note.textContent='model load failed — check connection & refresh'; console.error(e); return; }
   makeThumbs(); buildPosters(); buildBadgeDisplay();
-  const saved=load();
+  let bootMode='demo'; try{ if(localStorage.getItem(MODEKEY)==='live') bootMode='live'; }catch(e){}
+  const saved=load(bootMode)||(bootMode==='live'?freshLiveState():null);
   if(saved){ S=saved;
     $('mintbtn').textContent='⛏ RESUME MINING';
-    note.textContent=`welcome back — ${saved.rigs.length} rig(s) · ${fmt(saved.watt)} ⚡WATT`;
+    note.textContent=`welcome back — ${saved.mode==='live'?'🔗 LIVE · ':''}${saved.rigs.length} rig(s) · ${fmt(saved.watt)} ⚡WATT`;
   } else note.textContent='ready';
   $('mintbtn').onclick=()=>{
     $('splash').style.display='none';
     if(!S){ S=freshState(); }
     auInit(); setMuted(S.muted);
     setBadgeOwned(!!S.badge); setTowerOwned(!!S.tower);
-    if(S.rigs.length===0){ mintPC(true); S.tut=0; showTut(); }
+    if(S.mode==='live'){ /* LIVE: rigs come from the wallet, never a demo mint */
+      rebuildAllRigs(); showTut();
+      if(!W3.addr) toast('🔗 LIVE MODE — connect your wallet (🦊) to load your NFTs, or switch to 🎮 DEMO in the wallet panel','gold',10000);
+    }
+    else if(S.rigs.length===0){ mintPC(true); S.tut=0; showTut(); }
     else { rebuildAllRigs(); applyOffline(); showTut(); }
     buildFarm(); refreshRings(); renderHud(); drawScreen(); save();
     running=true;

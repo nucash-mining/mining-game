@@ -260,14 +260,32 @@ async function poolEthers(){ if(!_E6) _E6=import('https://cdn.jsdelivr.net/npm/e
    real DEX pools, earning reflects real rewards (validator wiring lands in a later
    pass), on-chain pool hosting. Live requires a wallet on a supported chain. */
 function isLive(){ return S && S.mode==='live'; }
+/* DEMO and LIVE are SEPARATE WORLDS with separate saves. Switching stashes the
+   world you leave and loads (or creates) the other: live starts empty and is
+   filled from the wallet, so demo rigs/balances never show in live and demo
+   desks can never absorb your real on-chain components. */
 function setMode(m){
-  S.mode=m; SFX.swap();
-  if(m==='live'&&!W3.addr){ toast('🔗 LIVE MODE — connect a wallet (🦊) to sell into real pools and mine on-chain','gold',9000); }
-  else toast(m==='live'?'🔗 LIVE MODE — sells are REAL swaps into on-chain WATT pools':'🎮 DEMO MODE — simulated economy, nothing on-chain','cyan',7000);
+  if(!S||S.mode===m) return;
+  save();                                              // stash the world we're leaving
+  S=load(m)||(m==='live'?freshLiveState():freshState());
+  SFX.swap();
+  /* rebuild the 3D world from the new state */
+  if(typeof closeBench==='function'&&benchOpen) closeBench();
+  setBadgeOwned(!!S.badge); setTowerOwned(!!S.tower);
+  rebuildAllRigs(); buildFarm(); refreshRings();
+  selRig=-1; renderRigPanel&&renderRigPanel();
+  if(m==='live'&&!W3.addr){ toast('🔗 LIVE MODE — connect a wallet (🦊): your NFTs become your rigs, balances and pools are real','gold',9000); }
+  else toast(m==='live'?'🔗 LIVE MODE — your wallet IS the game: real NFTs, real balances, real on-chain pools':'🎮 DEMO MODE — simulated economy, nothing on-chain','cyan',7000);
+  if(m==='live'&&W3.addr) w3Refresh().catch(()=>{});    // mirror wallet NFTs -> rigs + inventory
   renderHud&&renderHud(); if($('m-pool')&&$('m-pool').classList.contains('open')) renderPoolHub();
-  if($('m-web3')&&$('m-web3').classList.contains('open')) renderWallet(); save();
+  if($('m-web3')&&$('m-web3').classList.contains('open')) renderWallet();
+  if($('m-shop')&&$('m-shop').classList.contains('open')&&typeof renderShop==='function') renderShop();
+  save();
 }
 function toggleMode(){ setMode(isLive()?'demo':'live'); }
+/* the wallet panel's DEMO/LIVE buttons are inline onclick= handlers, which
+   resolve against window — without this they were dead in the module build */
+window.setMode=setMode; window.toggleMode=toggleMode;
 
 /* ===== WTX -> WATT via the live bridge desk (bridge.wattxchange.app) ===== */
 const WATT_BRIDGE_API='https://bridge.wattxchange.app';
@@ -622,6 +640,24 @@ async function ocBuyItem(id){
   return true;
 }
 
+/* LIVE free Gaming PC: the real CaseFreeMint contract — mint(proof) with an
+   empty proof while the mint is open to all; one per wallet forever. The desk
+   appears via w3GrantOwned as soon as the wallet re-syncs. */
+async function ocFreeMintPC(){
+  const c=ecoCfg();
+  if(!c||!c.freeMint){ SFX.err(); toast('Free Gaming PC mint lives on Polygon and Altcoinchain — switch your wallet there','gold',9000); return; }
+  try{
+    const E=await poolEthers();
+    const prov=new E.BrowserProvider(w3Eth()); const signer=await prov.getSigner();
+    const fm=new E.Contract(c.freeMint,['function mint(bytes32[] proof)','function freeMinted(address) view returns (bool)'],signer);
+    if(await fm.freeMinted(W3.addr).catch(()=>false)){ SFX.err(); toast('This wallet already claimed its free Gaming PC — one per wallet, forever','gold',9000); return; }
+    toast('⛓ Claiming your FREE Gaming PC on '+c.name+' — you pay only gas…','gold',9000);
+    await (await fm.mint([])).wait();
+    SFX.mint(); toast('⛓ FREE Gaming PC minted — your desk appears as the wallet syncs','gold',12000);
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('free mint failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
+}
+
 /* CLAIM RIG — turn the classic Mining Game NFTs you already own (ERC-1155
    components) into an engine-compatible rig via the RigClaimMigrator. Escrows
    your components (reclaim anytime by returning the rig). */
@@ -827,7 +863,14 @@ async function fillChainPools(){
 /* ---------- Pool Hub UI ---------- */
 function renderPoolHub(){
   const coin=CFG.nets[S.net].coin, sym=CFG.nets[S.net].sym, mine=S.myPools[coin];
-  const rows=POOLS[coin].map(p=>{
+  /* LIVE: the fictional demo pools (PolyHash, MaticWorks…) are sim-only. The
+     available pools are the REAL registry pools read from the chain — they
+     render in the ⛓ REAL ON-CHAIN POOLS box (fillChainPools), which also
+     carries hosting, rig staking and per-rig MINE. */
+  const live=isLive();
+  const rows=live?`<div class="prow"><div class="pi"><b>⛓ LIVE — real pools only</b>
+      <small>The pools above are read straight from the on-chain PoolRegistry — anyone who locks 100k ⚡WATT appears there automatically. Demo pools are hidden in live mode.</small></div></div>`
+    :POOLS[coin].map(p=>{
     const sel=S.pool[coin]===p.id;
     const soloLocked=p.solo&&!mine;
     return `<div class="prow ${sel?'sel':''}${p.official?' off':''}">
@@ -836,7 +879,7 @@ function renderPoolHub(){
       <div class="pf">x${p.speed}<small>payout freq</small></div>
       <button class="hbtn ${sel?'':'accent'}" data-join="${p.id}" ${sel?'disabled':''}>${sel?'CONNECTED':soloLocked?'🔒 JOIN':'JOIN'}</button></div>`;
   }).join('');
-  const mineRow = mine?`<div class="prow sel host">
+  const mineRow = live?'':mine?`<div class="prow sel host">
       <div class="pi"><b>${mine.solo?'⛏':'🏊'} ${mine.name}</b><small>${mine.solo?'YOUR private node · solo mining · power-free':'YOUR pool · fee '+(mine.fee*100).toFixed(1)+'% · NPC hashrate '+fmtInt(mine.npc||0)+' H'}</small></div>
       ${mine.solo?'':`<div class="pf">+${fmt(mine.earnC||0)}<small>${sym} earned</small></div>
       <div class="pf">+${fmt(mine.earnW||0)}<small>⚡ from burn</small></div>`}
@@ -847,7 +890,7 @@ function renderPoolHub(){
       <div class="rowbtns" style="margin-top:8px">FEE <input id="hostfee" type="range" min="0" max="12" value="3" step="0.5" style="flex:1"> <b id="hostfeev">3.0%</b>
       <button class="hbtn gold" id="hostgo">🏊 PUBLIC POOL</button>
       <button class="hbtn accent" id="hostsolo">⛏ PRIVATE NODE</button></div></div>`;
-  const alt=`<div class="valbox"><b>⛓ ALTCOINCHAIN HYBRID PoS ${S.altHybrid?'<span style="color:var(--grn)">— LIVE</span>':''}</b>
+  const alt=live?'':`<div class="valbox"><b>⛓ ALTCOINCHAIN HYBRID PoS ${S.altHybrid?'<span style="color:var(--grn)">— LIVE</span>':''}</b>
       <small>height <b>${fmtInt(S.altH)}</b> / 7.00M ${S.altHybrid?'· reward split 1/1 miners : stakers':'· hybrid fork at block 7,000,000'}</small>
       ${S.altHybrid?`<div class="rowbtns" style="margin-top:8px">
         <span>🛰 nodes: <b>${S.altNodes}</b> · locked <b>${fmt(S.altLocked)} ALT</b> · earned <b>${fmt(S.valEarn)} ALT</b></span>

@@ -114,7 +114,10 @@ const SLOTS = [ // rig positions [x,z,shelfY] — 0-8 garage desks, 9-20 contain
   [-9,27,0.55],[-9,27,1.9],[-9,27,3.25],[-3,27,0.55],[-3,27,1.9],[-3,27,3.25],
   [ 3,27,0.55],[ 3,27,1.9],[ 3,27,3.25],[ 9,27,0.55],[ 9,27,1.9],[ 9,27,3.25],
 ];
-const SAVEKEY='tmg3d_v1';
+const SAVEKEY='tmg3d_v1';          // DEMO world save (unchanged key — old saves keep working)
+const LIVEKEY='tmg3d_live_v1';     // LIVE world save — a separate world holding ONLY wallet-backed state
+const MODEKEY='tmg3d_mode';        // which world to boot into next visit
+const keyForMode=m=>m==='live'?LIVEKEY:SAVEKEY;
 const now=()=>Date.now();
 let S=null;
 function freshState(){ const inv={},bought={2:0,17:0,18:0,19:0,23:0}; INV_IDS.forEach(i=>{inv[i]=0;bought[i]=0;}); return {
@@ -128,8 +131,14 @@ function freshState(){ const inv={},bought={2:0,17:0,18:0,19:0,23:0}; INV_IDS.fo
   pool:{pol:'nucash',alt:'nucash',wtx:'genesis'}, myPools:{}, pend:{pol:0,alt:0,wtx:0}, payThresh:3,
   shares:0, burned:0, altH:6998800, altHybrid:0, altNodes:0, altLocked:0, valEarn:0, poolEarnW:0, poolEarnC:{pol:0,alt:0,wtx:0},
 };}
-function save(){ if(!S) return; S.lastSeen=now(); try{localStorage.setItem(SAVEKEY,JSON.stringify(S));}catch(e){} }
-function load(){ try{ const r=localStorage.getItem(SAVEKEY); if(r){ const o=JSON.parse(r); if(o&&o.rigs){
+/* LIVE world: starts EMPTY — no free demo WATT, no sim rigs. Inventory and
+   rigs mirror the connected wallet (w3GrantOwned); the HUD coin rows read the
+   wallet's real balances (W3.live). Demo progress never leaks in. */
+function freshLiveState(){ const st=freshState(); st.mode='live'; st.watt=0; st.shopPool=0; return st; }
+function save(){ if(!S) return; S.lastSeen=now();
+  try{ localStorage.setItem(keyForMode(S.mode),JSON.stringify(S)); localStorage.setItem(MODEKEY,S.mode); }catch(e){} }
+function load(mode){ mode=mode==='live'?'live':'demo';
+  try{ const r=localStorage.getItem(keyForMode(mode)); if(r){ const o=JSON.parse(r); if(o&&o.rigs){
   const f=freshState();
   const inv=Object.assign({},f.inv,o.inv||{}), bought=Object.assign({},f.bought,o.bought||{});
   const st=Object.assign(f,o);
@@ -143,6 +152,9 @@ function load(){ try{ const r=localStorage.getItem(SAVEKEY); if(r){ const o=JSON
   st.myPools=o.myPools||{}; st.pend=Object.assign({pol:0,alt:0,wtx:0},o.pend||{});
   for(const c of ['pol','alt','wtx']) if(st.pool[c]==='solo'&&!st.myPools[c]) st.pool[c]=c==='wtx'?'genesis':'nucash';
   st.poolEarnC=Object.assign({pol:0,alt:0,wtx:0},o.poolEarnC||{});
+  /* the slot decides the mode — a pre-split save that stored mode:'live' in the
+     demo slot must NOT drag demo rigs/balances into the live world */
+  st.mode=mode;
   return st; } } }catch(e){} return null; }
 /* number formatting */
 function fmt(n){ n=Number(n)||0; const a=Math.abs(n);

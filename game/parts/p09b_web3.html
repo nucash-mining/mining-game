@@ -9,6 +9,7 @@ const WEB3CFG={
       nft:'0x0CDbf4926a8EdFFaa803B96f8fa90B065DE19Eb2', watt:'0x387693eCEC037C61943404F03c097d2ADA15ae3f', staking:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f',
       shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', mg:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f', vault:'0x72A716F62aCfF960f6F097B4c7909B2368eD3acA', migrator:'0x97BcC99ff34FA2cde929c97074011E8929F59679',
       classicNft:'0x970a8b10147e3459d3cbf56329b76ac18d329728', oldWatt:'0xE960d5076cd3169C343Ee287A2c3380A222e5839',
+      freeMint:'0xc75504Cb57b26041655dDd739414C240Dd628e7a', /* CaseFreeMint — free Gaming PC (id 1), one per wallet, open since 2026-08-24 */
       nftV2:null, wattV2:null,
       /* pools: V3 multi-coin set (WATT v2 stake, coin-menu pools) — deployed +
          verified 2026-08-25 (deployments-pools-v3-137.json). rigNft + staking
@@ -27,6 +28,7 @@ const WEB3CFG={
       nft:'0x851fd0205348783444Fc9EDe99Ca2321681EC99b', watt:'0xB7635E386283CAE6FB1A710f19CaA8220beF630D', staking:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f',
       shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', mg:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f', vault:'0x72A716F62aCfF960f6F097B4c7909B2368eD3acA', migrator:'0x97BcC99ff34FA2cde929c97074011E8929F59679',
       classicNft:'0xf9670e5D46834561813CA79854B3d7147BBbFfb2', oldWatt:'0x6645143e49B3a15d8F205658903a55E520444698',
+      freeMint:'0x91Ae9eDe6016AdF84c643F9Ce5Bb60A9438D792f', /* CaseFreeMint — free Gaming PC (id 1), one per wallet, open since 2026-08-23 */
       nftV2:null, wattV2:null,
       /* pools: V3 multi-coin set (WATT v2 stake, coin-menu pools) — deployed +
          verified 2026-08-25 (deployments-pools-v3-2330.json). Hosts can lock
@@ -201,8 +203,10 @@ function w3GrantOwned(){
     if(r.frame) inst[14]=(inst[14]||0)+1;
     for(const g of r.gpus) inst[g]=(inst[g]||0)+1;
   }
-  // Gaming PC → ensure a rig exists if you own one on-chain
-  if((W3.nfts[1]||0)>0 && S.rigs.length===0) mintPC(true);
+  // Gaming PC → one desk rig per PC you own on-chain (live rigs only — live
+  // mode is its own world, so demo desks can no longer absorb these)
+  const pcs=W3.nfts[1]||0;
+  while(S.rigs.length<pcs && mintPC(true)){}
   // Genesis Badge
   if((W3.nfts[2]||0)>0 && !S.badge){ S.badge=1; setBadgeOwned(true); }
   // every other component: set inventory to (owned − installed)

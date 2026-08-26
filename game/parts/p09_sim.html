@@ -192,7 +192,15 @@ function curPay(cur,amt){
 }
 function buyItem(id){
   const it=ITEMS[id];
-  if(id===1){ if(mintPC(S.pcCount===0)) renderShop(); return; }
+  if(id===1){
+    /* LIVE: the Gaming PC is a REAL free mint (CaseFreeMint, one per wallet) —
+       never a sim rig, or the desk would have no NFT behind it */
+    if(typeof isLive==='function' && isLive()){
+      if(typeof ocFreeMintPC==='function' && W3.addr) ocFreeMintPC();
+      else toast('Connect a wallet (🦊) on Polygon or Altcoinchain to claim the free Gaming PC','gold',9000);
+      return;
+    }
+    if(mintPC(S.pcCount===0)) renderShop(); return; }
   /* LIVE mode: buy the item as a REAL NFT through the on-chain ItemShop instead
      of the sim shop. ocBuyItem handles payment (WATT→staking pool, or native at
      WATT value→treasury), mint, and messaging; the sim inventory is untouched. */

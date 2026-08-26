@@ -179,6 +179,12 @@ function buildFarm(){
       pad.rotation.x=-Math.PI/2; pad.position.set(0,0.01,27); scene.add(pad); farmG.pads[1]=pad; }
     farmG.warehouse=makeWarehouse();
   }
+  // farm can also SHRINK now (demo/live are separate worlds) — structures are
+  // kept but hidden when the loaded state doesn't own them
+  farmG.containers.forEach((c,i)=>{ c.visible=i<S.containers; });
+  if(farmG.warehouse) farmG.warehouse.visible=!!S.warehouse;
+  if(farmG.pads[0]) farmG.pads[0].visible=S.containers>0;
+  if(farmG.pads[1]) farmG.pads[1].visible=!!S.warehouse;
   // widen the world as the farm grows
   const far=S.warehouse?46:S.containers?38:24;
   controls.maxDistance=far; scene.fog.far=S.warehouse?95:S.containers?75:40;

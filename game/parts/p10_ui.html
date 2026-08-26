@@ -122,7 +122,9 @@ function renderShop(){
   [1,3,4,5,14,2].forEach(id=>shopCard(el,id,false));
   head('🖱 BATTLESTATION · permanent luck, survives prestige');
   [17,18,23].forEach(id=>shopCard(el,id,false));
-  const locked=S.gen<2;
+  /* Gen prestige is a SIM mechanic — in live mode the on-chain shop sells every
+     item, so gen2 hardware is never locked there */
+  const locked=S.gen<2 && !(typeof isLive==='function'&&isLive());
   head(`🚀 GEN 2 HARDWARE ${locked?'· <span style="color:var(--red)">locked — reach GENERATION 2 in 🔧 GARAGE</span>':'· unlocked'}`);
   [8,9,10,12,11,13,19].forEach(id=>shopCard(el,id,locked));
   el.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>buyItem(+b.dataset.buy));
