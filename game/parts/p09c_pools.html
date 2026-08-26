@@ -467,11 +467,16 @@ const REG_STATUS=['—','ACTIVE','PAUSED','UNSTAKING','CLOSED'];
 /* HOST: approve 100k WATT -> registerPoolWithNode -> engine.createPool */
 async function ocHostPool(){
   const c=poolCfg(); if(!c) return;
-  const name=($('oc-name')?.value||'').trim(), stratum=($('oc-stratum')?.value||'').trim(),
-        rpc=($('oc-rpc')?.value||'').trim(), p2p=($('oc-p2p')?.value||'').trim(),
+  /* Endpoints are DESCRIPTIVE metadata (shown on the pool row) — an NFT-mining
+     pool has no stratum, so blanks auto-fill; the registry just requires
+     non-empty strings. Hosts fronting real nodes can list theirs. */
+  const name=($('oc-name')?.value||'').trim(),
+        stratum=($('oc-stratum')?.value||'').trim()||'nft-mining (no stratum)',
+        rpc=($('oc-rpc')?.value||'').trim()||'n/a',
+        p2p=($('oc-p2p')?.value||'').trim()||'n/a',
         feeBps=Math.round(clamp(+($('oc-fee')?.value||1),0,10)*100),
         targetIds=WEB3CFG.targets.filter(t=>$('oc-tgt-'+t.id)?.checked).map(t=>t.id);
-  if(!name||!stratum||!rpc||!p2p){ SFX.err(); toast('Fill in pool name + stratum + node RPC + node P2P endpoints','red'); return; }
+  if(!name){ SFX.err(); toast('Give your pool a name','red'); return; }
   if(!targetIds.length){ SFX.err(); toast('Tick at least one payout coin for the pool menu','red'); return; }
   try{
     const E=await poolEthers();
@@ -781,9 +786,9 @@ async function fillChainPools(){
           ${tgtChecks}
           FEE <input id="oc-fee" type="range" min="0" max="10" value="1" step="0.5" style="flex:1;min-width:80px"> <b id="oc-feev">1.0%</b></div>
         <div class="rowbtns" style="margin-top:6px;flex-wrap:wrap">
-          <input id="oc-stratum" class="hbtn" placeholder="stratum+tcp://host:3333" style="flex:1;min-width:150px">
-          <input id="oc-rpc" class="hbtn" placeholder="node RPC http://…" style="flex:1;min-width:120px">
-          <input id="oc-p2p" class="hbtn" placeholder="enode://… or addnode ip:port" style="flex:1;min-width:120px">
+          <input id="oc-stratum" class="hbtn" placeholder="stratum (optional — NFT pools need none)" style="flex:1;min-width:150px">
+          <input id="oc-rpc" class="hbtn" placeholder="node RPC (optional)" style="flex:1;min-width:120px">
+          <input id="oc-p2p" class="hbtn" placeholder="node P2P (optional)" style="flex:1;min-width:120px">
           <button class="hbtn gold" id="oc-host">🏊 LOCK 100k + LAUNCH</button></div></div>`}
       <div class="rowbtns" style="margin-top:8px;flex-wrap:wrap">
         <button class="hbtn accent" id="oc-mintrig">⛏ MINT ON-CHAIN RIG</button>
