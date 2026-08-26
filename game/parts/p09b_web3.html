@@ -86,6 +86,26 @@ async function rpcFetch(url,method,params){
    coin rows and ⚡ total render from this in Live mode, so what every player
    sees is THEIR wallet's real balances — refreshed every 30s and on demand. */
 W3.live={};
+/* WTX lives on the UTXO layer: the connected EVM address only sees its own
+   UTXOs, so players can DECLARE their real WATTx wallet address (W…) and the
+   WTX row reads that instead — janus eth_getBalance resolves a hash160
+   address's UTXO balance. Stored per device (localStorage mgWtxAddr). */
+function wtxAddrToHex(a){
+  try{
+    a=String(a||'').trim(); if(!a) return null;
+    if(/^0x[0-9a-fA-F]{40}$/.test(a)) return a.toLowerCase();
+    if(!/^W[1-9A-HJ-NP-Za-km-z]{25,40}$/.test(a)) return null;
+    const A='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    let n=0n; for(const ch of a){ const i=A.indexOf(ch); if(i<0) return null; n=n*58n+BigInt(i); }
+    let h=n.toString(16); if(h.length%2) h='0'+h;
+    let zeros=0; for(const ch of a){ if(ch==='1') zeros++; else break; }
+    h='00'.repeat(zeros)+h;
+    if(h.length!==50) return null;           // version(1)+hash160(20)+checksum(4)
+    return '0x'+h.slice(2,42);
+  }catch(e){ return null; }
+}
+function wtxDeclared(){ try{ return localStorage.getItem('mgWtxAddr')||''; }catch(e){ return ''; } }
+function wtxBalanceAddr(){ return wtxAddrToHex(wtxDeclared())||W3.addr; }
 let _liveBalT=0,_liveBalBusy=false;
 async function w3LiveBalances(force){
   if(!W3.addr||!(typeof isLive==='function'&&isLive())) return;
@@ -95,8 +115,9 @@ async function w3LiveBalances(force){
     await Promise.all([['polygon','pol'],['alt','alt'],['wattx','wtx']].map(async([key,cn])=>{
       const c=WEB3CFG.chains[key]; if(!c?.rpc) return;
       try{
+        const natAddr=cn==='wtx'?wtxBalanceAddr():W3.addr; // WTX: declared UTXO wallet
         const [nat,watt]=await Promise.all([
-          rpcFetch(c.rpc,'eth_getBalance',[W3.addr,'latest']),
+          rpcFetch(c.rpc,'eth_getBalance',[natAddr,'latest']),
           c.watt?rpcFetch(c.rpc,'eth_call',[{to:c.watt,data:WEB3CFG.sel.balErc20+encA(W3.addr)},'latest']):'0x0']);
         W3.live[cn]={nat:fromWei(nat),watt:fromWei(watt),at:Date.now()};
       }catch(e){ /* keep the previous reading on a transient RPC failure */ }

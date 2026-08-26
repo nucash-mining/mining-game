@@ -373,7 +373,17 @@ async function ocRenderWallet(){
     el.innerHTML=`<div class="valbox" style="border-color:#3dff8a44"><b>💰 WALLET — live on-chain balances</b>
       <small>${rows.join('')}<br>WATT v2 total <b>${wattTot.toLocaleString(undefined,{maximumFractionDigits:0})}</b>${wUsd?` <i style="opacity:.65">${usdFmt(wattTot*wUsd)}</i>`:''}
       &nbsp;·&nbsp; WATT ${usdFmt(px.usd?.WATT)} · POL ${usdFmt(px.usd?.POL)} · ALT ${usdFmt(px.usd?.ALT)} · WTX ${usdFmt(px.usd?.WTX)} <i style="opacity:.55">QuickSwap/Uniswap agg</i><br>
-      🖼 NFTs on ${W3.chain?.name||'—'}: <b>${nftN}</b> component NFT${nftN===1?'':'s'} (auto-unlocked in your rigs · full list in 🦊 WALLET) — rig NFTs, staking &amp; mining live in the pools box below</small></div>`;
+      🖼 NFTs on ${W3.chain?.name||'—'}: <b>${nftN}</b> component NFT${nftN===1?'':'s'} (auto-unlocked in your rigs · full list in 🦊 WALLET) — rig NFTs, staking &amp; mining live in the pools box below</small>
+      <div class="rowbtns" style="margin-top:6px;flex-wrap:wrap">
+        <input id="oc-wtxwallet" class="hbtn" placeholder="your WATTx wallet address (W…) — the WTX row reads this" value="${wtxDeclared()}" style="flex:1;min-width:220px">
+        <button class="hbtn" id="oc-savewtxwallet">SAVE WTX WALLET</button></div></div>`;
+    $('oc-savewtxwallet')?.addEventListener('click',()=>{
+      const a=($('oc-wtxwallet')?.value||'').trim();
+      if(a&&!wtxAddrToHex(a)){ SFX.err(); toast('Not a valid WATTx address (W… base58 or 0x… hex)','red',8000); return; }
+      try{ localStorage.setItem('mgWtxAddr',a); }catch(e){}
+      SFX.buy(); toast(a?'⚡ WTX wallet saved — the WTX balance row now reads '+a.slice(0,10)+'…':'WTX wallet cleared — reading the connected EVM address','gold',8000);
+      _liveBalT=0; w3LiveBalances(true).catch(()=>{}); ocRenderWallet();
+    });
   }catch(e){ el.innerHTML=''; }
 }
 /* SELL popup: pick what to receive, see the aggregated price, execute the rail
