@@ -386,28 +386,69 @@ async function ocRenderWallet(){
     });
   }catch(e){ el.innerHTML=''; }
 }
-/* SELL popup: pick what to receive, see the aggregated price, execute the rail
-   that exists (native→WATT via chain DEX; WTX→WATT via the bridge mint). */
+/* SELL popup: pick what to receive, see the aggregated price. Single-leg rails
+   execute one-click (native→WATT via chain DEX; WTX→WATT via the bridge mint);
+   MULTI-HOP pairs are quoted live by the desk's route engine (/api/route —
+   pools + migrator + both bridges) and open a step-by-step route map. Pairs
+   with no live path say exactly which missing pool blocks them. */
+async function ocRouteQuote(from,to,amount){
+  try{ const r=await fetch(`https://bridge.wattxchange.app/api/route?from=${from}&to=${to}&amount=${amount}`);
+    return await r.json(); }catch(e){ return null; }
+}
+function ocShowRoute(from,to,q){
+  const steps=(q.steps||[]).map((s,i)=>({value:null,disabled:true,
+    label:`<b>${i+1}.</b> ${s.venue} <small style="opacity:.7">(${s.chain}) ${fmt(s.in)} → ${fmt(s.out)}</small>`}));
+  const links=[];
+  if(q.steps?.some(s=>s.leg==='swapin_alt_wattv1')) links.push({value:'sellalt',label:'▶ do leg 1 here — SELL ALT → WATT <small style="opacity:.7">(in-game, SwapinDEX)</small>'});
+  if(q.steps?.some(s=>s.leg==='migrate_v1_v2')) links.push({value:'migrate',label:'▶ migrate v1 → v2 <small style="opacity:.7">(stake.mining-game… /swap.html)</small>'});
+  if(q.steps?.some(s=>s.kind==='desk')) links.push({value:'bridge',label:'▶ bridge legs — wattxchange.app DeFi Hub / bridge.wattxchange.app'});
+  ocChoose(`🗺 ROUTE ${from} → ${to}: ${fmt(q.amountIn)} → ≈ <b>${fmt(q.amountOut)}</b> ${to}${q.capacityWarning?`<br><small style="color:#ffb145">${q.capacityWarning}</small>`:''}`,
+    [...steps,...links]).then(v=>{
+      if(v==='sellalt') onchainSell('alt', q.amountIn);
+      else if(v==='migrate') window.open('https://stake.mining-game.wattxchange.app/swap.html','_blank');
+      else if(v==='bridge') window.open('https://bridge.wattxchange.app','_blank');
+    });
+}
 async function ocSellPopup(cn){
   const px=await ocPrices(true);
   const from={alt:'ALT',pol:'POL',wtx:'WTX'}[cn]||cn.toUpperCase();
   const uFrom=px.usd?.[from];
-  const mk=(sym,rail,en,note)=>{
+  const others=cn==='wtx'?['POL','ALT']:cn==='alt'?['WTX','POL']:['WTX','ALT'];
+  /* quote the multi-hop pairs live (per 1 unit for the rate display) */
+  const routed={};
+  await Promise.all(others.map(async sym=>{ routed[sym]=await ocRouteQuote(from,sym,1); }));
+  const mk=(sym,rail,en)=>{
     const uTo=px.usd?.[sym];
     const rate=(uFrom&&uTo)?(uFrom/uTo):null;
     return {value:sym, disabled:!en,
-      label:`<b>${sym}</b>${rate?` — 1 ${from} ≈ ${rate<0.01?rate.toPrecision(3):rate.toLocaleString(undefined,{maximumFractionDigits:3})} ${sym}`:''} <small style="opacity:.7">${en?('via '+rail):(note||'no route yet')}</small>`};
+      label:`<b>${sym}</b>${rate?` — 1 ${from} ≈ ${rate<0.01?rate.toPrecision(3):rate.toLocaleString(undefined,{maximumFractionDigits:3})} ${sym}`:''} <small style="opacity:.7">via ${rail}</small>`};
+  };
+  const mkRoute=(sym)=>{
+    const q=routed[sym];
+    if(q?.available){
+      const hops=q.steps.length;
+      return {value:'route:'+sym,
+        label:`<b>${sym}</b> — 1 ${from} ≈ ${q.amountOut<0.01?q.amountOut.toPrecision(3):q.amountOut.toLocaleString(undefined,{maximumFractionDigits:3})} ${sym} <small style="opacity:.7">via ${hops}-leg route (${q.steps.map(s=>s.venue.split(' ')[0]).join(' → ')})</small>`};
+    }
+    const why=q?.blocked?.[0]?.note||'no route yet';
+    return {value:sym,disabled:true,label:`<b>${sym}</b> <small style="opacity:.6">${why}</small>`};
   };
   const opts=cn==='wtx'
-    ? [mk('WATT','bridge (supply-ratio mint)',true), mk('POL',null,false), mk('ALT',null,false)]
-    : [mk('WATT',cn==='alt'?'SwapinDEX':'QuickSwap',true), mk('WTX',null,false), mk(cn==='alt'?'POL':'ALT',null,false)];
+    ? [mk('WATT','bridge (supply-ratio mint)',true), mkRoute('POL'), mkRoute('ALT')]
+    : [mk('WATT',cn==='alt'?'SwapinDEX':'QuickSwap',true), mkRoute('WTX'), mkRoute(others[1])];
   const pick=await ocChoose(`💱 SELL ${from} — what do you want for it? <small style="opacity:.6">(1 ${from} ≈ ${usdFmt(uFrom)})</small>`,opts);
   if(!pick) return false;
-  const raw=prompt(`How much ${from} to sell for ${pick}?\n(from your connected wallet — leaves gas)`,'');
+  const raw=prompt(`How much ${from} to sell for ${pick.replace('route:','')}?\n(from your connected wallet — leaves gas)`,'');
   if(raw===null) return false;
   const a=parseFloat(raw);
   if(!(a>0)){ SFX.err(); toast('Enter a positive amount','red'); return false; }
   if(pick==='WATT') return cn==='wtx'?bridgeSellWtx(a):onchainSell(cn,a);
+  if(pick.startsWith('route:')){
+    const sym=pick.slice(6);
+    const q=await ocRouteQuote(from,sym,a);
+    if(q?.available){ ocShowRoute(from,sym,q); return true; }
+    toast('Route unavailable right now: '+(q?.blocked?.[0]?.note||'quote failed'),'red',9000); return false;
+  }
   toast('No route for that pair yet','red'); return false;
 }
 function poolCfg(){ return (W3.addr&&W3.chain&&W3.chain.pools)?W3.chain:null; }
