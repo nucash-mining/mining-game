@@ -28,9 +28,11 @@ const WEB3CFG={
       shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', mg:'0x856f59F1729f6e107EbCD75d21c64AB897c5681f', vault:'0x72A716F62aCfF960f6F097B4c7909B2368eD3acA', migrator:'0x97BcC99ff34FA2cde929c97074011E8929F59679',
       classicNft:'0xf9670e5D46834561813CA79854B3d7147BBbFfb2', oldWatt:'0x6645143e49B3a15d8F205658903a55E520444698',
       nftV2:null, wattV2:null,
-      /* pools: RETIRED v1-stake set (ABI mismatch with the V3 client) — the V3
-         multi-coin deploy fills this slot when it lands on ALT. */
-      pools:null,
+      /* pools: V3 multi-coin set (WATT v2 stake, coin-menu pools) — deployed +
+         verified 2026-08-25 (deployments-pools-v3-2330.json). Hosts can lock
+         their 100k on ALT or Polygon; rigNft/staking/migrator carry over. */
+      pools:{ registry:'0x88beBed99cb45D81F5DEd708682C55a2b26a221C', hub:'0x7Cee30E196Cb298e4634D7192C527dA37f2C7d57',
+              engine:'0x755dCf18b521BC7e42f88fdfEBa2C910809AF09F', rigNft:'0x131A875e1bfEB2B3735E5d9Ad5e8871fF6CE9381', stakingPool:'0x62fC935400104371777aD36B78CF73f2c48dcD24', migrator:'0xdB13ecc87960632b8aAe93640F246CdAE1675B78' },
       economy:{ items:'0x851fd0205348783444Fc9EDe99Ca2321681EC99b', shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', stakingPool:'0xa3f8B04310380cD13Ec85B11420d1fc848af36C4', wattV2:'0xB7635E386283CAE6FB1A710f19CaA8220beF630D' },
       /* SwapinDEX (original live venue) — WATT/wALT pool 0xb2F8e147…. Sell ALT→WATT native-in. */
       dex:{ kind:'univ2', router:'0xae168Ce47cebca9abbC5107a58df0532f1afa4d6', weth:'0x48721ADeFE5b97101722c0866c2AffCE797C32b6',

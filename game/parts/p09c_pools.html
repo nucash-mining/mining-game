@@ -687,7 +687,7 @@ async function fillChainPools(){
     <small>Connect a wallet (🦊 WALLET) to host a real pool: <b>100,000 WATT v2</b> locked in the PoolRegistry host contract. ONE pool offers a MENU of coins (ALT / WTX / BSV / HTH / BITN …) — every miner picks which coin each rig mines.</small></div>`; return; }
   const c=poolCfg();
   if(!c){ el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS</b>
-    <small>${W3.chain?W3.chain.name+' V3 pool contracts are pending deploy — switch the wallet to <b>Polygon</b> once the V3 set lands there.':'Switch the wallet to Polygon.'}</small></div>`; return; }
+    <small>${W3.chain?W3.chain.name+' V3 pool contracts are pending deploy — switch the wallet to <b>Polygon</b> or <b>Altcoinchain</b> to host or mine now.':'Switch the wallet to Polygon or Altcoinchain.'}</small></div>`; return; }
   if(_ocBusy) return; _ocBusy=true;
   el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS — ${c.name}</b><small>reading chain…</small></div>`;
   try{
