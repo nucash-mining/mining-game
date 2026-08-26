@@ -239,7 +239,11 @@ const POOL_ABI={
  staking:[
   'function stake(address,uint256)','function unstake(address,uint256)',
   'function earned(address) view returns (uint256)',
-  'function pendingRewards(address) view returns (uint256)'],
+  'function pendingRewards(address) view returns (uint256)',
+  'function getUserStakedRigs(address) view returns (address[],uint256[])',
+  'function getPendingRewards(address,uint256) view returns (uint256)',
+  'function getAllPendingRewards(address) view returns (uint256)',
+  'function claimRewards(address,uint256)','function claimAllRewards()'],
  migrator:[
   'function claim(uint256[],uint256[]) returns (uint256)',
   'function reclaim(uint256)'],
@@ -365,9 +369,11 @@ async function ocRenderWallet(){
       }catch(e){ rows.push(`<span style="margin-right:14px;opacity:.5"><b>${c.sym}</b> unreachable</span>`); }
     }
     const wUsd=px.usd?.WATT;
+    const nftN=Object.values(W3.nfts||{}).reduce((a,b)=>a+(b||0),0);
     el.innerHTML=`<div class="valbox" style="border-color:#3dff8a44"><b>💰 WALLET — live on-chain balances</b>
       <small>${rows.join('')}<br>WATT v2 total <b>${wattTot.toLocaleString(undefined,{maximumFractionDigits:0})}</b>${wUsd?` <i style="opacity:.65">${usdFmt(wattTot*wUsd)}</i>`:''}
-      &nbsp;·&nbsp; WATT ${usdFmt(px.usd?.WATT)} · POL ${usdFmt(px.usd?.POL)} · ALT ${usdFmt(px.usd?.ALT)} · WTX ${usdFmt(px.usd?.WTX)} <i style="opacity:.55">QuickSwap/Uniswap agg</i></small></div>`;
+      &nbsp;·&nbsp; WATT ${usdFmt(px.usd?.WATT)} · POL ${usdFmt(px.usd?.POL)} · ALT ${usdFmt(px.usd?.ALT)} · WTX ${usdFmt(px.usd?.WTX)} <i style="opacity:.55">QuickSwap/Uniswap agg</i><br>
+      🖼 NFTs on ${W3.chain?.name||'—'}: <b>${nftN}</b> component NFT${nftN===1?'':'s'} (auto-unlocked in your rigs · full list in 🦊 WALLET) — rig NFTs, staking &amp; mining live in the pools box below</small></div>`;
   }catch(e){ el.innerHTML=''; }
 }
 /* SELL popup: pick what to receive, see the aggregated price, execute the rail
@@ -604,6 +610,14 @@ async function ocStakeRig(rigId){
   }catch(e){ SFX.err(); toast('stake failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
   fillChainPools();
 }
+async function ocClaimStakeRewards(rigId){
+  const c=poolCfg(); if(!c||!c.pools.stakingPool) return;
+  try{ const sp=await poolCtr('staking',true);
+    await (await sp.claimRewards(c.pools.rigNft,rigId)).wait();
+    SFX.buy(); toast(`⛓ staking rewards claimed for RIG #${rigId}`,'grn',8000);
+  }catch(e){ SFX.err(); toast('claim failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',8000); }
+  fillChainPools();
+}
 async function ocUnstakeRig(rigId){
   const c=poolCfg(); if(!c||!c.pools.stakingPool) return;
   try{ const sp=await poolCtr('staking',true);
@@ -672,6 +686,22 @@ async function fillChainPools(){
       rigRows+=`<div class="prow"><div class="pi"><b>⛏ RIG #${id}</b><small>${t.hashRate} H · eff ${t.efficiency} · ${t.wattConsumption} ⚡/h · algo ${t.algorithm}</small></div>
         ${opts?`<select id="oc-pool-${id}" class="hbtn">${opts}</select><button class="hbtn accent" data-ocmine="${id}">MINE</button>`:''}${stakeBtn}${!opts&&!stakeBtn?'<small style="color:var(--dim)">no active pools</small>':''}</div>`;
     }
+    /* STAKED rigs — escrowed in the StakingPool so they leave the wallet list;
+       read them back from the pool with pending WATT, unstake + claim inline. */
+    let stakedRows='';
+    if(c.pools.stakingPool){
+      try{
+        const sp=await poolCtr('staking');
+        const [nftCs,stkIds]=await sp.getUserStakedRigs(W3.addr);
+        for(let i=0;i<stkIds.length;i++){
+          const rid=Number(stkIds[i]);
+          const pend=await sp.getPendingRewards(nftCs[i],rid).catch(()=>0n);
+          stakedRows+=`<div class="prow"><div class="pi"><b>🥩 RIG #${rid} — STAKED</b><small>full stake weight · pending ${ocFmt(pend,4)} ⚡</small></div>
+            <button class="hbtn gold" data-ocstkclaim="${rid}">CLAIM ⚡</button>
+            <button class="hbtn" data-ocunstake="${rid}">UNSTAKE</button></div>`;
+        }
+      }catch(e){}
+    }
     /* rigs currently in sessions are owned by the engine — check my recent ones via events is heavy; keep a local note */
     const mySessions=(S.ocRigs||[]).filter(Boolean);
     let sesRows='';
@@ -713,7 +743,7 @@ async function fillChainPools(){
         <button class="hbtn" id="oc-savehth">SAVE HTH ADDR</button>
         <input id="oc-bitn" class="hbtn" placeholder="BITN payout address (Bitnet PoS-reward pools)" value="${bitnAddr||''}" style="flex:1;min-width:180px">
         <button class="hbtn" id="oc-savebitn">SAVE BITN ADDR</button></div>
-      ${rigRows}${sesRows}</div>`;
+      ${rigRows}${stakedRows}${sesRows}</div>`;
     /* wire */
     $('oc-host')?.addEventListener('click',ocHostPool);
     $('oc-mintrig')?.addEventListener('click',ocMintRig);
@@ -730,6 +760,8 @@ async function fillChainPools(){
       ocMine(id, +($('oc-pool-'+id)?.value||0)); });
     el.querySelectorAll('[data-ocstop]').forEach(b=>b.onclick=()=>ocStop(+b.dataset.ocstop));
     el.querySelectorAll('[data-ocstake]').forEach(b=>b.onclick=()=>ocStakeRig(+b.dataset.ocstake));
+    el.querySelectorAll('[data-ocunstake]').forEach(b=>b.onclick=()=>ocUnstakeRig(+b.dataset.ocunstake));
+    el.querySelectorAll('[data-ocstkclaim]').forEach(b=>b.onclick=()=>ocClaimStakeRewards(+b.dataset.ocstkclaim));
   }catch(e){
     el.innerHTML=`<div class="valbox" style="border-color:#ff5b5b44"><b>⛓ REAL ON-CHAIN POOLS</b><small>chain read failed: ${(''+(e&&e.message||e)).slice(0,110)}</small></div>`;
   }
