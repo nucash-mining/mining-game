@@ -678,6 +678,37 @@ async function ocBuyUpgrade(k){
   finally{ _upBusy=false; }
 }
 
+/* LIVE game-credit TOP UP: ONE signed WATT v2 transfer into the on-chain
+   stakers rewards pool; the amount becomes upgrade credit spent with no
+   further signatures. Deliberately NOT an erc20 approve — an allowance the
+   page can pull from is an exploit surface; a pre-paid top-up caps the risk
+   at exactly what the user chose to sign. */
+async function ocTopUp(amt){
+  const c=ecoCfg(); if(!c||!c.economy){ SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain first','red'); return; }
+  amt=Math.floor(Number(amt)||0);
+  if(amt<=0){ SFX.err(); toast('Enter a WATT amount to top up','red'); return; }
+  if(_upBusy){ toast('A payment is already in flight…','gold'); return; }
+  _upBusy=true;
+  try{
+    const cost=BigInt(amt)*10n**18n;
+    const balH=await w3CallRaw(c.economy.wattV2, WEB3CFG.sel.balErc20+encA(W3.addr));
+    if(BigInt(balH&&balH!=='0x'?balH:'0x0')<cost){ SFX.err(); toast('Not enough on-chain WATT for that top-up','red',8000); return; }
+    if(W3.chainId!==c.chainId){ SFX.err(); toast(`Switch your wallet to ${c.name} to pay there`,'gold',8000); w3Switch(c.key); return; }
+    toast(`Sign ONCE in your wallet — ${fmt(amt)} ⚡WATT to the stakers rewards pool becomes upgrade credit…`,'gold',10000);
+    const data='0xa9059cbb'+encA(c.economy.stakingPool)+cost.toString(16).padStart(64,'0');
+    const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.economy.wattV2,data}]);
+    toast('⛓ Paying… '+w3Short(tx),'gold',8000);
+    const ok=await w3WaitTx(tx);
+    if(ok===false){ SFX.err(); toast('Top-up reverted — nothing charged','red',9000); return; }
+    if(ok===null){ toast('Top-up still pending — credit lands when it confirms','gold',9000); const ok2=await w3WaitTx(tx,480); if(ok2!==true) return; }
+    S.watt+=amt; save(); SFX.buy();
+    toast(`⛓ ${fmt(amt)} ⚡ GAME CREDIT loaded — upgrades now buy without more signatures`,'gold',10000);
+    renderHud&&renderHud(); if(typeof renderUpg==='function'&&$('m-upg')&&$('m-upg').classList.contains('open')) renderUpg();
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('top-up cancelled: '+(''+(e&&(e.reason||e.message)||e)).slice(0,80),'red',8000); }
+  finally{ _upBusy=false; }
+}
+
 /* LIVE free Gaming PC: the real CaseFreeMint contract — mint(proof) with an
    empty proof while the mint is open to all; one per wallet forever. The desk
    appears via w3GrantOwned as soon as the wallet re-syncs. */

@@ -212,18 +212,27 @@ function renderUpg(){
     ['rackgpu','🗄️','Rack Expansion',`${framedCap()} GPUs per rack on every framed rig${rgLv<rgMax?` → ${framedCap(rgLv+1)} at the next level, up to ${CFG.rackGpuCap[rgMax]}`:' — maxed (19-GPU open-air rigs)'}.`],
     ['rack','🏠','Garage Expansion',`${slotCount()} rig slots. Each expansion adds 3 desks.`],
   ];
-  /* LIVE: the ladder is paid in REAL on-chain WATT (wallet-signed transfer), so
-     the buy gate reads the connected wallet's WATT v2, not the sim balance */
+  /* LIVE: the ladder is paid in REAL on-chain WATT — from pre-paid GAME CREDIT
+     (S.watt, one signature per top-up) or a signed transfer per upgrade. The
+     buy gate passes if EITHER can cover the price. */
   const upLive=(typeof isLive==='function'&&isLive());
-  const upBal=upLive?(W3.watt||0):S.watt;
-  $('upgrows').innerHTML=defs.map(([k,ic,nm,ds])=>{
+  const upBal=upLive?Math.max(S.watt||0,W3.watt||0):S.watt;
+  if(upLive){
+    $('upgrows').innerHTML=`<div class="uprow" style="border-color:#3dff8a66"><div class="uic">⛓</div>
+      <div class="ubody"><h3>Game Credit <small style="color:var(--grn)">${fmt(S.watt)} ⚡ loaded</small></h3>
+      <p>Live upgrades cost <b>real WATT v2</b>. Sign <b>once</b> to load credit (it goes to the on-chain stakers rewards pool) and upgrades buy instantly with no more signatures — or skip credit and sign each upgrade individually. Wallet: <b>${fmt(W3.watt||0)} ⚡</b> on ${W3.chain?W3.chain.name:'—'}.</p>
+      <div class="rowbtns" style="margin-top:6px"><input id="topup-amt" class="hbtn" type="number" min="1" step="1" placeholder="WATT amount (e.g. 5000)" style="flex:1;min-width:120px">
+      <button class="hbtn gold" id="topup-go">⚡ TOP UP — 1 signature</button></div></div></div>`;
+  } else $('upgrows').innerHTML='';
+  $('upgrows').insertAdjacentHTML('beforeend',defs.map(([k,ic,nm,ds])=>{
     const lv=S.upg[k]||0, max=upgMax(k), p=upgPrice(k,lv), inf=!isFinite(max), pipsN=inf?16:max;
     return `<div class="uprow"><div class="uic">${ic}</div>
       <div class="ubody"><h3>${nm} <small style="color:var(--dim)">Lv ${lv}${inf?' · ∞':'/'+max}</small></h3><p>${ds}</p>
       <div class="pips">${Array.from({length:pipsN},(_,i)=>`<span class="pip ${i<lv?'on':''}"></span>`).join('')}${inf&&lv>pipsN?`<small style="color:var(--cyan);margin-left:4px">+${lv-pipsN}</small>`:''}</div></div>
-      <button class="ubuy" data-up="${k}" ${lv>=max||upBal<p?'disabled':''} ${upLive?'title="Real WATT v2 — your wallet asks for a signature"':''}>${lv>=max?'MAX':fmt(p)+' ⚡'+(upLive?' ⛓':'')}</button></div>`;
-  }).join('');
+      <button class="ubuy" data-up="${k}" ${lv>=max||upBal<p?'disabled':''} ${upLive?'title="Real WATT v2 — paid from game credit, or your wallet asks for a signature"':''}>${lv>=max?'MAX':fmt(p)+' ⚡'+(upLive?' ⛓':'')}</button></div>`;
+  }).join(''));
   document.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>buyUpgrade(b.dataset.up));
+  const tg=$('topup-go'); if(tg) tg.onclick=()=>ocTopUp($('topup-amt')&&$('topup-amt').value);
   // battlestation comfort: monitor size + gaming chair
   $('upgrows').insertAdjacentHTML('beforeend',`
     <div class="uprow"><div class="uic">🖥️</div>

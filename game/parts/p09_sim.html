@@ -36,9 +36,12 @@ function simTick(dt){ // dt seconds (fixed 0.1)
       if(OS.open&&OS.rig===ri) osRefresh();
     }
   });
-  // stake income (always on)
-  const stakeIn=totSWStake()*CFG.stakePerSW*stakeMult()*dt;
-  S.watt+=stakeIn; S.lifeWatt+=stakeIn;
+  // stake income — DEMO only. In live the real drip comes from the on-chain
+  // staker, and S.watt is purchased upgrade CREDIT: the sim must not mint it.
+  if(!(typeof isLive==='function'&&isLive())){
+    const stakeIn=totSWStake()*CFG.stakePerSW*stakeMult()*dt;
+    S.watt+=stakeIn; S.lifeWatt+=stakeIn;
+  }
   // mining
   const draw=totWatt();
   const net=CFG.nets[S.net];
@@ -276,10 +279,14 @@ function applyUpgrade(k){
 function buyUpgrade(k){
   const lv=S.upg[k]||0, max=upgMax(k);
   if(lv>=max){ SFX.err(); return; }
-  /* LIVE: upgrades cost REAL on-chain WATT v2 — a wallet-signed transfer into
-     the stakers rewards pool (the same sink the on-chain shop pays into). The
-     sim balance is never the gate in live mode. */
+  /* LIVE: upgrades cost REAL WATT v2. Two ways to pay, both user-signed:
+     — GAME CREDIT: pre-paid via one signed TOP UP transfer (garage button);
+       upgrades spend it with no further signatures. S.watt IS that credit in
+       live (the sim never mints it there).
+     — direct: no/low credit -> a wallet-signed transfer per upgrade. */
   if(typeof isLive==='function' && isLive()){
+    const p=upgPrice(k,lv);
+    if(S.watt>=p){ S.watt-=p; applyUpgrade(k); toast(`Paid from game credit — ${fmt(S.watt)} ⚡ credit left`,'cyan',6000); return; }
     if(typeof ocBuyUpgrade==='function' && ecoCfg && ecoCfg()) ocBuyUpgrade(k);
     else { SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain to buy upgrades with your real WATT','red',8000); }
     return;

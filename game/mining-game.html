@@ -1929,9 +1929,12 @@ function simTick(dt){ // dt seconds (fixed 0.1)
       if(OS.open&&OS.rig===ri) osRefresh();
     }
   });
-  // stake income (always on)
-  const stakeIn=totSWStake()*CFG.stakePerSW*stakeMult()*dt;
-  S.watt+=stakeIn; S.lifeWatt+=stakeIn;
+  // stake income — DEMO only. In live the real drip comes from the on-chain
+  // staker, and S.watt is purchased upgrade CREDIT: the sim must not mint it.
+  if(!(typeof isLive==='function'&&isLive())){
+    const stakeIn=totSWStake()*CFG.stakePerSW*stakeMult()*dt;
+    S.watt+=stakeIn; S.lifeWatt+=stakeIn;
+  }
   // mining
   const draw=totWatt();
   const net=CFG.nets[S.net];
@@ -2169,10 +2172,14 @@ function applyUpgrade(k){
 function buyUpgrade(k){
   const lv=S.upg[k]||0, max=upgMax(k);
   if(lv>=max){ SFX.err(); return; }
-  /* LIVE: upgrades cost REAL on-chain WATT v2 — a wallet-signed transfer into
-     the stakers rewards pool (the same sink the on-chain shop pays into). The
-     sim balance is never the gate in live mode. */
+  /* LIVE: upgrades cost REAL WATT v2. Two ways to pay, both user-signed:
+     — GAME CREDIT: pre-paid via one signed TOP UP transfer (garage button);
+       upgrades spend it with no further signatures. S.watt IS that credit in
+       live (the sim never mints it there).
+     — direct: no/low credit -> a wallet-signed transfer per upgrade. */
   if(typeof isLive==='function' && isLive()){
+    const p=upgPrice(k,lv);
+    if(S.watt>=p){ S.watt-=p; applyUpgrade(k); toast(`Paid from game credit — ${fmt(S.watt)} ⚡ credit left`,'cyan',6000); return; }
     if(typeof ocBuyUpgrade==='function' && ecoCfg && ecoCfg()) ocBuyUpgrade(k);
     else { SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain to buy upgrades with your real WATT','red',8000); }
     return;
@@ -3221,6 +3228,37 @@ async function ocBuyUpgrade(k){
   finally{ _upBusy=false; }
 }
 
+/* LIVE game-credit TOP UP: ONE signed WATT v2 transfer into the on-chain
+   stakers rewards pool; the amount becomes upgrade credit spent with no
+   further signatures. Deliberately NOT an erc20 approve — an allowance the
+   page can pull from is an exploit surface; a pre-paid top-up caps the risk
+   at exactly what the user chose to sign. */
+async function ocTopUp(amt){
+  const c=ecoCfg(); if(!c||!c.economy){ SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain first','red'); return; }
+  amt=Math.floor(Number(amt)||0);
+  if(amt<=0){ SFX.err(); toast('Enter a WATT amount to top up','red'); return; }
+  if(_upBusy){ toast('A payment is already in flight…','gold'); return; }
+  _upBusy=true;
+  try{
+    const cost=BigInt(amt)*10n**18n;
+    const balH=await w3CallRaw(c.economy.wattV2, WEB3CFG.sel.balErc20+encA(W3.addr));
+    if(BigInt(balH&&balH!=='0x'?balH:'0x0')<cost){ SFX.err(); toast('Not enough on-chain WATT for that top-up','red',8000); return; }
+    if(W3.chainId!==c.chainId){ SFX.err(); toast(`Switch your wallet to ${c.name} to pay there`,'gold',8000); w3Switch(c.key); return; }
+    toast(`Sign ONCE in your wallet — ${fmt(amt)} ⚡WATT to the stakers rewards pool becomes upgrade credit…`,'gold',10000);
+    const data='0xa9059cbb'+encA(c.economy.stakingPool)+cost.toString(16).padStart(64,'0');
+    const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.economy.wattV2,data}]);
+    toast('⛓ Paying… '+w3Short(tx),'gold',8000);
+    const ok=await w3WaitTx(tx);
+    if(ok===false){ SFX.err(); toast('Top-up reverted — nothing charged','red',9000); return; }
+    if(ok===null){ toast('Top-up still pending — credit lands when it confirms','gold',9000); const ok2=await w3WaitTx(tx,480); if(ok2!==true) return; }
+    S.watt+=amt; save(); SFX.buy();
+    toast(`⛓ ${fmt(amt)} ⚡ GAME CREDIT loaded — upgrades now buy without more signatures`,'gold',10000);
+    renderHud&&renderHud(); if(typeof renderUpg==='function'&&$('m-upg')&&$('m-upg').classList.contains('open')) renderUpg();
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('top-up cancelled: '+(''+(e&&(e.reason||e.message)||e)).slice(0,80),'red',8000); }
+  finally{ _upBusy=false; }
+}
+
 /* LIVE free Gaming PC: the real CaseFreeMint contract — mint(proof) with an
    empty proof while the mint is open to all; one per wallet forever. The desk
    appears via w3GrantOwned as soon as the wallet re-syncs. */
@@ -3761,18 +3799,27 @@ function renderUpg(){
     ['rackgpu','🗄️','Rack Expansion',`${framedCap()} GPUs per rack on every framed rig${rgLv<rgMax?` → ${framedCap(rgLv+1)} at the next level, up to ${CFG.rackGpuCap[rgMax]}`:' — maxed (19-GPU open-air rigs)'}.`],
     ['rack','🏠','Garage Expansion',`${slotCount()} rig slots. Each expansion adds 3 desks.`],
   ];
-  /* LIVE: the ladder is paid in REAL on-chain WATT (wallet-signed transfer), so
-     the buy gate reads the connected wallet's WATT v2, not the sim balance */
+  /* LIVE: the ladder is paid in REAL on-chain WATT — from pre-paid GAME CREDIT
+     (S.watt, one signature per top-up) or a signed transfer per upgrade. The
+     buy gate passes if EITHER can cover the price. */
   const upLive=(typeof isLive==='function'&&isLive());
-  const upBal=upLive?(W3.watt||0):S.watt;
-  $('upgrows').innerHTML=defs.map(([k,ic,nm,ds])=>{
+  const upBal=upLive?Math.max(S.watt||0,W3.watt||0):S.watt;
+  if(upLive){
+    $('upgrows').innerHTML=`<div class="uprow" style="border-color:#3dff8a66"><div class="uic">⛓</div>
+      <div class="ubody"><h3>Game Credit <small style="color:var(--grn)">${fmt(S.watt)} ⚡ loaded</small></h3>
+      <p>Live upgrades cost <b>real WATT v2</b>. Sign <b>once</b> to load credit (it goes to the on-chain stakers rewards pool) and upgrades buy instantly with no more signatures — or skip credit and sign each upgrade individually. Wallet: <b>${fmt(W3.watt||0)} ⚡</b> on ${W3.chain?W3.chain.name:'—'}.</p>
+      <div class="rowbtns" style="margin-top:6px"><input id="topup-amt" class="hbtn" type="number" min="1" step="1" placeholder="WATT amount (e.g. 5000)" style="flex:1;min-width:120px">
+      <button class="hbtn gold" id="topup-go">⚡ TOP UP — 1 signature</button></div></div></div>`;
+  } else $('upgrows').innerHTML='';
+  $('upgrows').insertAdjacentHTML('beforeend',defs.map(([k,ic,nm,ds])=>{
     const lv=S.upg[k]||0, max=upgMax(k), p=upgPrice(k,lv), inf=!isFinite(max), pipsN=inf?16:max;
     return `<div class="uprow"><div class="uic">${ic}</div>
       <div class="ubody"><h3>${nm} <small style="color:var(--dim)">Lv ${lv}${inf?' · ∞':'/'+max}</small></h3><p>${ds}</p>
       <div class="pips">${Array.from({length:pipsN},(_,i)=>`<span class="pip ${i<lv?'on':''}"></span>`).join('')}${inf&&lv>pipsN?`<small style="color:var(--cyan);margin-left:4px">+${lv-pipsN}</small>`:''}</div></div>
-      <button class="ubuy" data-up="${k}" ${lv>=max||upBal<p?'disabled':''} ${upLive?'title="Real WATT v2 — your wallet asks for a signature"':''}>${lv>=max?'MAX':fmt(p)+' ⚡'+(upLive?' ⛓':'')}</button></div>`;
-  }).join('');
+      <button class="ubuy" data-up="${k}" ${lv>=max||upBal<p?'disabled':''} ${upLive?'title="Real WATT v2 — paid from game credit, or your wallet asks for a signature"':''}>${lv>=max?'MAX':fmt(p)+' ⚡'+(upLive?' ⛓':'')}</button></div>`;
+  }).join(''));
   document.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>buyUpgrade(b.dataset.up));
+  const tg=$('topup-go'); if(tg) tg.onclick=()=>ocTopUp($('topup-amt')&&$('topup-amt').value);
   // battlestation comfort: monitor size + gaming chair
   $('upgrows').insertAdjacentHTML('beforeend',`
     <div class="uprow"><div class="uic">🖥️</div>
