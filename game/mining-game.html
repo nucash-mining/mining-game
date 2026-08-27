@@ -2421,11 +2421,17 @@ function w3GrantOwned(){
   while(S.rigs.length<pcs && mintPC(true)){}
   // Genesis Badge
   if((W3.nfts[2]||0)>0 && !S.badge){ S.badge=1; setBadgeOwned(true); }
-  // every other component: set inventory to (owned − installed)
+  // every other component: set inventory to (owned − installed).
+  // Structures/peripherals aren't inventory: the Server Tower (19) is a garage
+  // structure and 17/18/23 are battlestation peripherals — map them to their
+  // own state or a wallet-held one is simply invisible in-game.
   let any=false;
   for(const id of WEB3CFG.ids){
     if(id===1||id===2) continue;
-    const avail=Math.max(0,(W3.nfts[id]||0)-(inst[id]||0));
+    const owned=W3.nfts[id]||0;
+    if(id===19){ const own=owned>0?1:0; if(own!==(S.tower?1:0)){ S.tower=own; setTowerOwned(!!own); any=true; } continue; }
+    if(id===17||id===18||id===23){ const own=owned>0?1:0; if(own!==(S.periph[id]||0)){ S.periph[id]=own; any=true; } continue; }
+    const avail=Math.max(0,owned-(inst[id]||0));
     if(avail!==(S.inv[id]||0)) any=true;
     S.inv[id]=avail;
   }
