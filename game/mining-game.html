@@ -2268,7 +2268,8 @@ const WEB3CFG={
     {id:5, sym:'BITN', name:'Bitnet PoS'},
   ],
   sel:{ bal1155:'0x00fdd58e', balErc20:'0x70a08231', freemint:'0xaf2de086', buyWithWatt:'0x663e0d4c', rates:'0xdd418ae2', rewards:'0xe8a31bdc',
-        positionCount:'0x42fd3880', positions:'0xc1be6677', unstake:'0x2e17de78' },
+        positionCount:'0x42fd3880', positions:'0xc1be6677', unstake:'0x2e17de78',
+        allowance:'0xdd62ed3e', approve:'0x095ea7b3', fund:'0xca1d209d' },
   ids:[1,2,3,4,5,8,9,10,11,12,13,14,17,18,19,23], // V3 collection component ids
 };
 const W3={ addr:null, chainId:null, chain:null, native:null, watt:null, rewards:null, nfts:{}, rates:{}, staked:[], busy:false, err:null };
@@ -3251,10 +3252,34 @@ async function w3WaitTx(hash,secs){
   }
   return null; // still pending — caller decides
 }
-/* LIVE garage upgrade: pays the same WATT price as the sim, but in REAL WATT v2
-   — a wallet-SIGNED erc20 transfer into the on-chain stakers rewards pool (the
-   sink the ItemShop's WATT sales feed). The level applies once the tx lands. */
+/* Pay WATT into the stakers pool THE COUNTED WAY. WattStakingPool distributes
+   ONLY what arrives through fund() (safeTransferFrom + accounting) — a plain
+   erc20 transfer would STRAND the WATT inside the contract, invisible to every
+   staker. So: approve the EXACT cost, then fund(cost). Up to two signatures,
+   never a standing allowance. The deployed pool is V1: every fund() is
+   distributed to stakers pro-rata instantly. */
 let _upBusy=false;
+async function ocPayToStakers(cost,label){
+  const c=ecoCfg(); if(!c||!c.economy) return false;
+  const balH=await w3CallRaw(c.economy.wattV2, WEB3CFG.sel.balErc20+encA(W3.addr));
+  if(BigInt(balH&&balH!=='0x'?balH:'0x0')<cost){ SFX.err(); toast('Not enough on-chain WATT — '+label+' (v2)','red',8000); return false; }
+  if(W3.chainId!==c.chainId){ SFX.err(); toast(`Switch your wallet to ${c.name} to pay there`,'gold',8000); w3Switch(c.key); return false; }
+  const alH=await w3CallRaw(c.economy.wattV2, WEB3CFG.sel.allowance+encA(W3.addr)+encA(c.economy.stakingPool));
+  if(BigInt(alH&&alH!=='0x'?alH:'0x0')<cost){
+    toast('Sign 1/2 — approve exactly '+label+' to the stakers pool…','gold',9000);
+    const atx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.economy.wattV2,data:WEB3CFG.sel.approve+encA(c.economy.stakingPool)+cost.toString(16).padStart(64,'0')}]);
+    if(await w3WaitTx(atx)!==true){ SFX.err(); toast('approval did not land — nothing charged','red',8000); return false; }
+  }
+  toast('Sign — fund the stakers pool with '+label+'…','gold',9000);
+  const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.economy.stakingPool,data:WEB3CFG.sel.fund+cost.toString(16).padStart(64,'0')}]);
+  toast('⛓ Paying… '+w3Short(tx),'gold',8000);
+  let ok=await w3WaitTx(tx);
+  if(ok===false){ SFX.err(); toast('Payment reverted — nothing charged, nothing applied','red',9000); return false; }
+  if(ok===null){ toast('Payment still pending — applies when it confirms (leave this open)','gold',9000); ok=await w3WaitTx(tx,480); if(ok!==true) return false; }
+  return true;
+}
+/* LIVE garage upgrade: same WATT price as the sim, paid in REAL WATT v2 via
+   the pool's fund() so stakers are credited instantly (V1 = pro-rata on fund). */
 async function ocBuyUpgrade(k){
   const c=ecoCfg(); if(!c||!c.economy){ SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain first','red'); return; }
   if(_upBusy){ toast('Upgrade payment already in flight…','gold'); return; }
@@ -3262,29 +3287,30 @@ async function ocBuyUpgrade(k){
   const p=upgPrice(k,lv);
   _upBusy=true;
   try{
-    const cost=BigInt(Math.round(p))*10n**18n;
-    const balH=await w3CallRaw(c.economy.wattV2, WEB3CFG.sel.balErc20+encA(W3.addr));
-    if(BigInt(balH&&balH!=='0x'?balH:'0x0')<cost){ SFX.err(); toast(`Not enough on-chain WATT — this upgrade costs ${fmt(p)} ⚡ (v2)`,'red',8000); return; }
-    if(W3.chainId!==c.chainId){ SFX.err(); toast(`Switch your wallet to ${c.name} to pay there`,'gold',8000); w3Switch(c.key); return; }
-    toast(`Sign the upgrade in your wallet — ${fmt(p)} ⚡WATT to the stakers rewards pool…`,'gold',10000);
-    const data='0xa9059cbb'+encA(c.economy.stakingPool)+cost.toString(16).padStart(64,'0');
-    const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.economy.wattV2,data}]);
-    toast('⛓ Paying… '+w3Short(tx),'gold',8000);
-    const ok=await w3WaitTx(tx);
-    if(ok===false){ SFX.err(); toast('Upgrade payment reverted — nothing charged, nothing applied','red',9000); return; }
-    if(ok===null){ toast('Payment still pending — the upgrade applies when it confirms (leave this open)','gold',9000); const ok2=await w3WaitTx(tx,480); if(ok2!==true) return; }
-    applyUpgrade(k);
-    toast(`⛓ Paid ${fmt(p)} ⚡WATT on ${c.name} — it flows back to WATT stakers`,'gold',9000);
-    w3Refresh&&w3Refresh();
+    if(await ocPayToStakers(BigInt(Math.round(p))*10n**18n, fmt(p)+' ⚡WATT')){
+      applyUpgrade(k);
+      toast(`⛓ Paid ${fmt(p)} ⚡WATT on ${c.name} — distributed to WATT stakers instantly`,'gold',9000);
+      w3Refresh&&w3Refresh();
+    }
   }catch(e){ SFX.err(); toast('upgrade cancelled: '+(''+(e&&(e.reason||e.message)||e)).slice(0,80),'red',8000); }
   finally{ _upBusy=false; }
 }
+/* LIVE structure/comfort purchase (chair, container, warehouse): credit first,
+   else a signed fund() payment; `apply` runs only when paid. */
+async function ocBuyStructure(price,apply){
+  if(S.watt>=price){ S.watt-=price; apply(); save(); toast(`Paid from game credit — ${fmt(S.watt)} ⚡ credit left`,'cyan',6000); return; }
+  const c=ecoCfg(); if(!c){ SFX.err(); toast('Not enough game credit — connect a wallet on Polygon or Altcoinchain to pay real WATT','red',8000); return; }
+  if(_upBusy){ toast('A payment is already in flight…','gold'); return; }
+  _upBusy=true;
+  try{ if(await ocPayToStakers(BigInt(Math.round(price))*10n**18n, fmt(price)+' ⚡WATT')){ apply(); w3Refresh&&w3Refresh(); } }
+  catch(e){ SFX.err(); toast('purchase cancelled: '+(''+(e&&(e.reason||e.message)||e)).slice(0,80),'red',8000); }
+  finally{ _upBusy=false; }
+}
 
-/* LIVE game-credit TOP UP: ONE signed WATT v2 transfer into the on-chain
-   stakers rewards pool; the amount becomes upgrade credit spent with no
-   further signatures. Deliberately NOT an erc20 approve — an allowance the
-   page can pull from is an exploit surface; a pre-paid top-up caps the risk
-   at exactly what the user chose to sign. */
+/* LIVE game-credit TOP UP: pays the chosen amount into the stakers pool via
+   fund() (an exact-amount approve + fund — never an unlimited allowance, so
+   the page can only ever move what the user just signed for). The amount
+   becomes upgrade credit spent with no further signatures. */
 async function ocTopUp(amt){
   const c=ecoCfg(); if(!c||!c.economy){ SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain first','red'); return; }
   amt=Math.floor(Number(amt)||0);
@@ -3292,17 +3318,7 @@ async function ocTopUp(amt){
   if(_upBusy){ toast('A payment is already in flight…','gold'); return; }
   _upBusy=true;
   try{
-    const cost=BigInt(amt)*10n**18n;
-    const balH=await w3CallRaw(c.economy.wattV2, WEB3CFG.sel.balErc20+encA(W3.addr));
-    if(BigInt(balH&&balH!=='0x'?balH:'0x0')<cost){ SFX.err(); toast('Not enough on-chain WATT for that top-up','red',8000); return; }
-    if(W3.chainId!==c.chainId){ SFX.err(); toast(`Switch your wallet to ${c.name} to pay there`,'gold',8000); w3Switch(c.key); return; }
-    toast(`Sign ONCE in your wallet — ${fmt(amt)} ⚡WATT to the stakers rewards pool becomes upgrade credit…`,'gold',10000);
-    const data='0xa9059cbb'+encA(c.economy.stakingPool)+cost.toString(16).padStart(64,'0');
-    const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.economy.wattV2,data}]);
-    toast('⛓ Paying… '+w3Short(tx),'gold',8000);
-    const ok=await w3WaitTx(tx);
-    if(ok===false){ SFX.err(); toast('Top-up reverted — nothing charged','red',9000); return; }
-    if(ok===null){ toast('Top-up still pending — credit lands when it confirms','gold',9000); const ok2=await w3WaitTx(tx,480); if(ok2!==true) return; }
+    if(!(await ocPayToStakers(BigInt(amt)*10n**18n, fmt(amt)+' ⚡WATT'))) return;
     S.watt+=amt; save(); SFX.buy();
     toast(`⛓ ${fmt(amt)} ⚡ GAME CREDIT loaded — upgrades now buy without more signatures`,'gold',10000);
     renderHud&&renderHud(); if(typeof renderUpg==='function'&&$('m-upg')&&$('m-upg').classList.contains('open')) renderUpg();
@@ -3881,36 +3897,47 @@ function renderUpg(){
     <div class="uprow"><div class="uic">${S.chair?'🏎️':'🪑'}</div>
       <div class="ubody"><h3>Gaming Chair <small style="color:var(--dim)">${S.chair?'owned':'Lv 0/1'}</small></h3>
       <p>${S.chair?'Racing-style chair with RGB trim on every desk — +3% luck comfort bonus.':'Upgrade every desk chair to a racing-style gaming chair. Sim comfort: +3% luck.'}</p></div>
-      <button class="ubuy" data-chair="1" ${S.chair||S.watt<CFG.chairPrice?'disabled':''}>${S.chair?'OWNED ✓':fmt(CFG.chairPrice)+' ⚡'}</button></div>`);
+      <button class="ubuy" data-chair="1" ${S.chair||upBal<CFG.chairPrice?'disabled':''}>${S.chair?'OWNED ✓':fmt(CFG.chairPrice)+' ⚡'+(upLive?' ⛓':'')}</button></div>`);
   document.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{
     S.monSize=+b.dataset.mon; SFX.click(); rebuildAllRigs(); renderUpg(); save();
     toast(`🖥 Monitors swapped to ${S.monSize}&Prime; on every desk`,'cyan'); });
-  const chb=document.querySelector('[data-chair]');
-  if(chb) chb.onclick=()=>{ if(S.chair||S.watt<CFG.chairPrice){SFX.err();return;}
-    S.watt-=CFG.chairPrice; S.shopPool+=CFG.chairPrice; S.chair=1; rebuildChairs(); SFX.buy();
+  const chairApply=()=>{ S.chair=1; rebuildChairs(); SFX.buy();
     toast('🏎️ GAMING CHAIRS rolled in — +3% luck comfort bonus','gold'); renderUpg(); renderHud(); save(); };
-  // mining farm expansion — payable in WATT/POL/ALT/WTX/USDT/DAI (shop pay currency)
-  const cur=S.payCur||'watt';
+  const chb=document.querySelector('[data-chair]');
+  if(chb) chb.onclick=()=>{ if(S.chair){SFX.err();return;}
+    if(upLive){ ocBuyStructure(CFG.chairPrice,chairApply); return; }   // real WATT via fund()
+    if(S.watt<CFG.chairPrice){SFX.err();return;}
+    S.watt-=CFG.chairPrice; S.shopPool+=CFG.chairPrice; chairApply(); };
+  // mining farm expansion — payable in WATT/POL/ALT/WTX/USDT/DAI (shop pay
+  // currency) in DEMO; LIVE pays real WATT only (credit or signed fund())
+  const cur=upLive?'watt':(S.payCur||'watt');
+  const structBal=c=>upLive?upBal:curBal(c);
   const cCost=costIn(cur,CFG.containerPrice), wCost=costIn(cur,CFG.warehousePrice);
   $('upgrows').insertAdjacentHTML('beforeend',`
     <div class="uprow" style="border-color:${S.containers?'var(--gold)':''}"><div class="uic">🚢</div>
       <div class="ubody"><h3>Shipping Container <small style="color:var(--dim)">${S.containers}/${CFG.containerMax} · unlocks 🏭 PRO FARM</small></h3>
       <p>A 20ft high-cube on the lot: <b>6 rack slots</b> for rack-mounted rigs. Pay in ⚡/POL/ALT/WTX/USDT/DAI (set in 🛒 SHOP — now: ${curSym(cur)}).</p></div>
-      <button class="ubuy" data-cont="1" ${S.containers>=CFG.containerMax||curBal(cur)<cCost?'disabled':''}>${S.containers>=CFG.containerMax?'MAX':fmt(cCost)+' '+curSym(cur)}</button></div>
+      <button class="ubuy" data-cont="1" ${S.containers>=CFG.containerMax||structBal(cur)<cCost?'disabled':''}>${S.containers>=CFG.containerMax?'MAX':fmt(cCost)+' '+curSym(cur)+(upLive?' ⛓':'')}</button></div>
     <div class="uprow" style="border-color:${S.warehouse?'var(--gold)':''}"><div class="uic">🏭</div>
       <div class="ubody"><h3>Warehouse <small style="color:var(--dim)">${S.warehouse?'owned · ⛏ ELITE FARM':'requires 2 containers'}</small></h3>
       <p>The big leagues: <b>12 rack slots</b> and ELITE MINING FARM status.</p></div>
-      <button class="ubuy" data-ware="1" ${S.warehouse||S.containers<CFG.containerMax||curBal(cur)<wCost?'disabled':''}>${S.warehouse?'OWNED ✓':fmt(wCost)+' '+curSym(cur)}</button></div>`);
-  const cb=document.querySelector('[data-cont]');
-  if(cb) cb.onclick=()=>{ if(S.containers>=CFG.containerMax||curBal(cur)<cCost){SFX.err();return;}
-    curPay(cur,cCost); S.containers++; buildFarm(); refreshRings(); SFX.gen2();
+      <button class="ubuy" data-ware="1" ${S.warehouse||S.containers<CFG.containerMax||structBal(cur)<wCost?'disabled':''}>${S.warehouse?'OWNED ✓':fmt(wCost)+' '+curSym(cur)+(upLive?' ⛓':'')}</button></div>`);
+  const contApply=()=>{ S.containers++; buildFarm(); refreshRings(); SFX.gen2();
     toast(S.containers===1?'🚢 SHIPPING CONTAINER delivered — 6 rack slots · 🏭 <b>PRO MINING FARM</b> status!':'🚢 Second container down — 6 more rack slots','gold',9000);
     renderUpg(); renderHud(); save(); };
-  const wb=document.querySelector('[data-ware]');
-  if(wb) wb.onclick=()=>{ if(S.warehouse||S.containers<CFG.containerMax||curBal(cur)<wCost){SFX.err();return;}
-    curPay(cur,wCost); S.warehouse=1; buildFarm(); refreshRings(); SFX.gen2();
+  const wareApply=()=>{ S.warehouse=1; buildFarm(); refreshRings(); SFX.gen2();
     toast('🏭 WAREHOUSE ONLINE — 12 rack slots · ⛏ <b>ELITE MINING FARM</b> status!','gold',10000);
     renderUpg(); renderHud(); save(); };
+  const cb=document.querySelector('[data-cont]');
+  if(cb) cb.onclick=()=>{ if(S.containers>=CFG.containerMax){SFX.err();return;}
+    if(upLive){ ocBuyStructure(CFG.containerPrice,contApply); return; }
+    if(curBal(cur)<cCost){SFX.err();return;}
+    curPay(cur,cCost); contApply(); };
+  const wb=document.querySelector('[data-ware]');
+  if(wb) wb.onclick=()=>{ if(S.warehouse||S.containers<CFG.containerMax){SFX.err();return;}
+    if(upLive){ ocBuyStructure(CFG.warehousePrice,wareApply); return; }
+    if(curBal(cur)<wCost){SFX.err();return;}
+    curPay(cur,wCost); wareApply(); };
   const ok=S.lifeWatt>=CFG.gen2Req;
   $('gen2box').innerHTML=`<div class="big">🚀 <b>GENERATION ${S.gen+1}</b><br>
     <small style="color:var(--dim)">Reset your garage (Genesis Badge & Battlestation stay) for a permanent ×${CFG.gen2Mult} hashpower multiplier${S.gen===1?` — and unlock the <b style="color:var(--gold)">GEN 2 hardware shop</b>: TX190 · GP720 · GPX880 · XXL270 · Bit Hammer ASIC · Server Tower`:''}.<br>

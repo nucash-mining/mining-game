@@ -701,10 +701,34 @@ async function w3WaitTx(hash,secs){
   }
   return null; // still pending — caller decides
 }
-/* LIVE garage upgrade: pays the same WATT price as the sim, but in REAL WATT v2
-   — a wallet-SIGNED erc20 transfer into the on-chain stakers rewards pool (the
-   sink the ItemShop's WATT sales feed). The level applies once the tx lands. */
+/* Pay WATT into the stakers pool THE COUNTED WAY. WattStakingPool distributes
+   ONLY what arrives through fund() (safeTransferFrom + accounting) — a plain
+   erc20 transfer would STRAND the WATT inside the contract, invisible to every
+   staker. So: approve the EXACT cost, then fund(cost). Up to two signatures,
+   never a standing allowance. The deployed pool is V1: every fund() is
+   distributed to stakers pro-rata instantly. */
 let _upBusy=false;
+async function ocPayToStakers(cost,label){
+  const c=ecoCfg(); if(!c||!c.economy) return false;
+  const balH=await w3CallRaw(c.economy.wattV2, WEB3CFG.sel.balErc20+encA(W3.addr));
+  if(BigInt(balH&&balH!=='0x'?balH:'0x0')<cost){ SFX.err(); toast('Not enough on-chain WATT — '+label+' (v2)','red',8000); return false; }
+  if(W3.chainId!==c.chainId){ SFX.err(); toast(`Switch your wallet to ${c.name} to pay there`,'gold',8000); w3Switch(c.key); return false; }
+  const alH=await w3CallRaw(c.economy.wattV2, WEB3CFG.sel.allowance+encA(W3.addr)+encA(c.economy.stakingPool));
+  if(BigInt(alH&&alH!=='0x'?alH:'0x0')<cost){
+    toast('Sign 1/2 — approve exactly '+label+' to the stakers pool…','gold',9000);
+    const atx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.economy.wattV2,data:WEB3CFG.sel.approve+encA(c.economy.stakingPool)+cost.toString(16).padStart(64,'0')}]);
+    if(await w3WaitTx(atx)!==true){ SFX.err(); toast('approval did not land — nothing charged','red',8000); return false; }
+  }
+  toast('Sign — fund the stakers pool with '+label+'…','gold',9000);
+  const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.economy.stakingPool,data:WEB3CFG.sel.fund+cost.toString(16).padStart(64,'0')}]);
+  toast('⛓ Paying… '+w3Short(tx),'gold',8000);
+  let ok=await w3WaitTx(tx);
+  if(ok===false){ SFX.err(); toast('Payment reverted — nothing charged, nothing applied','red',9000); return false; }
+  if(ok===null){ toast('Payment still pending — applies when it confirms (leave this open)','gold',9000); ok=await w3WaitTx(tx,480); if(ok!==true) return false; }
+  return true;
+}
+/* LIVE garage upgrade: same WATT price as the sim, paid in REAL WATT v2 via
+   the pool's fund() so stakers are credited instantly (V1 = pro-rata on fund). */
 async function ocBuyUpgrade(k){
   const c=ecoCfg(); if(!c||!c.economy){ SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain first','red'); return; }
   if(_upBusy){ toast('Upgrade payment already in flight…','gold'); return; }
@@ -712,29 +736,30 @@ async function ocBuyUpgrade(k){
   const p=upgPrice(k,lv);
   _upBusy=true;
   try{
-    const cost=BigInt(Math.round(p))*10n**18n;
-    const balH=await w3CallRaw(c.economy.wattV2, WEB3CFG.sel.balErc20+encA(W3.addr));
-    if(BigInt(balH&&balH!=='0x'?balH:'0x0')<cost){ SFX.err(); toast(`Not enough on-chain WATT — this upgrade costs ${fmt(p)} ⚡ (v2)`,'red',8000); return; }
-    if(W3.chainId!==c.chainId){ SFX.err(); toast(`Switch your wallet to ${c.name} to pay there`,'gold',8000); w3Switch(c.key); return; }
-    toast(`Sign the upgrade in your wallet — ${fmt(p)} ⚡WATT to the stakers rewards pool…`,'gold',10000);
-    const data='0xa9059cbb'+encA(c.economy.stakingPool)+cost.toString(16).padStart(64,'0');
-    const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.economy.wattV2,data}]);
-    toast('⛓ Paying… '+w3Short(tx),'gold',8000);
-    const ok=await w3WaitTx(tx);
-    if(ok===false){ SFX.err(); toast('Upgrade payment reverted — nothing charged, nothing applied','red',9000); return; }
-    if(ok===null){ toast('Payment still pending — the upgrade applies when it confirms (leave this open)','gold',9000); const ok2=await w3WaitTx(tx,480); if(ok2!==true) return; }
-    applyUpgrade(k);
-    toast(`⛓ Paid ${fmt(p)} ⚡WATT on ${c.name} — it flows back to WATT stakers`,'gold',9000);
-    w3Refresh&&w3Refresh();
+    if(await ocPayToStakers(BigInt(Math.round(p))*10n**18n, fmt(p)+' ⚡WATT')){
+      applyUpgrade(k);
+      toast(`⛓ Paid ${fmt(p)} ⚡WATT on ${c.name} — distributed to WATT stakers instantly`,'gold',9000);
+      w3Refresh&&w3Refresh();
+    }
   }catch(e){ SFX.err(); toast('upgrade cancelled: '+(''+(e&&(e.reason||e.message)||e)).slice(0,80),'red',8000); }
   finally{ _upBusy=false; }
 }
+/* LIVE structure/comfort purchase (chair, container, warehouse): credit first,
+   else a signed fund() payment; `apply` runs only when paid. */
+async function ocBuyStructure(price,apply){
+  if(S.watt>=price){ S.watt-=price; apply(); save(); toast(`Paid from game credit — ${fmt(S.watt)} ⚡ credit left`,'cyan',6000); return; }
+  const c=ecoCfg(); if(!c){ SFX.err(); toast('Not enough game credit — connect a wallet on Polygon or Altcoinchain to pay real WATT','red',8000); return; }
+  if(_upBusy){ toast('A payment is already in flight…','gold'); return; }
+  _upBusy=true;
+  try{ if(await ocPayToStakers(BigInt(Math.round(price))*10n**18n, fmt(price)+' ⚡WATT')){ apply(); w3Refresh&&w3Refresh(); } }
+  catch(e){ SFX.err(); toast('purchase cancelled: '+(''+(e&&(e.reason||e.message)||e)).slice(0,80),'red',8000); }
+  finally{ _upBusy=false; }
+}
 
-/* LIVE game-credit TOP UP: ONE signed WATT v2 transfer into the on-chain
-   stakers rewards pool; the amount becomes upgrade credit spent with no
-   further signatures. Deliberately NOT an erc20 approve — an allowance the
-   page can pull from is an exploit surface; a pre-paid top-up caps the risk
-   at exactly what the user chose to sign. */
+/* LIVE game-credit TOP UP: pays the chosen amount into the stakers pool via
+   fund() (an exact-amount approve + fund — never an unlimited allowance, so
+   the page can only ever move what the user just signed for). The amount
+   becomes upgrade credit spent with no further signatures. */
 async function ocTopUp(amt){
   const c=ecoCfg(); if(!c||!c.economy){ SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain first','red'); return; }
   amt=Math.floor(Number(amt)||0);
@@ -742,17 +767,7 @@ async function ocTopUp(amt){
   if(_upBusy){ toast('A payment is already in flight…','gold'); return; }
   _upBusy=true;
   try{
-    const cost=BigInt(amt)*10n**18n;
-    const balH=await w3CallRaw(c.economy.wattV2, WEB3CFG.sel.balErc20+encA(W3.addr));
-    if(BigInt(balH&&balH!=='0x'?balH:'0x0')<cost){ SFX.err(); toast('Not enough on-chain WATT for that top-up','red',8000); return; }
-    if(W3.chainId!==c.chainId){ SFX.err(); toast(`Switch your wallet to ${c.name} to pay there`,'gold',8000); w3Switch(c.key); return; }
-    toast(`Sign ONCE in your wallet — ${fmt(amt)} ⚡WATT to the stakers rewards pool becomes upgrade credit…`,'gold',10000);
-    const data='0xa9059cbb'+encA(c.economy.stakingPool)+cost.toString(16).padStart(64,'0');
-    const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.economy.wattV2,data}]);
-    toast('⛓ Paying… '+w3Short(tx),'gold',8000);
-    const ok=await w3WaitTx(tx);
-    if(ok===false){ SFX.err(); toast('Top-up reverted — nothing charged','red',9000); return; }
-    if(ok===null){ toast('Top-up still pending — credit lands when it confirms','gold',9000); const ok2=await w3WaitTx(tx,480); if(ok2!==true) return; }
+    if(!(await ocPayToStakers(BigInt(amt)*10n**18n, fmt(amt)+' ⚡WATT'))) return;
     S.watt+=amt; save(); SFX.buy();
     toast(`⛓ ${fmt(amt)} ⚡ GAME CREDIT loaded — upgrades now buy without more signatures`,'gold',10000);
     renderHud&&renderHud(); if(typeof renderUpg==='function'&&$('m-upg')&&$('m-upg').classList.contains('open')) renderUpg();
