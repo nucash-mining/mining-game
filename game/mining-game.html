@@ -1587,8 +1587,25 @@ function drawScreen(){
   for(let i=0;i<n;i++){ const px=40+i*(500/Math.max(60,n)), py=330-90*(H[i]/maxH);
     i?x.lineTo(px,py):x.moveTo(px,py); }
   x.stroke();
-  // prices
+  // prices — LIVE shows the real aggregated market USD prices (same feed as
+  // the HUD/routing: QuickSwap/Uniswap via the bridge desk), DEMO the sim
   x.font='700 26px monospace';
+  const liveTV=(typeof isLive==='function'&&isLive()&&typeof _px!=='undefined'&&_px&&_px.usd);
+  if(liveTV){
+    const u=_px.usd, pfmt=(v,d)=>v!=null?'$'+Number(v).toPrecision(d||3):'—';
+    x.fillStyle='#a06bff'; x.fillText('POL '+pfmt(u.POL), 620, 220);
+    x.fillStyle='#ffb020'; x.fillText('ALT '+pfmt(u.ALT), 620, 258);
+    x.fillStyle='#ffd23f'; x.fillText('WTX '+pfmt(u.WTX), 620, 296);
+    [['POL','#a06bff'],['ALT','#ffb020'],['WTX','#ffd23f']].forEach(([k,col])=>{
+      const Ph=(typeof _pxHist!=='undefined'&&_pxHist[k])||[], pn=Ph.length; if(pn<2) return;
+      const mx=Math.max(...Ph), mn=Math.min(...Ph);
+      x.strokeStyle=col; x.lineWidth=2.5; x.beginPath();
+      for(let i=0;i<pn;i++){ const px=620+i*(360/Math.max(50,pn)), py=330-38*((Ph[i]-mn)/Math.max(1e-9,mx-mn));
+        i?x.lineTo(px,py):x.moveTo(px,py); }
+      x.stroke();
+    });
+    if(typeof ocPrices==='function') ocPrices().catch(()=>{}); // keep fresh samples flowing
+  } else {
   x.fillStyle='#a06bff'; x.fillText('POL '+S.price.pol.toFixed(2)+' ⚡', 620, 220);
   x.fillStyle='#ffb020'; x.fillText('ALT '+S.price.alt.toFixed(2)+' ⚡', 620, 258);
   ['pol','alt'].forEach((cn,ci)=>{
@@ -1599,6 +1616,7 @@ function drawScreen(){
       i?x.lineTo(px,py):x.moveTo(px,py); }
     x.stroke();
   });
+  }
   // block feed
   x.fillStyle='#9a93c4'; x.font='700 24px monospace'; x.fillText('LATEST BLOCKS', 40, 390);
   x.font='400 23px monospace';
@@ -2910,9 +2928,15 @@ async function onchainSell(coin, amtCoin){
    Polygon ALT pool is seeded; WTX via the bridge's supply-ratio mint). */
 const PRICE_API='https://bridge.wattxchange.app/api/prices';
 let _px=null;
+/* rolling real-price history for the garage TV chart (live mode) — one sample
+   per successful price refresh, capped at 120 points */
+const _pxHist={POL:[],ALT:[],WTX:[]};
 async function ocPrices(force){
   if(!force&&_px&&Date.now()-(_px._at||0)<60000) return _px;
-  try{ const r=await fetch(PRICE_API); _px=await r.json(); _px._at=Date.now(); }catch(e){ _px=_px||{usd:{}}; }
+  try{ const r=await fetch(PRICE_API); _px=await r.json(); _px._at=Date.now();
+    if(_px&&_px.usd) for(const k of ['POL','ALT','WTX']){ const v=Number(_px.usd[k]);
+      if(isFinite(v)&&v>0){ _pxHist[k].push(v); if(_pxHist[k].length>120) _pxHist[k].shift(); } }
+  }catch(e){ _px=_px||{usd:{}}; }
   return _px;
 }
 const usdFmt=(v)=>v==null?'—':(v<0.01?'$'+Number(v).toPrecision(3):'$'+Number(v).toLocaleString(undefined,{maximumFractionDigits:2}));

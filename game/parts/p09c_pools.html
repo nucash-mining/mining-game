@@ -359,9 +359,15 @@ async function onchainSell(coin, amtCoin){
    Polygon ALT pool is seeded; WTX via the bridge's supply-ratio mint). */
 const PRICE_API='https://bridge.wattxchange.app/api/prices';
 let _px=null;
+/* rolling real-price history for the garage TV chart (live mode) — one sample
+   per successful price refresh, capped at 120 points */
+const _pxHist={POL:[],ALT:[],WTX:[]};
 async function ocPrices(force){
   if(!force&&_px&&Date.now()-(_px._at||0)<60000) return _px;
-  try{ const r=await fetch(PRICE_API); _px=await r.json(); _px._at=Date.now(); }catch(e){ _px=_px||{usd:{}}; }
+  try{ const r=await fetch(PRICE_API); _px=await r.json(); _px._at=Date.now();
+    if(_px&&_px.usd) for(const k of ['POL','ALT','WTX']){ const v=Number(_px.usd[k]);
+      if(isFinite(v)&&v>0){ _pxHist[k].push(v); if(_pxHist[k].length>120) _pxHist[k].shift(); } }
+  }catch(e){ _px=_px||{usd:{}}; }
   return _px;
 }
 const usdFmt=(v)=>v==null?'—':(v<0.01?'$'+Number(v).toPrecision(3):'$'+Number(v).toLocaleString(undefined,{maximumFractionDigits:2}));
