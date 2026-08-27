@@ -311,30 +311,69 @@ function osAppDex(body){
   OS.wins.dex.refresh=upd; upd();
 }
 /* ---------- app: Wallet ---------- */
+/* Register a payout address on the PayoutHub (hub keys it to msg.sender). */
+async function osRegisterPayout(tid,addr,sym,btn){
+  try{ if(btn) btn.disabled=true;
+    const hub=await poolCtr('hub',true);
+    await (await hub.setPayoutAddress(tid,addr)).wait();
+    SFX.buy(); toast(`⛓ ${sym} payout address registered on the hub — ${sym} rewards pay there`,'gold',9000);
+  }catch(e){ SFX.err(); toast((''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',8000); if(btn) btn.disabled=false; }
+}
 function osAppWallet(body){
   const W=OS.wins.wallet;
+  /* one row per derived coin wallet (reveal + saved views share it) */
+  const coinRows=(ws,showKeys)=>ws.map(w=>`
+      <div style="margin-top:5px"><span style="color:#ffd23f">${w.sym}</span> <span style="color:#77777d;font-size:9px">${w.name} · ${w.path}</span><br>
+        <span class="pw-addr" data-a="${w.address}" style="color:#3dff8a;cursor:pointer" title="click to copy">${w.address}</span>${showKeys&&(w.wif||w.privKey)?`<br><span style="color:#ff6b74;font-size:10px">key: ${w.wif||w.privKey}</span>`:''}</div>`).join('');
   W.refresh=()=>{
-    /* payout-wallet section: key reveal survives the 600ms rebuild via W.reveal */
-    const payout = W.reveal ? `
-      <div style="font-size:10px;color:#ffae42;margin:10px 0 5px;letter-spacing:.1em">⚠ SAVE THIS KEY — SHOWN ONCE, NEVER STORED</div>
-      <div class="os-term" style="height:auto;padding:6px;word-break:break-all">
-        <div style="color:#3dff8a">address: ${W.reveal.address}</div>
-        <div style="color:#ff6b74">private key: ${W.reveal.privateKey}</div>
+    /* payout-wallet section: seed reveal survives the 600ms rebuild via W.revealSeed */
+    const pw=S.payoutWallets;
+    const TIDS={WTX:1,BSV:3,HTH:4,BITN:5}; /* hub target ids for off-EVM payout declarations */
+    const canReg=!!(typeof poolCfg==='function'&&poolCfg());
+    const payout = W.revealSeed ? `
+      <div style="font-size:10px;color:#ffae42;margin:10px 0 5px;letter-spacing:.1em">⚠ SEED PHRASE — SHOWN ONCE, NEVER STORED. WRITE IT DOWN.</div>
+      <div class="os-term" style="height:auto;padding:6px;word-break:break-all"><span style="color:#ffd23f;font-size:13px">${W.revealSeed.mnemonic}</span></div>
+      <div class="os-term" style="height:auto;padding:6px;word-break:break-all;margin-top:6px">${coinRows(W.revealSeed.wallets,W.showKeys)}</div>
+      <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+        <button class="os-task" id="pw-copyseed">COPY SEED</button>
+        <button class="os-task" id="pw-keys">${W.showKeys?'HIDE':'SHOW'} PRIVATE KEYS</button>
+        <button class="os-abtn" id="pw-done" style="margin:0">I WROTE DOWN MY SEED</button>
       </div>
+      <div class="os-note">One 12-word seed = a wallet for every payout coin. The same seed opens the same wallets in MetaMask (EVM), the WATTx wallet app/extension (WTX) and any BIP39 wallet — each coin's derivation path is shown above. Lose the seed = lose the coins.</div>`
+    : W.importing ? `
+      <div style="font-size:10px;color:#8a8a90;margin:10px 0 5px;letter-spacing:.1em">CONNECT EXISTING WALLETS — IMPORT SEED PHRASE</div>
+      <textarea id="pw-seedin" class="os-term" style="height:54px;width:100%;padding:6px;resize:none;box-sizing:border-box" placeholder="enter your 12 or 24 word BIP39 seed phrase" spellcheck="false"></textarea>
       <div style="display:flex;gap:6px;margin-top:6px">
-        <button class="os-task" id="pw-copy">COPY KEY</button>
-        <button class="os-abtn" id="pw-done" style="margin:0">I SAVED MY KEY</button>
+        <button class="os-abtn" id="pw-doimport" style="margin:0">CONNECT WALLETS</button>
+        <button class="os-task" id="pw-cancel">CANCEL</button>
       </div>
-      <div class="os-note">Import this key into the WATTx wallet (or any EVM wallet) to spend your payouts. Lose the key = lose the coins.</div>`
+      <div class="os-note">Derives your POL/ALT/WATT, WTX, HTH, BITN and BSV payout addresses locally in your browser. The seed is used once for derivation and never stored or sent anywhere.</div>`
+    : (pw&&pw.length) ? `
+      <div style="font-size:10px;color:#8a8a90;margin:10px 0 5px;letter-spacing:.1em">PAYOUT WALLETS (HD SEED)</div>
+      <div class="os-term" style="height:auto;padding:6px;word-break:break-all">${pw.map(w=>{const tid=TIDS[w.sym];return `
+        <div style="margin-top:5px"><span style="color:#ffd23f">${w.sym}</span> <span style="color:#77777d;font-size:9px">${w.name} · ${w.path}</span>${tid!=null?` <button class="os-task pw-reg" data-tid="${tid}" data-a="${w.address}" data-s="${w.sym}" ${canReg?'':'disabled'} style="float:right">SET PAYOUT</button>`:''}<br>
+          <span class="pw-addr" data-a="${w.address}" style="color:#3dff8a;cursor:pointer" title="click to copy">${w.address}</span></div>`;}).join('')}</div>
+      <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+        <button class="os-task" id="pw-gen">NEW SEED</button>
+        <button class="os-task" id="pw-import">IMPORT SEED</button>
+      </div>
+      <div class="os-note">Click an address to copy. SET PAYOUT registers the address on the PayoutHub${canReg?'':' — connect your wallet on a Live chain (POOLS tab) to enable it'} so WTX / HTH / BITN / BSV rewards really pay there. EVM rewards (POL·ALT·WATT) always pay your connected game address directly.</div>`
     : S.payoutAddr ? `
-      <div style="font-size:10px;color:#8a8a90;margin:10px 0 5px;letter-spacing:.1em">PAYOUT WALLET</div>
+      <div style="font-size:10px;color:#8a8a90;margin:10px 0 5px;letter-spacing:.1em">PAYOUT WALLET (LEGACY — EVM ONLY)</div>
       <div class="os-term" style="height:auto;padding:6px;word-break:break-all"><span style="color:#3dff8a">${S.payoutAddr}</span></div>
-      <div style="display:flex;gap:6px;margin-top:6px"><button class="os-task" id="pw-copyaddr">COPY ADDRESS</button></div>
-      <div class="os-note">Validator rewards are divided to this address. Manage it in 🏊 POOLS → VALIDATOR NODE.</div>`
+      <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+        <button class="os-task" id="pw-copyaddr">COPY ADDRESS</button>
+        <button class="os-task" id="pw-gen">UPGRADE: NEW SEED WALLET</button>
+        <button class="os-task" id="pw-import">IMPORT SEED</button>
+      </div>
+      <div class="os-note">This old wallet is a single EVM key. Generate or import a 12-word seed to get payout addresses for ALL coins (WTX · HTH · BITN · BSV · EVM).</div>`
     : `
       <div style="font-size:10px;color:#8a8a90;margin:10px 0 5px;letter-spacing:.1em">PAYOUT WALLET</div>
-      <button class="os-abtn" id="pw-gen" style="margin:0">🔑 GENERATE PAYOUT WALLET</button>
-      <div class="os-note">Creates your own wallet address for real coin payouts (validator reward splits). The key is generated locally in your browser.</div>`;
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="os-abtn" id="pw-gen" style="margin:0">🔑 GENERATE PAYOUT WALLET (12-WORD SEED)</button>
+        <button class="os-abtn" id="pw-import" style="margin:0">📥 IMPORT SEED PHRASE</button>
+      </div>
+      <div class="os-note">One universal seed phrase creates a payout address for every coin — POL/ALT/WATT (EVM), WTX, HTH, BITN and BSV. Generated locally in your browser; only the addresses are saved.</div>`;
     body.innerHTML=`
       <div style="font-size:10px;color:#8a8a90;margin-bottom:8px">${OS.addr?('CONNECTED · '+OS.addr):'GUEST — connect wallet at next login for an address'}</div>
       <div class="os-kv">
@@ -348,15 +387,36 @@ function osAppWallet(body){
       ${payout}
       <div style="font-size:10px;color:#8a8a90;margin:10px 0 5px;letter-spacing:.1em">RECENT BLOCKS</div>
       <div class="os-term" style="height:96px">${lastBlocksFeed.slice(-6).reverse().map(b=>`<div class="${b.lucky?'hl':''}">${b.txt}</div>`).join('')||'<span style="color:#3f7a55">no blocks yet — keep mining</span>'}</div>`;
+    /* persist ONLY addresses+paths — never the seed or keys */
+    const persist=(wallets)=>{ S.payoutWallets=wallets.map(w=>({sym:w.sym,name:w.name,path:w.path,address:w.address}));
+      const evm=wallets.find(w=>w.sym==='EVM'); if(evm) S.payoutAddr=evm.address; save(); };
     const gen=body.querySelector('#pw-gen');
-    if(gen) gen.onclick=()=>{ const w=mgGenWallet(); S.payoutAddr=w.address; W.reveal=w; SFX.mint();
-      toast('🔑 Payout wallet generated — SAVE THE PRIVATE KEY NOW','gold',8000); save(); W.refresh(); };
-    const cp=body.querySelector('#pw-copy');
-    if(cp) cp.onclick=()=>{ navigator.clipboard.writeText(W.reveal.privateKey); SFX.click(); toast('Private key copied — store it somewhere safe','cyan'); };
+    if(gen) gen.onclick=()=>{ try{
+        const r=mgNewSeedWallet(); r.wallets=mgWalletsFromSeed(r.mnemonic,true); /* keys in-memory for the one-time reveal */
+        W.revealSeed=r; W.showKeys=false; persist(r.wallets); SFX.mint();
+        toast('🔑 Seed wallet generated — WRITE DOWN THE 12 WORDS NOW','gold',9000); W.refresh();
+      }catch(e){ SFX.err(); toast(''+(e.message||e),'red',8000); } };
+    const imp=body.querySelector('#pw-import');
+    if(imp) imp.onclick=()=>{ W.importing=true; SFX.click(); W.refresh(); };
+    const doimp=body.querySelector('#pw-doimport');
+    if(doimp) doimp.onclick=()=>{ try{
+        const seed=body.querySelector('#pw-seedin').value;
+        const ws=mgWalletsFromSeed(seed,false);
+        persist(ws); W.importing=false; SFX.mint();
+        toast('📥 Wallets connected — payout addresses derived for every coin','gold',9000); W.refresh();
+      }catch(e){ SFX.err(); toast(''+(e.message||e),'red',8000); } };
+    const cxl=body.querySelector('#pw-cancel');
+    if(cxl) cxl.onclick=()=>{ W.importing=false; SFX.click(); W.refresh(); };
+    const cs=body.querySelector('#pw-copyseed');
+    if(cs) cs.onclick=()=>{ navigator.clipboard.writeText(W.revealSeed.mnemonic); SFX.click(); toast('Seed phrase copied — store it somewhere SAFE and offline','cyan'); };
+    const pk=body.querySelector('#pw-keys');
+    if(pk) pk.onclick=()=>{ W.showKeys=!W.showKeys; SFX.click(); W.refresh(); };
     const done=body.querySelector('#pw-done');
-    if(done) done.onclick=()=>{ if(!confirm('Key saved somewhere safe? It will NEVER be shown again.')) return; W.reveal=null; SFX.click(); W.refresh(); };
+    if(done) done.onclick=()=>{ if(!confirm('Seed phrase written down somewhere safe? It will NEVER be shown again.')) return; W.revealSeed=null; W.showKeys=false; SFX.click(); W.refresh(); };
     const ca=body.querySelector('#pw-copyaddr');
     if(ca) ca.onclick=()=>{ navigator.clipboard.writeText(S.payoutAddr); SFX.click(); toast('Payout address copied','cyan'); };
+    body.querySelectorAll('.pw-addr').forEach(el=>el.onclick=()=>{ navigator.clipboard.writeText(el.dataset.a); SFX.click(); toast(el.dataset.a.slice(0,10)+'… copied','cyan'); });
+    body.querySelectorAll('.pw-reg').forEach(el=>el.onclick=()=>osRegisterPayout(Number(el.dataset.tid),el.dataset.a,el.dataset.s,el));
   };
   W.refresh();
 }
