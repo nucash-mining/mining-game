@@ -308,6 +308,35 @@ function osAppDex(body){
     if(sellCoin(coin.value,a,body.querySelector('#dx-recv').value)){ amt.value=''; }
     upd();
   };
+  /* real SwapinDEX pools on Altcoinchain — live reserves incl. the wrapped-coin
+     pairs (wHTH / wBITN wrap real mainnet coins via the bridge desk). */
+  const poolsDiv=document.createElement('div');
+  poolsDiv.innerHTML=`<div style="font-size:10px;color:#8a8a90;margin:12px 0 5px;letter-spacing:.1em">REAL SWAPINDEX POOLS — ALTCOINCHAIN</div>
+    <div class="os-term" id="dx-pools" style="height:auto;padding:6px">reading chain…</div>
+    <div class="os-note">wHTH / wBITN are 1:1 wrapped mainnet coins. Wrap, move ALT⇄POL and withdraw back to mainnet at <span style="color:#ffd23f;cursor:pointer" id="dx-bridge">bridge.wattxchange.app</span>.</div>`;
+  body.appendChild(poolsDiv);
+  poolsDiv.querySelector('#dx-bridge').onclick=()=>{ SFX.click(); open('https://bridge.wattxchange.app/','_blank'); };
+  (async()=>{
+    const el=poolsDiv.querySelector('#dx-pools'); if(!el) return;
+    const PAIRS=[
+      {name:'WATT / wALT', pair:'0x0a45b8e42dcbcbdc92f7ef2909851af11e0a114b', d0:18, d1:18, s0:'⚡', s1:'wALT'},
+      {name:'wHTH / WATT', pair:'0x36795789407E89E548784F123108328197B09Cb2', d0:8,  d1:18, s0:'wHTH', s1:'⚡'},
+      {name:'wBITN / WATT', pair:'0xDf567261Dec915d245d888a8c65f77eA3E2EAC18', d0:8, d1:18, s0:'wBITN', s1:'⚡'},
+    ];
+    try{
+      const rpc=async(to,data)=>{ const r=await fetch('https://rpc.wattxchange.app',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({jsonrpc:'2.0',id:1,method:'eth_call',params:[{to,data},'latest']})}); return (await r.json()).result; };
+      const rows=[];
+      for(const P of PAIRS){
+        const res=await rpc(P.pair,'0x0902f1ac'); /* getReserves() */
+        if(!res||res==='0x'){ rows.push(`<div>${P.name} <span style="color:#8a8a90">— pool not found</span></div>`); continue; }
+        const r0=Number(BigInt('0x'+res.slice(2,66)))/10**P.d0, r1=Number(BigInt('0x'+res.slice(66,130)))/10**P.d1;
+        const rate=r0>0?(r1/r0):0;
+        rows.push(`<div style="margin-top:3px"><b style="color:#ffd23f">${P.name}</b> <span style="color:#3dff8a">${fmt(r0)} ${P.s0} ⇄ ${fmt(r1)} ${P.s1}</span> <span style="color:#8a8a90">${r0>0?('1 '+P.s0+' ≈ '+rate.toFixed(4)+' '+P.s1):'EMPTY — seed the LP'}</span></div>`);
+      }
+      el.innerHTML=rows.join('')||'no pools';
+    }catch(e){ el.innerHTML='<span style="color:#8a8a90">chain read failed — try again</span>'; }
+  })();
   OS.wins.dex.refresh=upd; upd();
 }
 /* ---------- app: Wallet ---------- */

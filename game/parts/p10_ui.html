@@ -16,15 +16,15 @@ function renderHud(){
   const L=live?(W3.live||{}):null;
   if(live){
     const wsum=(L.pol?.watt||0)+(L.alt?.watt||0)+(L.wtx?.watt||0);
-    $('v-watt').textContent = fmt(wsum || W3.watt || 0);
-  } else $('v-watt').textContent = fmt(S.watt);
-  $('v-hash').textContent=fmt(totHash());
+    $('v-watt').textContent = fmtQty(wsum || W3.watt || 0);
+  } else $('v-watt').textContent = fmtQty(S.watt);
+  $('v-hash').textContent=fmtHash(totHash());
   const draw=Math.round(totWatt()), cap=powerCap();
-  $('v-pow').textContent=`${draw}/${cap}`;
+  $('v-pow').textContent=`${fmtPow(draw)}/${fmtPow(cap)}W`;
   $('v-pow').style.color=draw>cap?'var(--red)':'';
   const tp=$('s-temp'); tp.classList.toggle('hot',S.temp>=85&&S.temp<100); tp.classList.toggle('crit',S.temp>=100);
   $('v-temp').textContent=Math.round(S.temp)+'°';
-  $('v-blk').textContent=fmtInt(S.blocks);
+  $('v-blk').textContent=fmtQty(S.blocks);
   $('v-pol').textContent=fmt(live?(L.pol?.nat||0):S.pol);
   $('v-alt').textContent=fmt(live?(L.alt?.nat||0):S.alt);
   $('v-wtx').textContent=fmt(live?(L.wtx?.nat||0):S.wtx);

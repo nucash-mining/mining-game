@@ -162,6 +162,17 @@ function fmt(n){ n=Number(n)||0; const a=Math.abs(n);
   if(a>=1e4) return (n/1e3).toFixed(1)+'k'; if(a>=100) return Math.floor(n).toString();
   if(a>=10) return n.toFixed(1); return n.toFixed(2); }
 function fmtInt(n){ n=Number(n)||0; if(n>=1e6) return (n/1e6).toFixed(2)+'M'; if(n>=1e4) return (n/1e3).toFixed(1)+'k'; return Math.floor(n).toString(); }
+/* SI-quantized formatters for the HUD pills: pick the unit so the mantissa
+   stays < 1000, show at most 6 decimals (trailing zeros trimmed) — keeps a
+   pill the same width at 5 H/s and at 3.14 EH/s instead of overflowing the
+   top bar and pushing the WATT TYCOON logo / SELL buttons out of place. */
+function fmtSI(n,units,step=1000){ n=Number(n)||0; const neg=n<0; n=Math.abs(n); let i=0;
+  while(n>=step&&i<units.length-1){ n/=step; i++; }
+  let s=n.toFixed(6).replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'');
+  return (neg?'-':'')+s+units[i]; }
+const fmtHash=n=>fmtSI(n,[' H/s',' kH/s',' MH/s',' GH/s',' TH/s',' PH/s',' EH/s',' ZH/s',' YH/s']);
+const fmtQty =n=>fmtSI(n,['','K','M','B','T','Qa','Qi']);
+const fmtPow =n=>fmtSI(n,['','k','M','G','T']);
 const $=id=>document.getElementById(id);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 /* derived stats */
