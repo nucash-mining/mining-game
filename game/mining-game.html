@@ -2246,10 +2246,11 @@ const WEB3CFG={
     {id:4, sym:'HTH', name:'HTH masternode'},
     {id:5, sym:'BITN', name:'Bitnet PoS'},
   ],
-  sel:{ bal1155:'0x00fdd58e', balErc20:'0x70a08231', freemint:'0xaf2de086', buyWithWatt:'0x663e0d4c', rates:'0xdd418ae2', rewards:'0xe8a31bdc' },
+  sel:{ bal1155:'0x00fdd58e', balErc20:'0x70a08231', freemint:'0xaf2de086', buyWithWatt:'0x663e0d4c', rates:'0xdd418ae2', rewards:'0xe8a31bdc',
+        positionCount:'0x42fd3880', positions:'0xc1be6677', unstake:'0x2e17de78' },
   ids:[1,2,3,4,5,8,9,10,11,12,13,14,17,18,19,23], // V3 collection component ids
 };
-const W3={ addr:null, chainId:null, chain:null, native:null, watt:null, rewards:null, nfts:{}, rates:{}, busy:false, err:null };
+const W3={ addr:null, chainId:null, chain:null, native:null, watt:null, rewards:null, nfts:{}, rates:{}, staked:[], busy:false, err:null };
 const w3Eth=()=>window.ethereum;
 const w3Has=()=>!!window.ethereum;
 const w3Short=a=>a?a.slice(0,6)+'…'+a.slice(-4):'';
@@ -2365,10 +2366,40 @@ async function w3Refresh(){
       jobs.push(w3CallRaw(c.nft, WEB3CFG.sel.rates+encU(id)).then(h=>{ W3.rates[id]=fromWei(h,6); }).catch(()=>{}));
     }
     await Promise.allSettled(jobs);
+    await w3Positions();               // staked components (escrowed, not in the wallet)
     w3GrantOwned();
+    /* the classic trap: EVERYTHING is staked -> wallet reads empty -> empty
+       garage with nothing to click. Say so instead of showing a bare room. */
+    if(typeof isLive==='function'&&isLive()&&S&&S.rigs.length===0
+       &&!WEB3CFG.ids.some(id=>(W3.nfts[id]||0)>0)&&W3.staked.length)
+      toast('🥩 All your components are STAKED (earning the WATT drip) — open 🦊 WALLET → STAKED COMPONENTS and UNSTAKE to build a rig','gold',14000);
   }catch(e){ W3.err=(''+(e&&e.message||e)).slice(0,120); }
   w3LiveBalances(true).catch(()=>{});  // cross-chain balances for the HUD rows
   renderWallet(); renderHud&&renderHud();  // reflect fresh on-chain WATT in the HUD immediately
+}
+/* Components staked in the MiningGame staker are ESCROWED — balanceOf can't see
+   them, which reads as "you own nothing" in the NFT mirror. Read the positions
+   so the wallet panel can show them and unstake without leaving the game. */
+async function w3Positions(){
+  W3.staked=[];
+  const c=W3.chain; if(!W3.addr||!c||!c.staking) return;
+  try{
+    const cnt=Number(BigInt(await w3CallRaw(c.staking, WEB3CFG.sel.positionCount+encA(W3.addr))||'0x0'));
+    for(let i=0;i<cnt&&i<64;i++){
+      const h=(await w3CallRaw(c.staking, WEB3CFG.sel.positions+encA(W3.addr)+encU(i))||'0x').slice(2);
+      const w=(h.match(/.{64}/g)||[]).map(x=>BigInt('0x'+x));
+      if(w.length>=6&&w[5]) W3.staked.push({idx:i,id:Number(w[0]),amount:Number(w[1]),weight:Number(w[2])});
+    }
+  }catch(e){}
+}
+async function w3Unstake(idx){
+  if(!W3.addr||!W3.chain||!W3.chain.staking) return;
+  try{
+    toast('Confirm the unstake in your wallet…','gold');
+    const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:W3.chain.staking,data:WEB3CFG.sel.unstake+encU(idx)}]);
+    toast('⛓ Unstaking… '+w3Short(tx)+' — your components land in the game as soon as it confirms','gold',10000);
+    setTimeout(()=>w3Refresh(),9000);
+  }catch(e){ SFX.err(); toast('unstake rejected: '+(''+(e&&e.message||e)).slice(0,80),'red'); }
 }
 /* Live mode: the installable inventory MIRRORS your current on-chain holdings.
    available-to-install(id) = balanceOf(you, id) − how many are already fitted in
@@ -2457,13 +2488,17 @@ function renderWallet(){
       const n=W3.nfts[id], it=ITEMS[id];
       return `<div class="w3nft ${n>0?'own':''}"><b>${n===undefined?'…':n}×</b> ${it?it.name:'#'+id}${W3.rates[id]?`<small>rate ${W3.rates[id]}</small>`:''}</div>`;
     }).join('')}</div>
-    <button class="hbtn accent" id="w3-mint" style="width:100%;margin-top:8px">⛓ FREE MINT GAMING PC — REAL TX (gas only)</button>
-    <div class="w3sec" style="margin-top:12px">MINING GAME V2 · WATT V2</div>
-    <div class="w3note">V2 contracts (Gen2 components: TX190, XL190, GP720, GPX880, XXL270, Bit Hammer, Rig Frame, Server Tower, peripherals) are <b>pending deployment</b> from the deployer wallet across all chains. Gen2 purchases run simulated until the addresses drop into the config. WATTxchain joins at launch.</div>`
+    ${W3.staked&&W3.staked.length?`<div class="w3sec" style="margin-top:10px">🥩 STAKED COMPONENTS — earning the WATT drip (escrowed, so they don't show in the wallet or the garage)</div>
+    ${W3.staked.map(p=>`<div class="w3nft own" style="display:flex;align-items:center;gap:8px"><b>${p.amount}×</b> ${ITEMS[p.id]?ITEMS[p.id].name:'#'+p.id} <small style="color:var(--dim)">weight ${p.weight}</small><span style="flex:1"></span><button class="hbtn gold" data-unstake="${p.idx}" title="Return these to your wallet so you can build them into a rig">UNSTAKE</button></div>`).join('')}
+    <div class="w3note">Unstaked components go back to your wallet and appear in the garage on the next sync. Tip: a rig that is <b>powered off</b> in the game earns the same stake-weight WATT drip — you don't lose the drip by building.</div>`:''}
+    <button class="hbtn accent" id="w3-mint" style="width:100%;margin-top:8px">⛓ FREE MINT GAMING PC — REAL TX (gas only)</button>`
     :`<div class="w3note">Switch to Polygon or Altcoinchain to read your Mining Game NFTs.</div><div class="w3chips">${chainPills}</div>`}
     ${W3.err?`<div class="w3err">${W3.err}</div>`:''}`;
   m.querySelectorAll('.w3chip').forEach(el=>el.onclick=()=>w3Switch(el.dataset.chain));
-  $('w3-mint')?.addEventListener('click',w3Freemint);
+  m.querySelectorAll('[data-unstake]').forEach(b=>b.onclick=()=>w3Unstake(+b.dataset.unstake));
+  /* the shop path (buyWithWatt id 1) reverts "not for sale" — the REAL free
+     mint is the CaseFreeMint contract */
+  $('w3-mint')?.addEventListener('click',()=>{ (typeof ocFreeMintPC==='function')?ocFreeMintPC():w3Freemint(); });
 }
 /* ---------- contract-call style purchase feedback ---------- */
 function txFlow(it, cost, cur){
