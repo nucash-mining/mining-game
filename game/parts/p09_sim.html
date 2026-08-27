@@ -260,12 +260,10 @@ function switchNet(){
   toast(`🔗 Switched to ${n.name}${n.sim?' (testnet sim — mainnet soon™)':''} — reward ${n.reward} ${n.sym}/block`, S.net==='alt'?'gold':'cyan');
   renderHud(); save();
 }
-function buyUpgrade(k){
-  const lv=S.upg[k]||0, max=upgMax(k);
-  if(lv>=max){ SFX.err(); return; }
-  const p=upgPrice(k,lv);
-  if(S.watt<p){ SFX.err(); toast('Not enough WATT','red'); return; }
-  S.watt-=p; S.shopPool+=p; S.upg[k]=lv+1;
+/* Apply an upgrade level that has already been PAID FOR (sim WATT or a real
+   on-chain WATT transfer) — one shared path so live and demo can't drift. */
+function applyUpgrade(k){
+  S.upg[k]=(S.upg[k]||0)+1;
   SFX.buy();
   const names={power:`⚡ Power grid upgraded — capacity ${fmt(powerCap())}W`,cooling:`❄ Cooling upgraded — ambient ${Math.round(tempTarget())}°C target`,
     rack:'🏠 Garage expansion built — 3 new rig slots',rackgpu:`🗄 Rack expansion — every framed rack now holds ${framedCap()} GPUs`};
@@ -274,6 +272,22 @@ function buyUpgrade(k){
   if(k==='rackgpu'&&selRig!=null&&S.rigs[selRig]) renderRigPanel();   // new empty GPU slots show up immediately
   if(k==='cooling'&&S.upg.cooling===1&&rebuildAllRigs) rebuildAllRigs(); // first cooling => RGB fans appear on the frames
   renderHud(); renderUpg(); save();
+}
+function buyUpgrade(k){
+  const lv=S.upg[k]||0, max=upgMax(k);
+  if(lv>=max){ SFX.err(); return; }
+  /* LIVE: upgrades cost REAL on-chain WATT v2 — a wallet-signed transfer into
+     the stakers rewards pool (the same sink the on-chain shop pays into). The
+     sim balance is never the gate in live mode. */
+  if(typeof isLive==='function' && isLive()){
+    if(typeof ocBuyUpgrade==='function' && ecoCfg && ecoCfg()) ocBuyUpgrade(k);
+    else { SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain to buy upgrades with your real WATT','red',8000); }
+    return;
+  }
+  const p=upgPrice(k,lv);
+  if(S.watt<p){ SFX.err(); toast('Not enough WATT','red'); return; }
+  S.watt-=p; S.shopPool+=p;
+  applyUpgrade(k);
 }
 function gen2(){
   if(S.lifeWatt<CFG.gen2Req){ SFX.err(); return; }

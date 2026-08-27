@@ -640,6 +640,44 @@ async function ocBuyItem(id){
   return true;
 }
 
+/* Wait for a tx to land (raw JSON-RPC through the wallet, no ethers needed). */
+async function w3WaitTx(hash,secs){
+  for(let i=0;i<(secs||120);i+=3){
+    try{ const r=await w3Req('eth_getTransactionReceipt',[hash]);
+      if(r&&r.blockNumber) return (r.status===undefined||BigInt(r.status)===1n); }catch(e){}
+    await new Promise(r=>setTimeout(r,3000));
+  }
+  return null; // still pending — caller decides
+}
+/* LIVE garage upgrade: pays the same WATT price as the sim, but in REAL WATT v2
+   — a wallet-SIGNED erc20 transfer into the on-chain stakers rewards pool (the
+   sink the ItemShop's WATT sales feed). The level applies once the tx lands. */
+let _upBusy=false;
+async function ocBuyUpgrade(k){
+  const c=ecoCfg(); if(!c||!c.economy){ SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain first','red'); return; }
+  if(_upBusy){ toast('Upgrade payment already in flight…','gold'); return; }
+  const lv=S.upg[k]||0, max=upgMax(k); if(lv>=max){ SFX.err(); return; }
+  const p=upgPrice(k,lv);
+  _upBusy=true;
+  try{
+    const cost=BigInt(Math.round(p))*10n**18n;
+    const balH=await w3CallRaw(c.economy.wattV2, WEB3CFG.sel.balErc20+encA(W3.addr));
+    if(BigInt(balH&&balH!=='0x'?balH:'0x0')<cost){ SFX.err(); toast(`Not enough on-chain WATT — this upgrade costs ${fmt(p)} ⚡ (v2)`,'red',8000); return; }
+    if(W3.chainId!==c.chainId){ SFX.err(); toast(`Switch your wallet to ${c.name} to pay there`,'gold',8000); w3Switch(c.key); return; }
+    toast(`Sign the upgrade in your wallet — ${fmt(p)} ⚡WATT to the stakers rewards pool…`,'gold',10000);
+    const data='0xa9059cbb'+encA(c.economy.stakingPool)+cost.toString(16).padStart(64,'0');
+    const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.economy.wattV2,data}]);
+    toast('⛓ Paying… '+w3Short(tx),'gold',8000);
+    const ok=await w3WaitTx(tx);
+    if(ok===false){ SFX.err(); toast('Upgrade payment reverted — nothing charged, nothing applied','red',9000); return; }
+    if(ok===null){ toast('Payment still pending — the upgrade applies when it confirms (leave this open)','gold',9000); const ok2=await w3WaitTx(tx,480); if(ok2!==true) return; }
+    applyUpgrade(k);
+    toast(`⛓ Paid ${fmt(p)} ⚡WATT on ${c.name} — it flows back to WATT stakers`,'gold',9000);
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('upgrade cancelled: '+(''+(e&&(e.reason||e.message)||e)).slice(0,80),'red',8000); }
+  finally{ _upBusy=false; }
+}
+
 /* LIVE free Gaming PC: the real CaseFreeMint contract — mint(proof) with an
    empty proof while the mint is open to all; one per wallet forever. The desk
    appears via w3GrantOwned as soon as the wallet re-syncs. */

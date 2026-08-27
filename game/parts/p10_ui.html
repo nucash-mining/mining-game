@@ -212,12 +212,16 @@ function renderUpg(){
     ['rackgpu','🗄️','Rack Expansion',`${framedCap()} GPUs per rack on every framed rig${rgLv<rgMax?` → ${framedCap(rgLv+1)} at the next level, up to ${CFG.rackGpuCap[rgMax]}`:' — maxed (19-GPU open-air rigs)'}.`],
     ['rack','🏠','Garage Expansion',`${slotCount()} rig slots. Each expansion adds 3 desks.`],
   ];
+  /* LIVE: the ladder is paid in REAL on-chain WATT (wallet-signed transfer), so
+     the buy gate reads the connected wallet's WATT v2, not the sim balance */
+  const upLive=(typeof isLive==='function'&&isLive());
+  const upBal=upLive?(W3.watt||0):S.watt;
   $('upgrows').innerHTML=defs.map(([k,ic,nm,ds])=>{
     const lv=S.upg[k]||0, max=upgMax(k), p=upgPrice(k,lv), inf=!isFinite(max), pipsN=inf?16:max;
     return `<div class="uprow"><div class="uic">${ic}</div>
       <div class="ubody"><h3>${nm} <small style="color:var(--dim)">Lv ${lv}${inf?' · ∞':'/'+max}</small></h3><p>${ds}</p>
       <div class="pips">${Array.from({length:pipsN},(_,i)=>`<span class="pip ${i<lv?'on':''}"></span>`).join('')}${inf&&lv>pipsN?`<small style="color:var(--cyan);margin-left:4px">+${lv-pipsN}</small>`:''}</div></div>
-      <button class="ubuy" data-up="${k}" ${lv>=max||S.watt<p?'disabled':''}>${lv>=max?'MAX':fmt(p)+' ⚡'}</button></div>`;
+      <button class="ubuy" data-up="${k}" ${lv>=max||upBal<p?'disabled':''} ${upLive?'title="Real WATT v2 — your wallet asks for a signature"':''}>${lv>=max?'MAX':fmt(p)+' ⚡'+(upLive?' ⛓':'')}</button></div>`;
   }).join('');
   document.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>buyUpgrade(b.dataset.up));
   // battlestation comfort: monitor size + gaming chair

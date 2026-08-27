@@ -2153,12 +2153,10 @@ function switchNet(){
   toast(`🔗 Switched to ${n.name}${n.sim?' (testnet sim — mainnet soon™)':''} — reward ${n.reward} ${n.sym}/block`, S.net==='alt'?'gold':'cyan');
   renderHud(); save();
 }
-function buyUpgrade(k){
-  const lv=S.upg[k]||0, max=upgMax(k);
-  if(lv>=max){ SFX.err(); return; }
-  const p=upgPrice(k,lv);
-  if(S.watt<p){ SFX.err(); toast('Not enough WATT','red'); return; }
-  S.watt-=p; S.shopPool+=p; S.upg[k]=lv+1;
+/* Apply an upgrade level that has already been PAID FOR (sim WATT or a real
+   on-chain WATT transfer) — one shared path so live and demo can't drift. */
+function applyUpgrade(k){
+  S.upg[k]=(S.upg[k]||0)+1;
   SFX.buy();
   const names={power:`⚡ Power grid upgraded — capacity ${fmt(powerCap())}W`,cooling:`❄ Cooling upgraded — ambient ${Math.round(tempTarget())}°C target`,
     rack:'🏠 Garage expansion built — 3 new rig slots',rackgpu:`🗄 Rack expansion — every framed rack now holds ${framedCap()} GPUs`};
@@ -2167,6 +2165,22 @@ function buyUpgrade(k){
   if(k==='rackgpu'&&selRig!=null&&S.rigs[selRig]) renderRigPanel();   // new empty GPU slots show up immediately
   if(k==='cooling'&&S.upg.cooling===1&&rebuildAllRigs) rebuildAllRigs(); // first cooling => RGB fans appear on the frames
   renderHud(); renderUpg(); save();
+}
+function buyUpgrade(k){
+  const lv=S.upg[k]||0, max=upgMax(k);
+  if(lv>=max){ SFX.err(); return; }
+  /* LIVE: upgrades cost REAL on-chain WATT v2 — a wallet-signed transfer into
+     the stakers rewards pool (the same sink the on-chain shop pays into). The
+     sim balance is never the gate in live mode. */
+  if(typeof isLive==='function' && isLive()){
+    if(typeof ocBuyUpgrade==='function' && ecoCfg && ecoCfg()) ocBuyUpgrade(k);
+    else { SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain to buy upgrades with your real WATT','red',8000); }
+    return;
+  }
+  const p=upgPrice(k,lv);
+  if(S.watt<p){ SFX.err(); toast('Not enough WATT','red'); return; }
+  S.watt-=p; S.shopPool+=p;
+  applyUpgrade(k);
 }
 function gen2(){
   if(S.lifeWatt<CFG.gen2Req){ SFX.err(); return; }
@@ -3169,6 +3183,44 @@ async function ocBuyItem(id){
   return true;
 }
 
+/* Wait for a tx to land (raw JSON-RPC through the wallet, no ethers needed). */
+async function w3WaitTx(hash,secs){
+  for(let i=0;i<(secs||120);i+=3){
+    try{ const r=await w3Req('eth_getTransactionReceipt',[hash]);
+      if(r&&r.blockNumber) return (r.status===undefined||BigInt(r.status)===1n); }catch(e){}
+    await new Promise(r=>setTimeout(r,3000));
+  }
+  return null; // still pending — caller decides
+}
+/* LIVE garage upgrade: pays the same WATT price as the sim, but in REAL WATT v2
+   — a wallet-SIGNED erc20 transfer into the on-chain stakers rewards pool (the
+   sink the ItemShop's WATT sales feed). The level applies once the tx lands. */
+let _upBusy=false;
+async function ocBuyUpgrade(k){
+  const c=ecoCfg(); if(!c||!c.economy){ SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain first','red'); return; }
+  if(_upBusy){ toast('Upgrade payment already in flight…','gold'); return; }
+  const lv=S.upg[k]||0, max=upgMax(k); if(lv>=max){ SFX.err(); return; }
+  const p=upgPrice(k,lv);
+  _upBusy=true;
+  try{
+    const cost=BigInt(Math.round(p))*10n**18n;
+    const balH=await w3CallRaw(c.economy.wattV2, WEB3CFG.sel.balErc20+encA(W3.addr));
+    if(BigInt(balH&&balH!=='0x'?balH:'0x0')<cost){ SFX.err(); toast(`Not enough on-chain WATT — this upgrade costs ${fmt(p)} ⚡ (v2)`,'red',8000); return; }
+    if(W3.chainId!==c.chainId){ SFX.err(); toast(`Switch your wallet to ${c.name} to pay there`,'gold',8000); w3Switch(c.key); return; }
+    toast(`Sign the upgrade in your wallet — ${fmt(p)} ⚡WATT to the stakers rewards pool…`,'gold',10000);
+    const data='0xa9059cbb'+encA(c.economy.stakingPool)+cost.toString(16).padStart(64,'0');
+    const tx=await w3Req('eth_sendTransaction',[{from:W3.addr,to:c.economy.wattV2,data}]);
+    toast('⛓ Paying… '+w3Short(tx),'gold',8000);
+    const ok=await w3WaitTx(tx);
+    if(ok===false){ SFX.err(); toast('Upgrade payment reverted — nothing charged, nothing applied','red',9000); return; }
+    if(ok===null){ toast('Payment still pending — the upgrade applies when it confirms (leave this open)','gold',9000); const ok2=await w3WaitTx(tx,480); if(ok2!==true) return; }
+    applyUpgrade(k);
+    toast(`⛓ Paid ${fmt(p)} ⚡WATT on ${c.name} — it flows back to WATT stakers`,'gold',9000);
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('upgrade cancelled: '+(''+(e&&(e.reason||e.message)||e)).slice(0,80),'red',8000); }
+  finally{ _upBusy=false; }
+}
+
 /* LIVE free Gaming PC: the real CaseFreeMint contract — mint(proof) with an
    empty proof while the mint is open to all; one per wallet forever. The desk
    appears via w3GrantOwned as soon as the wallet re-syncs. */
@@ -3709,12 +3761,16 @@ function renderUpg(){
     ['rackgpu','🗄️','Rack Expansion',`${framedCap()} GPUs per rack on every framed rig${rgLv<rgMax?` → ${framedCap(rgLv+1)} at the next level, up to ${CFG.rackGpuCap[rgMax]}`:' — maxed (19-GPU open-air rigs)'}.`],
     ['rack','🏠','Garage Expansion',`${slotCount()} rig slots. Each expansion adds 3 desks.`],
   ];
+  /* LIVE: the ladder is paid in REAL on-chain WATT (wallet-signed transfer), so
+     the buy gate reads the connected wallet's WATT v2, not the sim balance */
+  const upLive=(typeof isLive==='function'&&isLive());
+  const upBal=upLive?(W3.watt||0):S.watt;
   $('upgrows').innerHTML=defs.map(([k,ic,nm,ds])=>{
     const lv=S.upg[k]||0, max=upgMax(k), p=upgPrice(k,lv), inf=!isFinite(max), pipsN=inf?16:max;
     return `<div class="uprow"><div class="uic">${ic}</div>
       <div class="ubody"><h3>${nm} <small style="color:var(--dim)">Lv ${lv}${inf?' · ∞':'/'+max}</small></h3><p>${ds}</p>
       <div class="pips">${Array.from({length:pipsN},(_,i)=>`<span class="pip ${i<lv?'on':''}"></span>`).join('')}${inf&&lv>pipsN?`<small style="color:var(--cyan);margin-left:4px">+${lv-pipsN}</small>`:''}</div></div>
-      <button class="ubuy" data-up="${k}" ${lv>=max||S.watt<p?'disabled':''}>${lv>=max?'MAX':fmt(p)+' ⚡'}</button></div>`;
+      <button class="ubuy" data-up="${k}" ${lv>=max||upBal<p?'disabled':''} ${upLive?'title="Real WATT v2 — your wallet asks for a signature"':''}>${lv>=max?'MAX':fmt(p)+' ⚡'+(upLive?' ⛓':'')}</button></div>`;
   }).join('');
   document.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>buyUpgrade(b.dataset.up));
   // battlestation comfort: monitor size + gaming chair
