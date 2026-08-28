@@ -237,8 +237,8 @@ function w3GrantOwned(){
   }
   // Gaming PC → one desk rig per PC you own on-chain (live rigs only — live
   // mode is its own world, so demo desks can no longer absorb these)
-  const pcs=W3.nfts[1]||0;
-  while(S.rigs.length<pcs && mintPC(true)){}
+  // LIVE: your mining-rig NFTs ARE your farm — mirror them into the room (parts + placement).
+  if(typeof syncLiveRigsFromChain==='function') syncLiveRigsFromChain();
   // Genesis Badge
   if((W3.nfts[2]||0)>0 && !S.badge){ S.badge=1; setBadgeOwned(true); }
   // every other component: set inventory to (owned − installed).

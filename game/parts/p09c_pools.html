@@ -260,6 +260,32 @@ async function poolEthers(){ if(!_E6) _E6=import('https://cdn.jsdelivr.net/npm/e
    real DEX pools, earning reflects real rewards (validator wiring lands in a later
    pass), on-chain pool hosting. Live requires a wallet on a supported chain. */
 function isLive(){ return S && S.mode==='live'; }
+/* LIVE farm sync: mirror your on-chain mining-rig NFTs into the 3D room — one
+   built rig per NFT (a CPU + GPUs, count scaled from the rig's hashRate trait),
+   auto-placed across your available slots (garage desks → container shelves →
+   warehouse shelves). The LIVE world is its own save (LIVEKEY), so demo play is
+   untouched. Re-runs on wallet refresh; capacity = eligibleSlots() (grows as you
+   buy rack upgrades / containers / a warehouse). */
+let _liveRigSyncAt=0;
+async function syncLiveRigsFromChain(force){
+  if(!isLive()||!W3.addr||!(W3.chain&&W3.chain.pools)) return;
+  if(!force && Date.now()-_liveRigSyncAt<8000) return; _liveRigSyncAt=Date.now();
+  try{
+    const rig=await poolCtr('rig');
+    const bal=Number(await rig.balanceOf(W3.addr));
+    const slots=(typeof eligibleSlots==='function')?eligibleSlots():[0,1,2];
+    const built=[];
+    for(let i=0;i<bal && i<slots.length;i++){
+      let id, hash=1200, algo=0;
+      try{ id=Number(await rig.tokenOfOwnerByIndex(W3.addr,i)); }catch(e){ continue; }
+      try{ const t=await rig.getRigTraits(id); hash=Number(t.hashRate)||1200; algo=Number(t.algorithm); }catch(e){}
+      const ngpu=Math.max(1,Math.min(8,Math.round(hash/400)));
+      built.push({ ocId:id, algo, slot:slots[i], cpu:3, gpus:Array(ngpu).fill(5), asic:0, frame:0, oc:{c:0,m:0}, crashT:0, on:1, wear:0 });
+    }
+    S.overCap = Math.max(0, bal - slots.length);
+    if(built.length){ S.rigs=built; if(typeof rebuildAllRigs==='function') rebuildAllRigs(); if(typeof renderHud==='function') renderHud(); if(typeof save==='function') save(); }
+  }catch(e){}
+}
 /* DEMO and LIVE are SEPARATE WORLDS with separate saves. Switching stashes the
    world you leave and loads (or creates) the other: live starts empty and is
    filled from the wallet, so demo rigs/balances never show in live and demo

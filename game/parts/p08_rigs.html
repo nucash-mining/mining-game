@@ -166,7 +166,7 @@ function buildRackRig(i,r,sx,sz,sy){
   scene.add(g);
   rigVis[i]={group:g,led,gpuMeshes:[],cpuMesh:null,pcMesh:pc,slot:r.slot};
 }
-function rebuildAllRigs(){ for(let i=0;i<SLOTS.length;i++) clearRigVis(i); S.rigs.forEach((r,i)=>buildRigVis(i)); refreshRings(); }
+function rebuildAllRigs(){ for(let i=0;i<SLOTS.length;i++) clearRigVis(i); for(const k in deskAt){ try{scene.remove(deskAt[k]);}catch(e){} delete deskAt[k]; } S.rigs.forEach((r,i)=>buildRigVis(i)); refreshRings(); }
 /* rings show free/occupied slots when shopping for PC */
 function refreshRings(){
   const gar=3+S.upg.rack*3;
