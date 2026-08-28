@@ -337,6 +337,10 @@ function setTowerOwned(own){
   const box2=new THREE.Box3().setFromObject(m); const c=new THREE.Vector3(); box2.getCenter(c);
   m.position.x-=c.x; m.position.z-=c.z; m.position.y-=box2.min.y;
   towerVis.add(m);
+  // generous invisible click/grab hitbox — the tower mesh is thin/irregular, so
+  // raycasting it directly missed most clicks. Rigs use boxes for this reason too.
+  const thit=new THREE.Mesh(new THREE.BoxGeometry(2.8,3.2,2.8), new THREE.MeshBasicMaterial({visible:false,depthWrite:false}));
+  thit.position.y=1.5; thit.userData.towerHit=true; towerVis.add(thit);
   const glow=new THREE.PointLight(0x2ee6d6, 26, 8); glow.position.set(0,2.2,1.2); towerVis.add(glow);
   towerVis.userData.glow=glow;
   // default spot against the back wall — unless the player has picked it up and
