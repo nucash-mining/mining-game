@@ -5196,8 +5196,12 @@ function poolCfg(){ return (W3.addr&&W3.chain&&W3.chain.pools)?W3.chain:null; }
 async function poolCtr(kind,write){
   const c=poolCfg(); if(!c) return null;
   const E=await poolEthers();
-  const prov=new E.BrowserProvider(w3Eth());
-  const runner=write?await prov.getSigner():prov;
+  // READS go through a public JsonRpcProvider (staticNetwork = no chainId probe
+  // that can hang) — wallet-independent, so a slow/stuck wallet RPC (e.g. Rabby
+  // in Brave) can never freeze the Pool Hub on "reading chain…". WRITES still
+  // use the wallet signer.
+  const runner=write ? await new E.BrowserProvider(w3Eth()).getSigner()
+                     : new E.JsonRpcProvider(c.rpc,c.chainId,{staticNetwork:true});
   const slot=kind==='rig'?'rigNft':kind==='staking'?'stakingPool':kind;
   const addr=kind==='erc20'?c.watt:kind==='classic'?(c.classicNft||c.nft):c.pools[slot];
   return new E.Contract(addr,POOL_ABI[kind],runner);
