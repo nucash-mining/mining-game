@@ -27,6 +27,27 @@ function poolFor(coin,id){
   return (p&&!p.solo)?p:null;
 }
 function curPool(){ const c=CFG.nets[S.net].coin; return poolFor(c,S.pool[c]); }
+/* The 🏊 HUD pill reads "Mining Pools" by default and, while a rig is hovered in
+   the 3D room, shows THAT rig's  pool : blockchain  — so mousing across the farm
+   reveals what each rig is pointed at. A LIVE rig carries an on-chain `algo`
+   trait mapped to its coin; a demo rig mines whatever network is selected. */
+const RIG_ALGO_COIN={0:'wtx',1:'bitn',2:'wtx',3:'alt',5:'hth'};
+const COIN_CHAIN={pol:'Polygon',alt:'Altcoinchain',wtx:'WATTxchain',bitn:'Bitnet',hth:'HTH'};
+function rigMineCoin(r){ return (r&&r.algo!=null&&RIG_ALGO_COIN[r.algo])||CFG.nets[S.net].coin; }
+function rigPoolLabel(i){
+  const r=S&&S.rigs&&S.rigs[i]; if(!r) return null;
+  const coin=rigMineCoin(r);
+  let P=poolFor(coin,(S.pool&&S.pool[coin]));
+  if(!P&&coin===CFG.nets[S.net].coin) P=curPool();
+  const chain=COIN_CHAIN[coin]||(''+coin).toUpperCase();
+  const name=P?(P.mine?'🏗 '+P.name:P.name):((POOLS[coin]&&POOLS[coin][0]&&POOLS[coin][0].name)||'Pool');
+  return name+' : '+chain;
+}
+function updatePoolPill(){
+  const el=document.getElementById('v-pool'); if(!el) return;
+  const i=(typeof hoverRig==='number')?hoverRig:-1;
+  el.textContent=(i>=0?rigPoolLabel(i):null)||'Mining Pools';
+}
 function poolCredit(coin,amt,P){
   if(!P||P.direct){ S[coin]+=amt; return; } // solo node: full reward, direct credit
   S.pend[coin]+=amt;
@@ -283,7 +304,16 @@ async function syncLiveRigsFromChain(force){
       built.push({ ocId:id, algo, slot:slots[i], cpu:3, gpus:Array(ngpu).fill(5), asic:0, frame:0, oc:{c:0,m:0}, crashT:0, on:1, wear:0 });
     }
     S.overCap = Math.max(0, bal - slots.length);
-    if(built.length){ S.rigs=built; if(typeof rebuildAllRigs==='function') rebuildAllRigs(); if(typeof renderHud==='function') renderHud(); if(typeof save==='function') save(); }
+    // Mirror EXACTLY this wallet's rigs — including zero. Switching to an account
+    // that owns no rig NFTs (bal===0) must CLEAR the room, not leave the previous
+    // account's rigs on the desks. Only skip the swap on a transient read error
+    // (bal>0 but we built nothing), so a hiccup never wipes a real farm.
+    if(built.length || bal===0){
+      S.rigs=built;
+      if(typeof rebuildAllRigs==='function') rebuildAllRigs();
+      if(typeof renderHud==='function') renderHud();
+      if(typeof save==='function') save();
+    }
   }catch(e){}
 }
 /* DEMO and LIVE are SEPARATE WORLDS with separate saves. Switching stashes the

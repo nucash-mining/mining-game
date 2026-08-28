@@ -33,7 +33,7 @@ canvas.addEventListener('pointermove',e=>{
   if(TRAILER) return;
   const h=pick(e);
   const hr=(typeof h==='number')?h:-1;
-  if(hr!==hoverRig){ hoverRig=hr; }
+  if(hr!==hoverRig){ hoverRig=hr; if(typeof updatePoolPill==='function') updatePoolPill(); }
   canvas.style.cursor=(hr>=0||(h&&h.chair!==undefined))?'pointer':'default';
 });
 canvas.addEventListener('pointerdown',e=>{ pdown=[e.clientX,e.clientY]; });

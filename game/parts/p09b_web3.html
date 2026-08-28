@@ -144,8 +144,18 @@ async function w3Connect(){
     W3.chainId=parseInt(await w3Req('eth_chainId',[]),16);
     W3.chain=w3ChainByHexId(W3.chainId);
     if(!w3Connect._wired){ w3Connect._wired=1;
-      w3Eth().on?.('accountsChanged',a=>{ W3.addr=a[0]||null; w3Refresh(); });
-      w3Eth().on?.('chainChanged',c=>{ W3.chainId=parseInt(c,16); W3.chain=w3ChainByHexId(W3.chainId); w3Refresh(); });
+      // Switching wallet/account in Rabby/MetaMask must load THAT account's miner:
+      // its NFTs become its rigs, its balances/pools go live. Ignore spurious
+      // same-account events; force a full resync (bypasses the sync throttle and
+      // clears the room when the new account owns no rigs — see syncLiveRigsFromChain).
+      w3Eth().on?.('accountsChanged',a=>{
+        const na=(a&&a[0])||null;
+        if((na||'').toLowerCase()===(W3.addr||'').toLowerCase()) return;
+        W3.addr=na;
+        toast(na?('🦊 Account switched → '+w3Short(na)):'🦊 Wallet locked/disconnected','cyan');
+        w3Refresh(true);
+      });
+      w3Eth().on?.('chainChanged',c=>{ W3.chainId=parseInt(c,16); W3.chain=w3ChainByHexId(W3.chainId); w3Refresh(true); });
     }
     SFX.buy(); toast('🦊 Wallet connected: '+w3Short(W3.addr),'grn');
     if(W3.chain&&W3.chain.net){ S.net=W3.chain.net; toast('🔗 Mining network synced to wallet chain: '+W3.chain.name,'cyan'); }
@@ -170,8 +180,12 @@ async function w3Switch(key){
     }
   }
 }
-async function w3Refresh(){
-  if(!W3.addr){ renderWallet(); return; }
+async function w3Refresh(force){
+  if(!W3.addr){
+    // wallet locked / all accounts disconnected: empty the LIVE room too
+    if(typeof isLive==='function'&&isLive()){ S.rigs=[]; rebuildAllRigs&&rebuildAllRigs(); }
+    renderWallet(); renderHud&&renderHud(); return;
+  }
   const c=W3.chain;
   W3.native=W3.watt=W3.rewards=null; W3.nfts={}; W3.rates={};
   renderWallet();
@@ -187,7 +201,7 @@ async function w3Refresh(){
     }
     await Promise.allSettled(jobs);
     await w3Positions();               // staked components (escrowed, not in the wallet)
-    w3GrantOwned();
+    w3GrantOwned(force);
     /* the classic trap: EVERYTHING is staked -> wallet reads empty -> empty
        garage with nothing to click. Say so instead of showing a bare room. */
     if(typeof isLive==='function'&&isLive()&&S&&S.rigs.length===0
@@ -225,7 +239,7 @@ async function w3Unstake(idx){
    available-to-install(id) = balanceOf(you, id) − how many are already fitted in
    your rigs. This is a live sync (re-runs every wallet refresh), so swaps, buys
    and migrations show up immediately — no one-time grant, no demo items counted. */
-function w3GrantOwned(){
+function w3GrantOwned(force){
   if(!W3.addr||!W3.chain||!(typeof isLive==='function'&&isLive())) return;
   // count components already installed across every rig
   const inst={};
@@ -238,7 +252,7 @@ function w3GrantOwned(){
   // Gaming PC → one desk rig per PC you own on-chain (live rigs only — live
   // mode is its own world, so demo desks can no longer absorb these)
   // LIVE: your mining-rig NFTs ARE your farm — mirror them into the room (parts + placement).
-  if(typeof syncLiveRigsFromChain==='function') syncLiveRigsFromChain();
+  if(typeof syncLiveRigsFromChain==='function') syncLiveRigsFromChain(force);
   // Genesis Badge
   if((W3.nfts[2]||0)>0 && !S.badge){ S.badge=1; setBadgeOwned(true); }
   // every other component: set inventory to (owned − installed).

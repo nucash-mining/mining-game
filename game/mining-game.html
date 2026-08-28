@@ -372,7 +372,7 @@ body.touch.walkoff #joy{display:none}
   <div class="coin" id="coin-usdt" style="display:none">💵 <b id="v-usdt">0</b> USDT</div>
   <div class="coin" id="coin-dai" style="display:none">◈ <b id="v-dai">0</b> DAI</div>
   <span id="wallet-extra" style="display:contents"></span>
-  <div class="coin" id="coin-pool" title="Mining pool — click to select a pool" style="cursor:pointer">🏊 <b id="v-pool">nucash-mining</b><span class="pr" id="p-pend"></span></div>
+  <div class="coin" id="coin-pool" title="Mining pools — hover a rig to see its pool·blockchain; click to select" style="cursor:pointer">🏊 <b id="v-pool">Mining Pools</b><span class="pr" id="p-pend"></span></div>
 </div>
 <div id="feed"></div>
 <div id="ctrlhint"><b>WASD</b>/<b>WAX</b>/<b>arrows</b> walk · <b>shift</b> run · <b>F</b> mouse-look (drag works too) · <b>1</b>shop <b>2</b>garage <b>3</b>pools <b>4</b>stats <b>5</b>wallet</div>
@@ -4513,8 +4513,18 @@ async function w3Connect(){
     W3.chainId=parseInt(await w3Req('eth_chainId',[]),16);
     W3.chain=w3ChainByHexId(W3.chainId);
     if(!w3Connect._wired){ w3Connect._wired=1;
-      w3Eth().on?.('accountsChanged',a=>{ W3.addr=a[0]||null; w3Refresh(); });
-      w3Eth().on?.('chainChanged',c=>{ W3.chainId=parseInt(c,16); W3.chain=w3ChainByHexId(W3.chainId); w3Refresh(); });
+      // Switching wallet/account in Rabby/MetaMask must load THAT account's miner:
+      // its NFTs become its rigs, its balances/pools go live. Ignore spurious
+      // same-account events; force a full resync (bypasses the sync throttle and
+      // clears the room when the new account owns no rigs — see syncLiveRigsFromChain).
+      w3Eth().on?.('accountsChanged',a=>{
+        const na=(a&&a[0])||null;
+        if((na||'').toLowerCase()===(W3.addr||'').toLowerCase()) return;
+        W3.addr=na;
+        toast(na?('🦊 Account switched → '+w3Short(na)):'🦊 Wallet locked/disconnected','cyan');
+        w3Refresh(true);
+      });
+      w3Eth().on?.('chainChanged',c=>{ W3.chainId=parseInt(c,16); W3.chain=w3ChainByHexId(W3.chainId); w3Refresh(true); });
     }
     SFX.buy(); toast('🦊 Wallet connected: '+w3Short(W3.addr),'grn');
     if(W3.chain&&W3.chain.net){ S.net=W3.chain.net; toast('🔗 Mining network synced to wallet chain: '+W3.chain.name,'cyan'); }
@@ -4539,8 +4549,12 @@ async function w3Switch(key){
     }
   }
 }
-async function w3Refresh(){
-  if(!W3.addr){ renderWallet(); return; }
+async function w3Refresh(force){
+  if(!W3.addr){
+    // wallet locked / all accounts disconnected: empty the LIVE room too
+    if(typeof isLive==='function'&&isLive()){ S.rigs=[]; rebuildAllRigs&&rebuildAllRigs(); }
+    renderWallet(); renderHud&&renderHud(); return;
+  }
   const c=W3.chain;
   W3.native=W3.watt=W3.rewards=null; W3.nfts={}; W3.rates={};
   renderWallet();
@@ -4556,7 +4570,7 @@ async function w3Refresh(){
     }
     await Promise.allSettled(jobs);
     await w3Positions();               // staked components (escrowed, not in the wallet)
-    w3GrantOwned();
+    w3GrantOwned(force);
     /* the classic trap: EVERYTHING is staked -> wallet reads empty -> empty
        garage with nothing to click. Say so instead of showing a bare room. */
     if(typeof isLive==='function'&&isLive()&&S&&S.rigs.length===0
@@ -4594,7 +4608,7 @@ async function w3Unstake(idx){
    available-to-install(id) = balanceOf(you, id) − how many are already fitted in
    your rigs. This is a live sync (re-runs every wallet refresh), so swaps, buys
    and migrations show up immediately — no one-time grant, no demo items counted. */
-function w3GrantOwned(){
+function w3GrantOwned(force){
   if(!W3.addr||!W3.chain||!(typeof isLive==='function'&&isLive())) return;
   // count components already installed across every rig
   const inst={};
@@ -4607,7 +4621,7 @@ function w3GrantOwned(){
   // Gaming PC → one desk rig per PC you own on-chain (live rigs only — live
   // mode is its own world, so demo desks can no longer absorb these)
   // LIVE: your mining-rig NFTs ARE your farm — mirror them into the room (parts + placement).
-  if(typeof syncLiveRigsFromChain==='function') syncLiveRigsFromChain();
+  if(typeof syncLiveRigsFromChain==='function') syncLiveRigsFromChain(force);
   // Genesis Badge
   if((W3.nfts[2]||0)>0 && !S.badge){ S.badge=1; setBadgeOwned(true); }
   // every other component: set inventory to (owned − installed).
@@ -4745,6 +4759,27 @@ function poolFor(coin,id){
   return (p&&!p.solo)?p:null;
 }
 function curPool(){ const c=CFG.nets[S.net].coin; return poolFor(c,S.pool[c]); }
+/* The 🏊 HUD pill reads "Mining Pools" by default and, while a rig is hovered in
+   the 3D room, shows THAT rig's  pool : blockchain  — so mousing across the farm
+   reveals what each rig is pointed at. A LIVE rig carries an on-chain `algo`
+   trait mapped to its coin; a demo rig mines whatever network is selected. */
+const RIG_ALGO_COIN={0:'wtx',1:'bitn',2:'wtx',3:'alt',5:'hth'};
+const COIN_CHAIN={pol:'Polygon',alt:'Altcoinchain',wtx:'WATTxchain',bitn:'Bitnet',hth:'HTH'};
+function rigMineCoin(r){ return (r&&r.algo!=null&&RIG_ALGO_COIN[r.algo])||CFG.nets[S.net].coin; }
+function rigPoolLabel(i){
+  const r=S&&S.rigs&&S.rigs[i]; if(!r) return null;
+  const coin=rigMineCoin(r);
+  let P=poolFor(coin,(S.pool&&S.pool[coin]));
+  if(!P&&coin===CFG.nets[S.net].coin) P=curPool();
+  const chain=COIN_CHAIN[coin]||(''+coin).toUpperCase();
+  const name=P?(P.mine?'🏗 '+P.name:P.name):((POOLS[coin]&&POOLS[coin][0]&&POOLS[coin][0].name)||'Pool');
+  return name+' : '+chain;
+}
+function updatePoolPill(){
+  const el=document.getElementById('v-pool'); if(!el) return;
+  const i=(typeof hoverRig==='number')?hoverRig:-1;
+  el.textContent=(i>=0?rigPoolLabel(i):null)||'Mining Pools';
+}
 function poolCredit(coin,amt,P){
   if(!P||P.direct){ S[coin]+=amt; return; } // solo node: full reward, direct credit
   S.pend[coin]+=amt;
@@ -5001,7 +5036,16 @@ async function syncLiveRigsFromChain(force){
       built.push({ ocId:id, algo, slot:slots[i], cpu:3, gpus:Array(ngpu).fill(5), asic:0, frame:0, oc:{c:0,m:0}, crashT:0, on:1, wear:0 });
     }
     S.overCap = Math.max(0, bal - slots.length);
-    if(built.length){ S.rigs=built; if(typeof rebuildAllRigs==='function') rebuildAllRigs(); if(typeof renderHud==='function') renderHud(); if(typeof save==='function') save(); }
+    // Mirror EXACTLY this wallet's rigs — including zero. Switching to an account
+    // that owns no rig NFTs (bal===0) must CLEAR the room, not leave the previous
+    // account's rigs on the desks. Only skip the swap on a transient read error
+    // (bal>0 but we built nothing), so a hiccup never wipes a real farm.
+    if(built.length || bal===0){
+      S.rigs=built;
+      if(typeof rebuildAllRigs==='function') rebuildAllRigs();
+      if(typeof renderHud==='function') renderHud();
+      if(typeof save==='function') save();
+    }
   }catch(e){}
 }
 /* DEMO and LIVE are SEPARATE WORLDS with separate saves. Switching stashes the
@@ -6040,7 +6084,7 @@ function renderHud(){
   $('farmpill').style.display=fs==='GARAGE'?'none':'flex';
   $('farmtier').textContent=fs;
   const coin=CFG.nets[S.net].coin, P=curPool();
-  $('v-pool').textContent=P?(P.mine?'🏗 '+P.name:P.name):'SOLO';
+  updatePoolPill();   // 'Mining Pools' by default; the hovered rig's pool:blockchain while hovering
   $('p-pend').textContent=S.pend[coin]>0.005?('pend '+fmt(S.pend[coin])+' '+CFG.nets[S.net].sym):'';
   const n=$('net'); n.classList.toggle('alt',S.net==='alt'); n.classList.toggle('wtx',S.net==='wattx');
   $('netname').textContent=CFG.nets[S.net].name;
@@ -6820,7 +6864,7 @@ canvas.addEventListener('pointermove',e=>{
   if(TRAILER) return;
   const h=pick(e);
   const hr=(typeof h==='number')?h:-1;
-  if(hr!==hoverRig){ hoverRig=hr; }
+  if(hr!==hoverRig){ hoverRig=hr; if(typeof updatePoolPill==='function') updatePoolPill(); }
   canvas.style.cursor=(hr>=0||(h&&h.chair!==undefined))?'pointer':'default';
 });
 canvas.addEventListener('pointerdown',e=>{ pdown=[e.clientX,e.clientY]; });

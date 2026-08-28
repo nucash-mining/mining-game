@@ -73,7 +73,7 @@ function renderHud(){
   $('farmpill').style.display=fs==='GARAGE'?'none':'flex';
   $('farmtier').textContent=fs;
   const coin=CFG.nets[S.net].coin, P=curPool();
-  $('v-pool').textContent=P?(P.mine?'🏗 '+P.name:P.name):'SOLO';
+  updatePoolPill();   // 'Mining Pools' by default; the hovered rig's pool:blockchain while hovering
   $('p-pend').textContent=S.pend[coin]>0.005?('pend '+fmt(S.pend[coin])+' '+CFG.nets[S.net].sym):'';
   const n=$('net'); n.classList.toggle('alt',S.net==='alt'); n.classList.toggle('wtx',S.net==='wattx');
   $('netname').textContent=CFG.nets[S.net].name;
