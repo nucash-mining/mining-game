@@ -46,6 +46,20 @@ button{font-family:inherit;cursor:pointer}
 .hbtn{background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 12px;font-size:12.5px;font-weight:600;letter-spacing:.04em;transition:all .15s}
 .hbtn:hover{border-color:var(--pur);background:var(--panel2);transform:translateY(-1px)}
 .hbtn.gold{color:var(--gold)} .hbtn.accent{color:var(--cyan)}
+/* free-move / place bar (bottom-center) */
+#movebar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;
+  display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:14px;
+  background:rgba(14,11,30,.92);border:1px solid var(--pur);box-shadow:0 8px 30px rgba(0,0,0,.5);
+  backdrop-filter:blur(6px);font-size:12px;max-width:96vw;flex-wrap:wrap;justify-content:center}
+#movebar .mv-name{color:var(--cyan);font-weight:700;letter-spacing:.03em;white-space:nowrap}
+#movebar .mv-name b{color:#fff}
+#movebar .mv-grp{display:flex;gap:4px}
+#movebar button{width:38px;height:38px;font-size:16px;line-height:1;border-radius:10px;
+  background:var(--panel2);border:1px solid var(--line);color:var(--txt);cursor:pointer;transition:all .12s}
+#movebar button:hover{border-color:var(--pur);background:#241a47;transform:translateY(-1px)}
+#movebar #mv-done{width:auto;padding:0 14px;font-size:13px;font-weight:700;color:#04170c;background:var(--grn);border-color:transparent}
+#movebar #mv-cancel{color:var(--red)}
+@media(max-width:560px){#movebar .mv-name{width:100%;text-align:center}}
 /* network pill */
 #net{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 11px;font-size:12.5px;font-weight:600}
 #net .dot{width:8px;height:8px;border-radius:50%;background:var(--pur);box-shadow:0 0 8px var(--pur)}
@@ -375,8 +389,26 @@ body.touch.walkoff #joy{display:none}
   <div class="coin" id="coin-pool" title="Mining pools — hover a rig to see its pool·blockchain; click to select" style="cursor:pointer">🏊 <b id="v-pool">Mining Pools</b><span class="pr" id="p-pend"></span></div>
 </div>
 <div id="feed"></div>
-<div id="ctrlhint"><b>WASD</b>/<b>WAX</b>/<b>arrows</b> walk · <b>shift</b> run · <b>F</b> mouse-look (drag works too) · <b>1</b>shop <b>2</b>garage <b>3</b>pools <b>4</b>stats <b>5</b>wallet</div>
+<div id="ctrlhint"><b>WASD</b>/<b>WAX</b>/<b>arrows</b> walk · <b>shift</b> run · <b>F</b> mouse-look · <b>right-click</b> a case or the tower to <b>MOVE</b> it · <b>1</b>shop <b>2</b>garage <b>3</b>pools <b>4</b>stats <b>5</b>wallet</div>
 <button id="standbtn" style="display:none">🧍 STAND UP <small>(esc)</small></button>
+<div id="movebar" style="display:none">
+  <span class="mv-name">✋ Moving <b id="move-name">Rig</b></span>
+  <div class="mv-grp">
+    <button id="mv-lf" title="move left">◀</button>
+    <button id="mv-up" title="move back">▲</button>
+    <button id="mv-dn" title="move forward">▼</button>
+    <button id="mv-rt" title="move right">▶</button>
+  </div>
+  <div class="mv-grp">
+    <button id="mv-rotl" title="rotate left">⟲</button>
+    <button id="mv-rotr" title="rotate right">⟳</button>
+    <button id="mv-raise" title="raise">⤒</button>
+    <button id="mv-lower" title="lower">⤓</button>
+    <button id="mv-snap" title="snap to nearest desk/shelf">🧲</button>
+  </div>
+  <button id="mv-done" class="mv-ok">✓ DONE</button>
+  <button id="mv-cancel" class="mv-x">✕</button>
+</div>
 <div id="tut"></div>
 
 <!-- ============ SHOP ============ -->
@@ -3380,7 +3412,11 @@ function setTowerOwned(own){
   m.position.x-=c.x; m.position.z-=c.z; m.position.y-=box2.min.y;
   towerVis.add(m);
   const glow=new THREE.PointLight(0x2ee6d6, 26, 8); glow.position.set(0,2.2,1.2); towerVis.add(glow);
-  towerVis.position.set(6.6,0,-ROOM.D/2+0.9); towerVis.rotation.y=0.35;
+  // default spot against the back wall — unless the player has picked it up and
+  // placed it (S.towerPos / S.towerRot from the free-move editor).
+  if(S&&S.towerPos){ towerVis.position.set(S.towerPos.x, S.towerPos.y||0, S.towerPos.z); }
+  else towerVis.position.set(6.6,0,-ROOM.D/2+0.9);
+  towerVis.rotation.y=(S&&S.towerRot!=null)?S.towerRot:0.35;
   scene.add(towerVis);
 }
 /* offscreen thumbnails of each model */
@@ -3503,8 +3539,12 @@ function buildRigVis(i){
   clearRigVis(i);
   const r=S.rigs[i]; if(!r) return;
   const [sx,sz,sy]=SLOTS[r.slot];
-  if(r.slot>=9){ buildRackRig(i,r,sx,sz,sy); return; }
-  if(!deskAt[r.slot]) deskAt[r.slot]=makeDesk(sx,sz,r.slot);
+  // free-move override: a rig the player picked up carries its own world pos/rot
+  // (r.pos / r.rot), otherwise it sits at its assigned SLOT.
+  const px=(r.pos&&r.pos.x!=null)?r.pos.x:sx, pz=(r.pos&&r.pos.z!=null)?r.pos.z:sz,
+        py=(r.pos&&r.pos.y!=null)?r.pos.y:0, prot=(r.rot!=null)?r.rot:null;
+  if(r.slot>=9){ buildRackRig(i,r,sx,sz,sy,px,pz,py,prot); return; }
+  if(!deskAt[r.slot]){ deskAt[r.slot]=makeDesk(px,pz,r.slot); if(prot!=null) deskAt[r.slot].rotation.y=prot; }
   const g=new THREE.Group();
   // PC on desk — real-life scale: ATX mid-tower ≈46cm on a 75cm-high, 1.9m desk (2.25 u/m)
   const pc=normalize(instOf('pc'),1.03);
@@ -3623,7 +3663,7 @@ function buildRigVis(i){
   const led=new THREE.Mesh(new THREE.BoxGeometry(DESK.W-0.2,0.07,0.07),
     new THREE.MeshBasicMaterial({color:0x3dff8a}));
   led.position.set(0,DESK.TOP+0.12,DESK.D/2+0.02); g.add(led);
-  g.position.set(sx,0,sz);
+  g.position.set(px,py,pz); if(prot!=null) g.rotation.y=prot;
   scene.add(g);
   rigVis[i]={group:g,led,gpuMeshes:gpuMs,cpuMesh:cpuM,pcMesh:pc,fans:fanMs,slot:r.slot};
 }
@@ -3646,7 +3686,7 @@ function makeRGBFan(){
   return grp;
 }
 /* rack-mounted rig inside a container / warehouse shelf */
-function buildRackRig(i,r,sx,sz,sy){
+function buildRackRig(i,r,sx,sz,sy,px,pz,py,prot){
   const g=new THREE.Group();
   const pc=normalize(instOf('pc'),1.03);
   pc.position.y+=sy; pc.rotation.y=sx>0?-Math.PI/2:Math.PI/2;
@@ -3659,7 +3699,7 @@ function buildRackRig(i,r,sx,sz,sy){
   const led=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.06,0.06),
     new THREE.MeshBasicMaterial({color:0x3dff8a}));
   led.position.set(0, sy+1.12, 0.6); g.add(led);
-  g.position.set(sx,0,sz);
+  g.position.set(px!=null?px:sx, py!=null?py:0, pz!=null?pz:sz); if(prot!=null) g.rotation.y=prot;
   scene.add(g);
   rigVis[i]={group:g,led,gpuMeshes:[],cpuMesh:null,pcMesh:pc,slot:r.slot};
 }
@@ -6190,6 +6230,7 @@ function renderRigPanel(){
     <div class="wearrow"><small>WEAR</small><div class="wearbar"><i style="width:${r.wear.toFixed(1)}%;background:${wearCol}"></i></div><b style="color:${wearCol}">${r.wear.toFixed(0)}%</b>
       ${r.wear>=1?`<button class="hbtn" id="rp-fix">🔧 REPAIR ${fmt(repairCost(r))} ⚡</button>`:''}</div>
     <div class="rowbtns"><button class="hbtn ${r.on?'':'gold'}" id="rp-pwr">${r.on?'🔋 POWER OFF — stake mode':'🔌 POWER ON — mine'}</button><button class="hbtn gold" id="rp-bench">🔧 OPEN CASE — WORKBENCH</button></div>
+    <div class="rowbtns"><button class="hbtn" id="rp-move">✋ MOVE / PLACE THIS CASE</button></div>
     <div class="rowbtns"><button class="hbtn accent" id="rp-os">💻 LOG IN — RIG OS</button><button class="hbtn gold" id="rp-shop">🛒 SHOP</button><button class="hbtn" id="rp-close">CLOSE</button></div>`;
   p.querySelectorAll('[data-in]').forEach(b=>b.onclick=()=>installPart(selRig,+b.dataset.in));
   p.querySelectorAll('[data-ing]').forEach(b=>b.onclick=()=>installPart(selRig,+b.dataset.ing));
@@ -6199,6 +6240,7 @@ function renderRigPanel(){
   $('rp-pwr').onclick=()=>togglePower(selRig);
   const fx=$('rp-fix'); if(fx) fx.onclick=()=>repairRig(selRig);
   $('rp-bench').onclick=()=>openBench(selRig);
+  { const mb=$('rp-move'); if(mb) mb.onclick=()=>beginMove({kind:'rig',i:selRig}); }
   $('rp-os').onclick=()=>openOS(selRig);
   $('rp-close').onclick=()=>{ selRig=-1; renderRigPanel(); };
   if(!S.osHint){ S.osHint=1; save();
@@ -6832,16 +6874,17 @@ function osAppWeb(body){
 
 /* ================= INPUT ================= */
 const ray=new THREE.Raycaster(), mouse=new THREE.Vector2();
-let hoverRig=-1, pdown=null;
+let hoverRig=-1, pdown=null, moveSel=null;
 function rigHitboxes(){
   const out=[];
   rigVis.forEach((rv,i)=>{ if(!rv) return;
+    const rack=rv.slot>=9, sy=rack?(SLOTS[rv.slot][2]||0):0;
     if(!rv.hit){
-      const rack=rv.slot>=9, sy=rack?SLOTS[rv.slot][2]:0;
       const m=new THREE.Mesh(rack?new THREE.BoxGeometry(1.7,1.5,1.4):new THREE.BoxGeometry(4.4,3.6,2.5),
         new THREE.MeshBasicMaterial({visible:false}));
-      m.position.set(SLOTS[rv.slot][0], rack?sy+0.6:1.8, SLOTS[rv.slot][1]); m.userData.rig=i;
-      scene.add(m); rv.hit=m; }
+      m.userData.rig=i; scene.add(m); rv.hit=m; }
+    // follow the live group position so a picked-up rig stays clickable where it landed
+    const g=rv.group; rv.hit.position.set(g.position.x, g.position.y+(rack?sy+0.6:1.8), g.position.z);
     out.push(rv.hit);
   });
   return out;
@@ -6862,13 +6905,15 @@ function pick(e){
 }
 canvas.addEventListener('pointermove',e=>{
   if(TRAILER) return;
+  if(moveSel){ if(e.buttons&1) moveDragTo(e); canvas.style.cursor='grabbing'; return; }
   const h=pick(e);
   const hr=(typeof h==='number')?h:-1;
   if(hr!==hoverRig){ hoverRig=hr; if(typeof updatePoolPill==='function') updatePoolPill(); }
   canvas.style.cursor=(hr>=0||(h&&h.chair!==undefined))?'pointer':'default';
 });
-canvas.addEventListener('pointerdown',e=>{ pdown=[e.clientX,e.clientY]; });
+canvas.addEventListener('pointerdown',e=>{ if(moveSel){ if(e.buttons&1) moveDragTo(e); return; } pdown=[e.clientX,e.clientY]; });
 canvas.addEventListener('pointerup',e=>{
+  if(moveSel) return;   // move mode owns the pointer; the MOVE bar ends it
   if(TRAILER||!pdown) return;
   const dx=e.clientX-pdown[0], dy=e.clientY-pdown[1]; pdown=null;
   if(dx*dx+dy*dy>36) return;
@@ -6878,6 +6923,104 @@ canvas.addEventListener('pointerup',e=>{
   if(h>=0){ selRig=h; SFX.click(); renderRigPanel(); if(S.tut===1){S.tut=2;save();showTut();} }
   else { selRig=-1; renderRigPanel(); }
 });
+/* ================= FREE-MOVE / PLACE editor =================
+   Pick up a PC case (a rig) or the Server Tower and place it anywhere. Right-
+   click it (or the rig panel's ✋ MOVE button) to grab, then drag across the
+   floor OR use the on-screen MOVE bar — nudge / rotate / raise / snap — so it's
+   fully usable without precise dragging. Persists per rig (r.pos / r.rot) and
+   for the tower (S.towerPos / S.towerRot); a moved object rebuilds in place. */
+const MOVE_PLANE=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+function moveTargets(){
+  if(!moveSel) return [];
+  if(moveSel.kind==='tower') return (typeof towerVis!=='undefined'&&towerVis)?[towerVis]:[];
+  const rv=rigVis[moveSel.i]; if(!rv) return [];
+  const t=[rv.group], r=S.rigs[moveSel.i];
+  if(r&&r.slot<9&&deskAt[r.slot]) t.push(deskAt[r.slot]);   // garage: the desk travels with its case
+  return t;
+}
+function moveApply(){
+  const m=moveSel; if(!m) return;
+  m.x=Math.max(-ROOM.W/2+0.6,Math.min(ROOM.W/2-0.6,m.x));
+  m.z=Math.max(-ROOM.D/2+0.6,Math.min(30,m.z));       // 30 reaches the containers/warehouse
+  m.y=Math.max(0,Math.min(4.2,m.y));
+  for(const o of moveTargets()){ o.position.set(m.x,m.y,m.z); o.rotation.y=m.rot; }
+}
+function moveDragTo(e){
+  const r=canvas.getBoundingClientRect();
+  mouse.x=((e.clientX-r.left)/r.width)*2-1; mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+  ray.setFromCamera(mouse,cam);
+  MOVE_PLANE.constant=-(moveSel.y||0);
+  const hit=new THREE.Vector3();
+  if(ray.ray.intersectPlane(MOVE_PLANE,hit)){ moveSel.x=hit.x; moveSel.z=hit.z; moveApply(); }
+}
+function beginMove(sel){
+  if(moveSel) endMove(true);
+  const o=(sel.kind==='tower')?(typeof towerVis!=='undefined'?towerVis:null):(rigVis[sel.i]&&rigVis[sel.i].group);
+  if(!o) return;
+  moveSel={kind:sel.kind,i:sel.i,x:o.position.x,y:o.position.y,z:o.position.z,rot:o.rotation.y,
+           orig:{x:o.position.x,y:o.position.y,z:o.position.z,rot:o.rotation.y}};
+  controls.enabled=false; selRig=-1; renderRigPanel&&renderRigPanel();
+  const bar=document.getElementById('movebar'); if(bar) bar.style.display='flex';
+  const nm=document.getElementById('move-name'); if(nm) nm.textContent=sel.kind==='tower'?'Server Tower':('Rig '+((sel.i|0)+1));
+  SFX&&SFX.click&&SFX.click();
+  toast('✋ MOVE — drag to place, or use the bar (rotate · raise · snap). Hit ✓ DONE when it\'s where you want it. (Esc cancels)','cyan',7000);
+}
+function moveNudge(dx,dz){ if(moveSel){ moveSel.x+=dx; moveSel.z+=dz; moveApply(); } }
+function moveRaise(dy){ if(moveSel){ moveSel.y+=dy; moveApply(); } }
+function moveRotate(da){ if(moveSel){ moveSel.rot+=da; moveApply(); } }
+function moveSnap(){
+  if(!moveSel) return;
+  let best=null,bd=1e9;
+  for(const s of (typeof eligibleSlots==='function'?eligibleSlots():[])){
+    const S0=SLOTS[s]; const d=(S0[0]-moveSel.x)**2+(S0[1]-moveSel.z)**2;
+    if(d<bd){ bd=d; best=[S0[0],S0[1],S0[2]||0]; }
+  }
+  if(best){ moveSel.x=best[0]; moveSel.z=best[1]; moveSel.y=best[2]; moveSel.rot=0; moveApply(); SFX&&SFX.click&&SFX.click(); }
+}
+function endMove(persist){
+  if(!moveSel) return;
+  const m=moveSel;
+  if(persist){
+    if(m.kind==='tower'){ S.towerPos={x:m.x,y:m.y,z:m.z}; S.towerRot=m.rot; }
+    else if(S.rigs[m.i]){ S.rigs[m.i].pos={x:m.x,y:m.y,z:m.z}; S.rigs[m.i].rot=m.rot; }
+    save&&save();
+  } else {
+    for(const o of moveTargets()){ o.position.set(m.orig.x,m.orig.y,m.orig.z); o.rotation.y=m.orig.rot; }
+  }
+  moveSel=null; controls.enabled=true;
+  const bar=document.getElementById('movebar'); if(bar) bar.style.display='none';
+  canvas.style.cursor='default';
+  if(persist) toast('✅ Placed.','grn',2200);
+}
+canvas.addEventListener('contextmenu',e=>{
+  if(TRAILER) return;
+  e.preventDefault();
+  if(moveSel){ endMove(true); return; }
+  if(typeof towerVis!=='undefined'&&towerVis&&towerVis.visible){
+    const r=canvas.getBoundingClientRect();
+    mouse.x=((e.clientX-r.left)/r.width)*2-1; mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+    ray.setFromCamera(mouse,cam);
+    if(ray.intersectObject(towerVis,true).length){ beginMove({kind:'tower'}); return; }
+  }
+  const h=pick(e);
+  if(typeof h==='number'&&h>=0) beginMove({kind:'rig',i:h});
+});
+window.addEventListener('keydown',e=>{ if(!moveSel) return;
+  if(e.key==='Escape') endMove(false);
+  else if(e.key==='Enter') endMove(true);
+  else if(e.key==='[') moveRotate(-Math.PI/12);
+  else if(e.key===']') moveRotate(Math.PI/12);
+});
+(function wireMoveBar(){
+  const set=(id,fn)=>{ const el=document.getElementById(id); if(el) el.onclick=fn; };
+  set('mv-up',()=>moveNudge(0,-0.5)); set('mv-dn',()=>moveNudge(0,0.5));
+  set('mv-lf',()=>moveNudge(-0.5,0)); set('mv-rt',()=>moveNudge(0.5,0));
+  set('mv-rotl',()=>moveRotate(-Math.PI/12)); set('mv-rotr',()=>moveRotate(Math.PI/12));
+  set('mv-raise',()=>moveRaise(0.2)); set('mv-lower',()=>moveRaise(-0.2));
+  set('mv-snap',moveSnap); set('mv-done',()=>endMove(true)); set('mv-cancel',()=>endMove(false));
+})();
+window.beginMoveTower=()=>{ if(typeof towerVis!=='undefined'&&towerVis&&towerVis.visible) beginMove({kind:'tower'}); };
+
 /* ---------- sit at a desk (click/tap the chair) ---------- */
 const SIT={on:false, slot:-1, save:null};
 function sitDown(slot){

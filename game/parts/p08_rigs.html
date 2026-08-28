@@ -6,8 +6,12 @@ function buildRigVis(i){
   clearRigVis(i);
   const r=S.rigs[i]; if(!r) return;
   const [sx,sz,sy]=SLOTS[r.slot];
-  if(r.slot>=9){ buildRackRig(i,r,sx,sz,sy); return; }
-  if(!deskAt[r.slot]) deskAt[r.slot]=makeDesk(sx,sz,r.slot);
+  // free-move override: a rig the player picked up carries its own world pos/rot
+  // (r.pos / r.rot), otherwise it sits at its assigned SLOT.
+  const px=(r.pos&&r.pos.x!=null)?r.pos.x:sx, pz=(r.pos&&r.pos.z!=null)?r.pos.z:sz,
+        py=(r.pos&&r.pos.y!=null)?r.pos.y:0, prot=(r.rot!=null)?r.rot:null;
+  if(r.slot>=9){ buildRackRig(i,r,sx,sz,sy,px,pz,py,prot); return; }
+  if(!deskAt[r.slot]){ deskAt[r.slot]=makeDesk(px,pz,r.slot); if(prot!=null) deskAt[r.slot].rotation.y=prot; }
   const g=new THREE.Group();
   // PC on desk — real-life scale: ATX mid-tower ≈46cm on a 75cm-high, 1.9m desk (2.25 u/m)
   const pc=normalize(instOf('pc'),1.03);
@@ -126,7 +130,7 @@ function buildRigVis(i){
   const led=new THREE.Mesh(new THREE.BoxGeometry(DESK.W-0.2,0.07,0.07),
     new THREE.MeshBasicMaterial({color:0x3dff8a}));
   led.position.set(0,DESK.TOP+0.12,DESK.D/2+0.02); g.add(led);
-  g.position.set(sx,0,sz);
+  g.position.set(px,py,pz); if(prot!=null) g.rotation.y=prot;
   scene.add(g);
   rigVis[i]={group:g,led,gpuMeshes:gpuMs,cpuMesh:cpuM,pcMesh:pc,fans:fanMs,slot:r.slot};
 }
@@ -149,7 +153,7 @@ function makeRGBFan(){
   return grp;
 }
 /* rack-mounted rig inside a container / warehouse shelf */
-function buildRackRig(i,r,sx,sz,sy){
+function buildRackRig(i,r,sx,sz,sy,px,pz,py,prot){
   const g=new THREE.Group();
   const pc=normalize(instOf('pc'),1.03);
   pc.position.y+=sy; pc.rotation.y=sx>0?-Math.PI/2:Math.PI/2;
@@ -162,7 +166,7 @@ function buildRackRig(i,r,sx,sz,sy){
   const led=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.06,0.06),
     new THREE.MeshBasicMaterial({color:0x3dff8a}));
   led.position.set(0, sy+1.12, 0.6); g.add(led);
-  g.position.set(sx,0,sz);
+  g.position.set(px!=null?px:sx, py!=null?py:0, pz!=null?pz:sz); if(prot!=null) g.rotation.y=prot;
   scene.add(g);
   rigVis[i]={group:g,led,gpuMeshes:[],cpuMesh:null,pcMesh:pc,slot:r.slot};
 }

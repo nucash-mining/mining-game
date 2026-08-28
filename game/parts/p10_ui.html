@@ -179,6 +179,7 @@ function renderRigPanel(){
     <div class="wearrow"><small>WEAR</small><div class="wearbar"><i style="width:${r.wear.toFixed(1)}%;background:${wearCol}"></i></div><b style="color:${wearCol}">${r.wear.toFixed(0)}%</b>
       ${r.wear>=1?`<button class="hbtn" id="rp-fix">🔧 REPAIR ${fmt(repairCost(r))} ⚡</button>`:''}</div>
     <div class="rowbtns"><button class="hbtn ${r.on?'':'gold'}" id="rp-pwr">${r.on?'🔋 POWER OFF — stake mode':'🔌 POWER ON — mine'}</button><button class="hbtn gold" id="rp-bench">🔧 OPEN CASE — WORKBENCH</button></div>
+    <div class="rowbtns"><button class="hbtn" id="rp-move">✋ MOVE / PLACE THIS CASE</button></div>
     <div class="rowbtns"><button class="hbtn accent" id="rp-os">💻 LOG IN — RIG OS</button><button class="hbtn gold" id="rp-shop">🛒 SHOP</button><button class="hbtn" id="rp-close">CLOSE</button></div>`;
   p.querySelectorAll('[data-in]').forEach(b=>b.onclick=()=>installPart(selRig,+b.dataset.in));
   p.querySelectorAll('[data-ing]').forEach(b=>b.onclick=()=>installPart(selRig,+b.dataset.ing));
@@ -188,6 +189,7 @@ function renderRigPanel(){
   $('rp-pwr').onclick=()=>togglePower(selRig);
   const fx=$('rp-fix'); if(fx) fx.onclick=()=>repairRig(selRig);
   $('rp-bench').onclick=()=>openBench(selRig);
+  { const mb=$('rp-move'); if(mb) mb.onclick=()=>beginMove({kind:'rig',i:selRig}); }
   $('rp-os').onclick=()=>openOS(selRig);
   $('rp-close').onclick=()=>{ selRig=-1; renderRigPanel(); };
   if(!S.osHint){ S.osHint=1; save();

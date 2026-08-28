@@ -338,7 +338,11 @@ function setTowerOwned(own){
   m.position.x-=c.x; m.position.z-=c.z; m.position.y-=box2.min.y;
   towerVis.add(m);
   const glow=new THREE.PointLight(0x2ee6d6, 26, 8); glow.position.set(0,2.2,1.2); towerVis.add(glow);
-  towerVis.position.set(6.6,0,-ROOM.D/2+0.9); towerVis.rotation.y=0.35;
+  // default spot against the back wall — unless the player has picked it up and
+  // placed it (S.towerPos / S.towerRot from the free-move editor).
+  if(S&&S.towerPos){ towerVis.position.set(S.towerPos.x, S.towerPos.y||0, S.towerPos.z); }
+  else towerVis.position.set(6.6,0,-ROOM.D/2+0.9);
+  towerVis.rotation.y=(S&&S.towerRot!=null)?S.towerRot:0.35;
   scene.add(towerVis);
 }
 /* offscreen thumbnails of each model */

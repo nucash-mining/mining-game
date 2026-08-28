@@ -32,8 +32,26 @@
   <div class="coin" id="coin-pool" title="Mining pools — hover a rig to see its pool·blockchain; click to select" style="cursor:pointer">🏊 <b id="v-pool">Mining Pools</b><span class="pr" id="p-pend"></span></div>
 </div>
 <div id="feed"></div>
-<div id="ctrlhint"><b>WASD</b>/<b>WAX</b>/<b>arrows</b> walk · <b>shift</b> run · <b>F</b> mouse-look (drag works too) · <b>1</b>shop <b>2</b>garage <b>3</b>pools <b>4</b>stats <b>5</b>wallet</div>
+<div id="ctrlhint"><b>WASD</b>/<b>WAX</b>/<b>arrows</b> walk · <b>shift</b> run · <b>F</b> mouse-look · <b>right-click</b> a case or the tower to <b>MOVE</b> it · <b>1</b>shop <b>2</b>garage <b>3</b>pools <b>4</b>stats <b>5</b>wallet</div>
 <button id="standbtn" style="display:none">🧍 STAND UP <small>(esc)</small></button>
+<div id="movebar" style="display:none">
+  <span class="mv-name">✋ Moving <b id="move-name">Rig</b></span>
+  <div class="mv-grp">
+    <button id="mv-lf" title="move left">◀</button>
+    <button id="mv-up" title="move back">▲</button>
+    <button id="mv-dn" title="move forward">▼</button>
+    <button id="mv-rt" title="move right">▶</button>
+  </div>
+  <div class="mv-grp">
+    <button id="mv-rotl" title="rotate left">⟲</button>
+    <button id="mv-rotr" title="rotate right">⟳</button>
+    <button id="mv-raise" title="raise">⤒</button>
+    <button id="mv-lower" title="lower">⤓</button>
+    <button id="mv-snap" title="snap to nearest desk/shelf">🧲</button>
+  </div>
+  <button id="mv-done" class="mv-ok">✓ DONE</button>
+  <button id="mv-cancel" class="mv-x">✕</button>
+</div>
 <div id="tut"></div>
 
 <!-- ============ SHOP ============ -->

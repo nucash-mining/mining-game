@@ -46,6 +46,20 @@ button{font-family:inherit;cursor:pointer}
 .hbtn{background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 12px;font-size:12.5px;font-weight:600;letter-spacing:.04em;transition:all .15s}
 .hbtn:hover{border-color:var(--pur);background:var(--panel2);transform:translateY(-1px)}
 .hbtn.gold{color:var(--gold)} .hbtn.accent{color:var(--cyan)}
+/* free-move / place bar (bottom-center) */
+#movebar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;
+  display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:14px;
+  background:rgba(14,11,30,.92);border:1px solid var(--pur);box-shadow:0 8px 30px rgba(0,0,0,.5);
+  backdrop-filter:blur(6px);font-size:12px;max-width:96vw;flex-wrap:wrap;justify-content:center}
+#movebar .mv-name{color:var(--cyan);font-weight:700;letter-spacing:.03em;white-space:nowrap}
+#movebar .mv-name b{color:#fff}
+#movebar .mv-grp{display:flex;gap:4px}
+#movebar button{width:38px;height:38px;font-size:16px;line-height:1;border-radius:10px;
+  background:var(--panel2);border:1px solid var(--line);color:var(--txt);cursor:pointer;transition:all .12s}
+#movebar button:hover{border-color:var(--pur);background:#241a47;transform:translateY(-1px)}
+#movebar #mv-done{width:auto;padding:0 14px;font-size:13px;font-weight:700;color:#04170c;background:var(--grn);border-color:transparent}
+#movebar #mv-cancel{color:var(--red)}
+@media(max-width:560px){#movebar .mv-name{width:100%;text-align:center}}
 /* network pill */
 #net{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 11px;font-size:12.5px;font-weight:600}
 #net .dot{width:8px;height:8px;border-radius:50%;background:var(--pur);box-shadow:0 0 8px var(--pur)}
