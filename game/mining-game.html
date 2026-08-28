@@ -371,6 +371,7 @@ body.touch.walkoff #joy{display:none}
   <div class="coin" id="coin-wtx">🟡 <b id="v-wtx">0</b> WTX <span class="pr" id="p-wtx">@2.0</span><button id="sell-wtx">SELL</button></div>
   <div class="coin" id="coin-usdt" style="display:none">💵 <b id="v-usdt">0</b> USDT</div>
   <div class="coin" id="coin-dai" style="display:none">◈ <b id="v-dai">0</b> DAI</div>
+  <span id="wallet-extra" style="display:contents"></span>
   <div class="coin" id="coin-pool" title="Mining pool — click to select a pool" style="cursor:pointer">🏊 <b id="v-pool">nucash-mining</b><span class="pr" id="p-pend"></span></div>
 </div>
 <div id="feed"></div>
@@ -5136,6 +5137,57 @@ async function ocRouteQuote(from,to,amount){
   try{ const r=await fetch(`https://bridge.wattxchange.app/api/route?from=${from}&to=${to}&amount=${amount}`);
     return await r.json(); }catch(e){ return null; }
 }
+/* ===== ALL-COINS SELL — wrapped EVM coins (wHTH/wBITN/wTHA/wALT) are held by
+   the connected wallet and sold through the SAME cross-chain aggregator + pools
+   as WTX/ALT/POL. A wrapped coin equals its native coin 1:1, so the aggregator
+   is queried by the native symbol. Only coins with a live balance are shown. ===== */
+const EXTRA_COINS = [
+  {sym:'wHTH', emoji:'🏠', route:'HTH',  dec:8,  tok:{polygon:'0x589136E488C7BE2BaBE1a9F03097B781205f92dc', alt:'0x71d1e3771F6cA847204c6B5dc5562805816E965E'}},
+  {sym:'wBITN',emoji:'🅱', route:'BITN', dec:8,  tok:{polygon:'0x1DeAd34D1151fF3d55afd117ddE77C51fe143eB2', alt:'0x2caa91cD011B00D2A8BeEefF630b27D66f7f0345'}},
+  {sym:'wTHA', emoji:'🌀', route:'THA',  dec:8,  tok:{polygon:'0x7B4A154988561A9cFD805954DfB30098c152bD8f', alt:'0xC9a8fDEE64b2FCf183f8078af1c23756bb69Bf1d'}},
+  {sym:'wALT', emoji:'🟠', route:'ALT',  dec:18, tok:{alt:'0x48721adefe5b97101722c0866c2affce797c32b6'}},
+];
+const W3X = {}; let _w3xT=0;
+async function w3ExtraBalances(force){
+  if(!W3.addr||!W3.chain) return;
+  if(!force && Date.now()-_w3xT<15000) return; _w3xT=Date.now();
+  const key=W3.chain.key;
+  for(const c of EXTRA_COINS){
+    const addr=c.tok[key];
+    if(!addr){ delete W3X[c.sym]; continue; }
+    try{ const h=await w3CallRaw(addr, WEB3CFG.sel.balErc20+encA(W3.addr));
+      W3X[c.sym]=(h&&h!=='0x')?Number(BigInt(h))/(10**c.dec):0; }
+    catch(e){ W3X[c.sym]=0; }
+  }
+  renderExtraCoins();
+}
+function renderExtraCoins(){
+  const el=$('wallet-extra'); if(!el) return;
+  if(S.mode!=='live'||!W3.addr){ el.innerHTML=''; return; }
+  el.innerHTML=EXTRA_COINS.filter(c=>(W3X[c.sym]||0)>1e-7).map(c=>
+    `<div class="coin" id="coin-${c.sym.toLowerCase()}">${c.emoji} <b>${fmt(W3X[c.sym])}</b> ${c.sym} <button data-sellx="${c.sym}">SELL</button></div>`).join('');
+  el.querySelectorAll('[data-sellx]').forEach(b=>b.onclick=()=>ocSellExtra(b.dataset.sellx));
+}
+async function ocSellExtra(sym){
+  const c=EXTRA_COINS.find(x=>x.sym===sym); if(!c) return;
+  const from=c.route, targets=['WATT','WTX','POL','ALT'].filter(t=>t!==from);
+  toast('Quoting routes for '+sym+'…','cyan',3000);
+  const routed={}; await Promise.all(targets.map(async t=>{ routed[t]=await ocRouteQuote(from,t,1); }));
+  const opts=targets.map(t=>{ const q=routed[t];
+    if(q&&q.available){ const hops=q.steps.length;
+      return {value:'route:'+t, label:`<b>${t}</b> — 1 ${sym} ≈ ${q.amountOut<0.01?q.amountOut.toPrecision(3):q.amountOut.toLocaleString(undefined,{maximumFractionDigits:3})} ${t} <small style="opacity:.7">via ${hops}-leg route</small>`}; }
+    return {value:t, disabled:true, label:`<b>${t}</b> <small style="opacity:.6">${(q&&q.blocked&&q.blocked[0]&&q.blocked[0].note)||('no route yet — seed the '+sym+'/WATT pool')}</small>`};
+  });
+  const pick=await ocChoose(`💱 SELL ${sym} — what do you want for it? <small style="opacity:.6">(wrapped ${c.route}, 1:1)</small>`,opts);
+  if(!pick||!pick.startsWith('route:')) return;
+  const to=pick.slice(6);
+  const raw=prompt(`How much ${sym} to sell for ${to}?`, String(W3X[sym]||''));
+  if(raw===null) return;
+  const a=parseFloat(raw); if(!(a>0)){ SFX.err(); toast('Enter a positive amount','red'); return; }
+  const q=await ocRouteQuote(from,to,a);
+  if(q&&q.available) ocShowRoute(sym,to,q);
+  else toast('Route unavailable: '+((q&&q.blocked&&q.blocked[0]&&q.blocked[0].note)||'quote failed'),'red',9000);
+}
 function ocShowRoute(from,to,q){
   const steps=(q.steps||[]).map((s,i)=>({value:null,disabled:true,
     label:`<b>${i+1}.</b> ${s.venue} <small style="opacity:.7">(${s.chain}) ${fmt(s.in)} → ${fmt(s.out)}</small>`}));
@@ -5948,6 +6000,7 @@ function renderHud(){
              :`No ${cn.toUpperCase()} to sell — mine some first`);
   });
   $('v-usdt').textContent=fmt(S.usdt); $('v-dai').textContent=fmt(S.dai);
+  if(typeof renderExtraCoins==='function'){ renderExtraCoins(); if(S.mode==='live'&&W3.addr) w3ExtraBalances(); }
   $('coin-usdt').style.display=S.usdt>0.005?'flex':'none';
   $('coin-dai').style.display=S.dai>0.005?'flex':'none';
   const mp=$('modepill');

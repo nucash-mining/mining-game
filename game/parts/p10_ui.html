@@ -59,6 +59,7 @@ function renderHud(){
              :`No ${cn.toUpperCase()} to sell — mine some first`);
   });
   $('v-usdt').textContent=fmt(S.usdt); $('v-dai').textContent=fmt(S.dai);
+  if(typeof renderExtraCoins==='function'){ renderExtraCoins(); if(S.mode==='live'&&W3.addr) w3ExtraBalances(); }
   $('coin-usdt').style.display=S.usdt>0.005?'flex':'none';
   $('coin-dai').style.display=S.dai>0.005?'flex':'none';
   const mp=$('modepill');
