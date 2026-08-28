@@ -182,8 +182,10 @@ async function w3Switch(key){
 }
 async function w3Refresh(force){
   if(!W3.addr){
-    // wallet locked / all accounts disconnected: empty the LIVE room too
-    if(typeof isLive==='function'&&isLive()){ S.rigs=[]; rebuildAllRigs&&rebuildAllRigs(); }
+    // No wallet (locked / disconnected / not yet connected): DON'T wipe the room.
+    // Boot deliberately shows your last-known rigs without a wallet, so keep them
+    // on screen until a wallet actually connects and re-syncs (held+staked). An
+    // account SWITCH to an empty wallet still clears via syncLiveRigsFromChain.
     renderWallet(); renderHud&&renderHud(); return;
   }
   const c=W3.chain;

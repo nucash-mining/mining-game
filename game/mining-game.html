@@ -4690,8 +4690,10 @@ async function w3Switch(key){
 }
 async function w3Refresh(force){
   if(!W3.addr){
-    // wallet locked / all accounts disconnected: empty the LIVE room too
-    if(typeof isLive==='function'&&isLive()){ S.rigs=[]; rebuildAllRigs&&rebuildAllRigs(); }
+    // No wallet (locked / disconnected / not yet connected): DON'T wipe the room.
+    // Boot deliberately shows your last-known rigs without a wallet, so keep them
+    // on screen until a wallet actually connects and re-syncs (held+staked). An
+    // account SWITCH to an empty wallet still clears via syncLiveRigsFromChain.
     renderWallet(); renderHud&&renderHud(); return;
   }
   const c=W3.chain;
@@ -5164,22 +5166,37 @@ async function syncLiveRigsFromChain(force){
   if(!force && Date.now()-_liveRigSyncAt<8000) return; _liveRigSyncAt=Date.now();
   try{
     const rig=await poolCtr('rig');
-    const bal=Number(await rig.balanceOf(W3.addr));
     const slots=(typeof eligibleSlots==='function')?eligibleSlots():[0,1,2];
-    const built=[];
-    for(let i=0;i<bal && i<slots.length;i++){
-      let id, hash=1200, algo=0;
-      try{ id=Number(await rig.tokenOfOwnerByIndex(W3.addr,i)); }catch(e){ continue; }
-      try{ const t=await rig.getRigTraits(id); hash=Number(t.hashRate)||1200; algo=Number(t.algorithm); }catch(e){}
-      const ngpu=Math.max(1,Math.min(8,Math.round(hash/400)));
-      built.push({ ocId:id, algo, slot:slots[i], cpu:3, gpus:Array(ngpu).fill(5), asic:0, frame:0, oc:{c:0,m:0}, crashT:0, on:1, wear:0 });
+    // A rig you STAKE to mine leaves your wallet (escrowed in the pool), so
+    // balanceOf drops to 0. Build the room from BOTH held rigs AND staked rigs,
+    // otherwise staking your farm makes it vanish from the garage.
+    const ids=[]; let heldOk=false, stakedOk=false;
+    try{
+      const bal=Number(await rig.balanceOf(W3.addr)); heldOk=true;
+      for(let i=0;i<bal;i++){ try{ ids.push({id:Number(await rig.tokenOfOwnerByIndex(W3.addr,i)), staked:false}); }catch(e){} }
+    }catch(e){}
+    const c=(typeof poolCfg==='function')?poolCfg():null;
+    if(c&&c.pools&&c.pools.stakingPool){
+      try{
+        const sp=await poolCtr('staking');
+        const [,stkIds]=await sp.getUserStakedRigs(W3.addr); stakedOk=true;
+        for(let i=0;i<stkIds.length;i++) ids.push({id:Number(stkIds[i]), staked:true});
+      }catch(e){}
     }
-    S.overCap = Math.max(0, bal - slots.length);
-    // Mirror EXACTLY this wallet's rigs — including zero. Switching to an account
-    // that owns no rig NFTs (bal===0) must CLEAR the room, not leave the previous
-    // account's rigs on the desks. Only skip the swap on a transient read error
-    // (bal>0 but we built nothing), so a hiccup never wipes a real farm.
-    if(built.length || bal===0){
+    const built=[];
+    for(let i=0;i<ids.length && i<slots.length;i++){
+      let hash=1200, algo=0;
+      try{ const t=await rig.getRigTraits(ids[i].id); hash=Number(t.hashRate)||1200; algo=Number(t.algorithm); }catch(e){}
+      const ngpu=Math.max(1,Math.min(8,Math.round(hash/400)));
+      built.push({ ocId:ids[i].id, algo, staked:ids[i].staked, slot:slots[i], cpu:3, gpus:Array(ngpu).fill(5), asic:0, frame:0, oc:{c:0,m:0}, crashT:0, on:1, wear:0 });
+    }
+    S.overCap = Math.max(0, ids.length - slots.length);
+    // Only replace the room when the chain ACTUALLY answered (held and/or staked
+    // read succeeded). If both reads threw — RPC hiccup, missing contract — leave
+    // the saved rigs untouched so a transient error never blanks a real farm.
+    // A genuinely empty wallet (both reads OK, zero rigs) still clears the room,
+    // which is what an account switch to an empty wallet should do.
+    if(heldOk || stakedOk){
       S.rigs=built;
       if(typeof rebuildAllRigs==='function') rebuildAllRigs();
       if(typeof renderHud==='function') renderHud();
