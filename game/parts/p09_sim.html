@@ -225,9 +225,9 @@ function buyItem(id){
     toast('🏅 GENESIS BADGE acquired! +10% luck · +10% efficiency','gold');
   } else if(it.comp==='Peripheral'){ S.periph[id]=1; rebuildAllRigs();
     toast(`🖱 ${it.name} — +2% luck on every desk${periphCount()===3?' · FULL BATTLESTATION SET +3%':''}`, periphCount()===3?'gold':'grn');
-  } else if(id===19){ S.tower=1; setTowerOwned(true);
+  } else if(id===19){ S.tower=1; if(!S.towerRig) S.towerRig={cpus:[],gpus:[],on:1}; setTowerOwned(true);
     burst(new THREE.Vector3(5.4,2.2,-ROOM.D/2+1.9),40,partMatCyan,3.5);
-    toast('🗼 SERVER TOWER online — +40 stake weight · +20% stake income','gold');
+    toast('🗄 SERVER TOWER online — +40 stake weight · +20% stake income. CLICK it to open its dual-CPU board and install up to 2 CPUs + 6 GPUs.','gold',9000);
   } else { S.inv[id]++; toast(`${it.name} added to inventory — open a rig to install`,'grn'); }
   SFX.buy(); renderHud(); renderShop(); save();
 }

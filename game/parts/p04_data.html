@@ -36,7 +36,7 @@ const ITEMS = {
   13:{id:13,key:'asic', name:'Bit Hammer ASIC',brand:'Bit Hammer',comp:'ASIC',gen:2, hash:320,watt:110,sw:120, supply:250, price:60000, scene:'13_Bit_Hammer_ASIC', gen2:1,
      desc:'Purpose-built hashing brick. One per rig. Runs HOT.'},
   19:{id:19,key:'tower',name:'Server Tower',brand:'Minga', comp:'Structure',gen:2, hash:0, watt:0,  sw:40, supply:1, price:20000, scene:'19_Server_Tower', gen2:1,
-     desc:'Garage centerpiece. +40 stake weight and +20% stake income.'},
+     desc:'A buildable dual-CPU server: +40 stake weight & +20% stake income, and click it to install up to 2 CPUs + 6 GPUs on its server board.'},
   /* battlestation peripherals — small permanent luck boosts, survive prestige */
   17:{id:17,key:'mouse',  name:'Red Mouse',   brand:'Minga', comp:'Peripheral', gen:1, hash:0, watt:0, sw:0, supply:1, price:2500, scene:'17_Red_Mouse', luck:2,
      desc:'+2% luck. Appears on every desk. Set bonus with keyboard & monitor.'},
@@ -122,7 +122,7 @@ const now=()=>Date.now();
 let S=null;
 function freshState(){ const inv={},bought={2:0,17:0,18:0,19:0,23:0}; INV_IDS.forEach(i=>{inv[i]=0;bought[i]=0;}); return {
   watt:CFG.startWatt, lifeWatt:0, pol:0, alt:0, wtx:0, price:{pol:CFG.nets.polygon.p0, alt:CFG.nets.alt.p0, wtx:CFG.nets.wattx.p0},
-  net:'polygon', rigs:[], inv, badge:0, bought, pcCount:0, periph:{17:0,18:0,23:0}, tower:0, payoutAddr:null,
+  net:'polygon', rigs:[], inv, badge:0, bought, pcCount:0, periph:{17:0,18:0,23:0}, tower:0, towerRig:{cpus:[],gpus:[],on:1}, payoutAddr:null,
   upg:{power:0,cooling:0,rack:0,rackgpu:0}, gen:1, blocks:0, blocksNet:{pol:0,alt:0,wtx:0}, lucky:0,
   temp:24, muted:false, tut:0, created:now(), lastSeen:now(), sold:{pol:0,alt:0,wtx:0}, netSwitchT:0,
   payCur:'watt', w3claim:{}, ocRigs:[], mode:'demo', monSize:27, chair:0,
@@ -144,6 +144,8 @@ function load(mode){ mode=mode==='live'?'live':'demo';
   const st=Object.assign(f,o);
   st.inv=inv; st.bought=bought;
   st.periph=Object.assign({17:0,18:0,23:0},o.periph||{}); st.tower=o.tower||0;
+  st.towerRig=(o.towerRig&&Array.isArray(o.towerRig.cpus))?o.towerRig:{cpus:[],gpus:[],on:1};
+  st.towerRig.cpus=st.towerRig.cpus||[]; st.towerRig.gpus=st.towerRig.gpus||[]; if(st.towerRig.on===undefined) st.towerRig.on=1;
   st.rigs.forEach(r=>{ if(r.cpu===1||r.cpu===true) r.cpu=3; r.cpu=r.cpu||0; r.asic=r.asic||0; r.frame=r.frame||0;
     r.oc=r.oc||{c:0,m:0}; r.crashT=r.crashT||0; r.on=r.on===undefined?1:r.on; r.wear=r.wear||0; });
   st.monSize=MONSIZES[st.monSize]?st.monSize:27; st.price.wtx=st.price.wtx||CFG.nets.wattx.p0; st.wtx=st.wtx||0;
@@ -197,10 +199,16 @@ function upgPrice(k,lv){ const arr=CFG.upPrice[k]; if(lv<arr.length) return arr[
   const mag=Math.pow(10,Math.floor(Math.log10(v))-2); return Math.round(v/mag)*mag; }   // 3 significant figures
 function powerCapAddAt(i){ const a=CFG.powerCapAdd; return i<a.length?a[i]:Math.round(a[a.length-1]*Math.pow(CFG.powerCapGrowth||1.65,i-a.length+1)); }
 function coolCoeffAt(lv){ const a=CFG.coolCoeff; return lv<a.length?a[lv]:a[a.length-1]*Math.pow(CFG.coolGrowth||0.75,lv-a.length+1); }
-function totHash(){ return S.rigs.reduce((a,r)=>a+rigHash(r),0) * Math.pow(CFG.gen2Mult,S.gen-1); }
-function totWatt(){ return S.rigs.reduce((a,r)=>a+rigWatt(r),0); }
-function totSW(){ return S.rigs.reduce((a,r)=>a+rigSW(r),0) + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
-function totSWStake(){ return S.rigs.reduce((a,r)=>a+rigSW(r)*(r.on?0.25:1),0) + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
+/* Server Tower is a built rig too: its dual-CPU board (up to 2 CPUs + 6 GPUs)
+   contributes hash/watt/stake just like a Gaming PC. Guard on ownership. */
+function towerRigOn(){ const t=S.tower&&S.towerRig; return !!(t&&t.on!==0); }
+function towerHash(){ const t=towerRigOn()&&S.towerRig; if(!t) return 0; let h=0; for(const c of t.cpus) h+=ITEMS[c].hash; for(const g of t.gpus) h+=ITEMS[g].hash; return h; }
+function towerWatt(){ const t=towerRigOn()&&S.towerRig; if(!t) return 0; let w=0; for(const c of t.cpus) w+=ITEMS[c].watt; for(const g of t.gpus) w+=ITEMS[g].watt; return w; }
+function towerCompSW(){ const t=S.tower&&S.towerRig; if(!t) return 0; let s=0; for(const c of t.cpus) s+=ITEMS[c].sw; for(const g of t.gpus) s+=ITEMS[g].sw; return s; }
+function totHash(){ return (S.rigs.reduce((a,r)=>a+rigHash(r),0)+towerHash()) * Math.pow(CFG.gen2Mult,S.gen-1); }
+function totWatt(){ return S.rigs.reduce((a,r)=>a+rigWatt(r),0)+towerWatt(); }
+function totSW(){ return S.rigs.reduce((a,r)=>a+rigSW(r),0) + towerCompSW() + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
+function totSWStake(){ return S.rigs.reduce((a,r)=>a+rigSW(r)*(r.on?0.25:1),0) + towerCompSW() + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
 function rigValue(r){ let v=ITEMS[1].price; if(r.cpu) v+=ITEMS[r.cpu].price; if(r.asic) v+=ITEMS[r.asic].price; if(r.frame) v+=ITEMS[14].price; for(const g of r.gpus) v+=ITEMS[g].price; return v; }
 function repairCost(r){ return Math.ceil(rigValue(r)*0.18*(r.wear||0)/100); }
 function stakeMult(){ return S.tower?CFG.towerStakeMult:1; }

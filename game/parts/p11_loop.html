@@ -30,6 +30,13 @@ function pick(e){
   if(ch.length&&(!hits.length||ch[0].distance<hits[0].distance)) return {chair:ch[0].object.userData.chairSlot};
   return hits.length?hits[0].object.userData.rig:-1;
 }
+function towerHitAt(e){
+  if(typeof towerVis==='undefined'||!towerVis||!towerVis.visible) return false;
+  const r=canvas.getBoundingClientRect();
+  mouse.x=((e.clientX-r.left)/r.width)*2-1; mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+  ray.setFromCamera(mouse,cam);
+  return ray.intersectObject(towerVis,true).length>0;
+}
 canvas.addEventListener('pointermove',e=>{
   if(TRAILER) return;
   if(moveSel){ if(e.buttons&1) moveDragTo(e); canvas.style.cursor='grabbing'; return; }
@@ -44,6 +51,7 @@ canvas.addEventListener('pointerup',e=>{
   if(TRAILER||!pdown) return;
   const dx=e.clientX-pdown[0], dy=e.clientY-pdown[1]; pdown=null;
   if(dx*dx+dy*dy>36) return;
+  if(towerHitAt(e)){ SFX.click(); openTowerBench(); return; }   // click the Server Tower → build it
   const h=pick(e);
   if(h&&h.chair!==undefined){ sitDown(h.chair); return; }
   if(SIT.on){ standUp(); return; }

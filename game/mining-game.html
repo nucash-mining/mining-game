@@ -435,7 +435,7 @@ body.touch.walkoff #joy{display:none}
 <!-- ============ WORKBENCH (open case / drag-snap install) ============ -->
 <div id="bench">
   <div id="bench-top">
-    <h3>🔧 WORKBENCH — RIG <span id="bench-rig">1</span></h3>
+    <h3>🔧 WORKBENCH — <span id="bench-rig">RIG 1</span></h3>
     <small id="bench-sub">side panel off · components at real-life scale</small>
     <span style="flex:1"></span>
     <button class="hbtn gold" id="bench-shop">🛒 BUY COMPONENTS</button>
@@ -2707,7 +2707,7 @@ const ITEMS = {
   13:{id:13,key:'asic', name:'Bit Hammer ASIC',brand:'Bit Hammer',comp:'ASIC',gen:2, hash:320,watt:110,sw:120, supply:250, price:60000, scene:'13_Bit_Hammer_ASIC', gen2:1,
      desc:'Purpose-built hashing brick. One per rig. Runs HOT.'},
   19:{id:19,key:'tower',name:'Server Tower',brand:'Minga', comp:'Structure',gen:2, hash:0, watt:0,  sw:40, supply:1, price:20000, scene:'19_Server_Tower', gen2:1,
-     desc:'Garage centerpiece. +40 stake weight and +20% stake income.'},
+     desc:'A buildable dual-CPU server: +40 stake weight & +20% stake income, and click it to install up to 2 CPUs + 6 GPUs on its server board.'},
   /* battlestation peripherals — small permanent luck boosts, survive prestige */
   17:{id:17,key:'mouse',  name:'Red Mouse',   brand:'Minga', comp:'Peripheral', gen:1, hash:0, watt:0, sw:0, supply:1, price:2500, scene:'17_Red_Mouse', luck:2,
      desc:'+2% luck. Appears on every desk. Set bonus with keyboard & monitor.'},
@@ -2793,7 +2793,7 @@ const now=()=>Date.now();
 let S=null;
 function freshState(){ const inv={},bought={2:0,17:0,18:0,19:0,23:0}; INV_IDS.forEach(i=>{inv[i]=0;bought[i]=0;}); return {
   watt:CFG.startWatt, lifeWatt:0, pol:0, alt:0, wtx:0, price:{pol:CFG.nets.polygon.p0, alt:CFG.nets.alt.p0, wtx:CFG.nets.wattx.p0},
-  net:'polygon', rigs:[], inv, badge:0, bought, pcCount:0, periph:{17:0,18:0,23:0}, tower:0, payoutAddr:null,
+  net:'polygon', rigs:[], inv, badge:0, bought, pcCount:0, periph:{17:0,18:0,23:0}, tower:0, towerRig:{cpus:[],gpus:[],on:1}, payoutAddr:null,
   upg:{power:0,cooling:0,rack:0,rackgpu:0}, gen:1, blocks:0, blocksNet:{pol:0,alt:0,wtx:0}, lucky:0,
   temp:24, muted:false, tut:0, created:now(), lastSeen:now(), sold:{pol:0,alt:0,wtx:0}, netSwitchT:0,
   payCur:'watt', w3claim:{}, ocRigs:[], mode:'demo', monSize:27, chair:0,
@@ -2815,6 +2815,8 @@ function load(mode){ mode=mode==='live'?'live':'demo';
   const st=Object.assign(f,o);
   st.inv=inv; st.bought=bought;
   st.periph=Object.assign({17:0,18:0,23:0},o.periph||{}); st.tower=o.tower||0;
+  st.towerRig=(o.towerRig&&Array.isArray(o.towerRig.cpus))?o.towerRig:{cpus:[],gpus:[],on:1};
+  st.towerRig.cpus=st.towerRig.cpus||[]; st.towerRig.gpus=st.towerRig.gpus||[]; if(st.towerRig.on===undefined) st.towerRig.on=1;
   st.rigs.forEach(r=>{ if(r.cpu===1||r.cpu===true) r.cpu=3; r.cpu=r.cpu||0; r.asic=r.asic||0; r.frame=r.frame||0;
     r.oc=r.oc||{c:0,m:0}; r.crashT=r.crashT||0; r.on=r.on===undefined?1:r.on; r.wear=r.wear||0; });
   st.monSize=MONSIZES[st.monSize]?st.monSize:27; st.price.wtx=st.price.wtx||CFG.nets.wattx.p0; st.wtx=st.wtx||0;
@@ -2868,10 +2870,16 @@ function upgPrice(k,lv){ const arr=CFG.upPrice[k]; if(lv<arr.length) return arr[
   const mag=Math.pow(10,Math.floor(Math.log10(v))-2); return Math.round(v/mag)*mag; }   // 3 significant figures
 function powerCapAddAt(i){ const a=CFG.powerCapAdd; return i<a.length?a[i]:Math.round(a[a.length-1]*Math.pow(CFG.powerCapGrowth||1.65,i-a.length+1)); }
 function coolCoeffAt(lv){ const a=CFG.coolCoeff; return lv<a.length?a[lv]:a[a.length-1]*Math.pow(CFG.coolGrowth||0.75,lv-a.length+1); }
-function totHash(){ return S.rigs.reduce((a,r)=>a+rigHash(r),0) * Math.pow(CFG.gen2Mult,S.gen-1); }
-function totWatt(){ return S.rigs.reduce((a,r)=>a+rigWatt(r),0); }
-function totSW(){ return S.rigs.reduce((a,r)=>a+rigSW(r),0) + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
-function totSWStake(){ return S.rigs.reduce((a,r)=>a+rigSW(r)*(r.on?0.25:1),0) + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
+/* Server Tower is a built rig too: its dual-CPU board (up to 2 CPUs + 6 GPUs)
+   contributes hash/watt/stake just like a Gaming PC. Guard on ownership. */
+function towerRigOn(){ const t=S.tower&&S.towerRig; return !!(t&&t.on!==0); }
+function towerHash(){ const t=towerRigOn()&&S.towerRig; if(!t) return 0; let h=0; for(const c of t.cpus) h+=ITEMS[c].hash; for(const g of t.gpus) h+=ITEMS[g].hash; return h; }
+function towerWatt(){ const t=towerRigOn()&&S.towerRig; if(!t) return 0; let w=0; for(const c of t.cpus) w+=ITEMS[c].watt; for(const g of t.gpus) w+=ITEMS[g].watt; return w; }
+function towerCompSW(){ const t=S.tower&&S.towerRig; if(!t) return 0; let s=0; for(const c of t.cpus) s+=ITEMS[c].sw; for(const g of t.gpus) s+=ITEMS[g].sw; return s; }
+function totHash(){ return (S.rigs.reduce((a,r)=>a+rigHash(r),0)+towerHash()) * Math.pow(CFG.gen2Mult,S.gen-1); }
+function totWatt(){ return S.rigs.reduce((a,r)=>a+rigWatt(r),0)+towerWatt(); }
+function totSW(){ return S.rigs.reduce((a,r)=>a+rigSW(r),0) + towerCompSW() + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
+function totSWStake(){ return S.rigs.reduce((a,r)=>a+rigSW(r)*(r.on?0.25:1),0) + towerCompSW() + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
 function rigValue(r){ let v=ITEMS[1].price; if(r.cpu) v+=ITEMS[r.cpu].price; if(r.asic) v+=ITEMS[r.asic].price; if(r.frame) v+=ITEMS[14].price; for(const g of r.gpus) v+=ITEMS[g].price; return v; }
 function repairCost(r){ return Math.ceil(rigValue(r)*0.18*(r.wear||0)/100); }
 function stakeMult(){ return S.tower?CFG.towerStakeMult:1; }
@@ -3412,12 +3420,20 @@ function setTowerOwned(own){
   m.position.x-=c.x; m.position.z-=c.z; m.position.y-=box2.min.y;
   towerVis.add(m);
   const glow=new THREE.PointLight(0x2ee6d6, 26, 8); glow.position.set(0,2.2,1.2); towerVis.add(glow);
+  towerVis.userData.glow=glow;
   // default spot against the back wall — unless the player has picked it up and
   // placed it (S.towerPos / S.towerRot from the free-move editor).
   if(S&&S.towerPos){ towerVis.position.set(S.towerPos.x, S.towerPos.y||0, S.towerPos.z); }
   else towerVis.position.set(6.6,0,-ROOM.D/2+0.9);
   towerVis.rotation.y=(S&&S.towerRot!=null)?S.towerRot:0.35;
   scene.add(towerVis);
+  syncTowerGlow();
+}
+/* brighten the tower's glow with how much hardware is installed in it */
+function syncTowerGlow(){
+  if(typeof towerVis==='undefined'||!towerVis||!towerVis.userData.glow) return;
+  const load=(typeof towerHash==='function')?towerHash():0;
+  towerVis.userData.glow.intensity=26+Math.min(50,load*0.15);
 }
 /* offscreen thumbnails of each model */
 function makeThumbs(){
@@ -3818,9 +3834,25 @@ function drawScreen(){
 /* ================= WORKBENCH — open case, real-scale motherboard, drag-snap install ================= */
 /* bench scale: 6 units per meter. ATX board 305x244mm, GPU 300mm, CPU package 40mm. */
 const BM=6;
-let benchOpen=false, benchRi=0, benchInit=false;
+let benchOpen=false, benchRi=0, benchInit=false, benchIsTower=false;
 let bR=null, bScene=null, bCam=null, bBoardG=null, bMountG=null, bSlotG=null;
-let bSlots=[], bDrag=null, bSel=null, bT=0, bPuffs=[];
+let bSlots=[], bDrag=null, bSel=null, bT=0, bPuffs=[], bMountHits=[];
+// what the bench is editing: a Gaming PC rig, or the Server Tower's dual-CPU board.
+function benchTarget(){ return benchIsTower ? S.towerRig : S.rigs[benchRi]; }
+const TOWER_MAXCPU=2, TOWER_MAXGPU=6;
+function towerInstallItem(id){
+  const t=S.towerRig, it=ITEMS[id]; if(!t) return false;
+  if((S.inv[id]||0)<=0){ SFX.err(); return false; }
+  if(it.comp==='Processor'){ if(t.cpus.length>=TOWER_MAXCPU){ SFX.err(); toast('Both CPU sockets are full','red'); return false; } t.cpus.push(id); }
+  else if(it.comp==='GPU'){ if(t.gpus.length>=TOWER_MAXGPU){ SFX.err(); toast('All 6 GPU slots are full','red'); return false; } t.gpus.push(id); }
+  else { SFX.err(); toast('The server board takes CPUs and GPUs only','red'); return false; }
+  S.inv[id]--; SFX.install(); if(typeof syncTowerGlow==='function')syncTowerGlow(); renderHud&&renderHud(); save&&save(); return true;
+}
+function towerRemoveMount(u){
+  const t=S.towerRig; if(!t||!u) return;
+  const arr=u.kind==='cpu'?t.cpus:t.gpus; const id=arr[u.ix]; if(id==null) return;
+  arr.splice(u.ix,1); S.inv[id]=(S.inv[id]||0)+1; SFX.click(); benchSync(); if(typeof syncTowerGlow==='function')syncTowerGlow(); renderHud&&renderHud(); save&&save();
+}
 const bRay=new THREE.Raycaster(), bPtr=new THREE.Vector2();
 const BOARD_TILT=0.98; // rad, test-bench tilt toward camera (component face up)
 function benchSetup(){
@@ -3869,6 +3901,14 @@ function benchSetup(){
 const SLOT_Y=0.32;
 function benchSlotDefs(r){
   const defs=[];
+  if(benchIsTower){
+    // dual-CPU server board: 2 CPU sockets across the top, 6 PCIe x16 slots down the board
+    defs.push({kind:'cpu', cidx:0, x:-0.42, z:-0.55, y:0.46, label:'CPU SOCKET 1', filled:!!r.cpus[0]});
+    defs.push({kind:'cpu', cidx:1, x: 0.42, z:-0.55, y:0.46, label:'CPU SOCKET 2', filled:!!r.cpus[1]});
+    for(let k=0;k<TOWER_MAXGPU;k++)
+      defs.push({kind:'gpu', idx:k, x:0, z:-0.24+k*0.18, label:'PCIe x16 · '+(k+1), filled:!!r.gpus[k]});
+    return defs;
+  }
   defs.push({kind:'cpu', x:-0.28, z:-0.52, y:0.46, label:'CPU SOCKET', filled:!!r.cpu});
   const cap=gpuCap(r), onBoard=Math.min(cap,4);
   for(let k=0;k<onBoard;k++)
@@ -3899,12 +3939,16 @@ function benchCompMesh(kind, id){
   return new THREE.Group();
 }
 let bSceneBits=[];
+function addMountHit(x,y,z,kind,ix){
+  const h=new THREE.Mesh(new THREE.SphereGeometry(kind==='gpu'?0.3:0.24,8,8), new THREE.MeshBasicMaterial({visible:false}));
+  h.position.set(x,y,z); h.userData.mount={kind,ix}; bMountG.add(h); bMountHits.push(h);
+}
 function benchSync(){
-  const r=S.rigs[benchRi]; if(!r) return;
+  const r=benchTarget(); if(!r) return;
   while(bSlotG.children.length) bSlotG.remove(bSlotG.children[0]);
   while(bMountG.children.length) bMountG.remove(bMountG.children[0]);
   bSceneBits.forEach(o=>bScene.remove(o)); bSceneBits=[];
-  bSlots=[];
+  bSlots=[]; bMountHits=[];
   for(const d of benchSlotDefs(r)){
     if(d.floor && d.filled) continue;
     let marker;
@@ -3931,7 +3975,14 @@ function benchSync(){
     bSlots.push(slot);
   }
   // mounted components
-  const r2=S.rigs[benchRi];
+  const r2=benchTarget();
+  if(benchIsTower){
+    r2.cpus.forEach((cid,k)=>{ const m=benchCompMesh('cpu',cid); const x=k===0?-0.42:0.42; m.position.set(x,0.42,-0.55); bMountG.add(m); addMountHit(x,0.52,-0.55,'cpu',k); });
+    r2.gpus.forEach((gid,k)=>{ const m=benchCompMesh('gpu',gid);
+      const bb=new THREE.Box3().setFromObject(m); const sz=new THREE.Vector3(); bb.getSize(sz);
+      m.rotation.x=-Math.PI/2; m.position.set(0, SLOT_Y-0.03+sz.z/2, -0.24+k*0.18); bMountG.add(m); addMountHit(0,SLOT_Y+0.22,-0.24+k*0.18,'gpu',k); });
+    benchTray(); return;
+  }
   if(r2.cpu){ const m=benchCompMesh('cpu',r2.cpu); m.position.set(-0.28,0.42,-0.52); bMountG.add(m); }
   r2.gpus.forEach((gid,k)=>{
     if(k<4){
@@ -3973,12 +4024,13 @@ function benchCompat(slot,it){
 }
 function benchTray(){
   const t=$('bench-tray'); if(!t) return;
-  const r=S.rigs[benchRi];
+  const r=benchTarget();
+  const allow=benchIsTower?['Processor','GPU']:['Processor','GPU','ASIC','Frame'];
   const rows=[];
   for(const id of INV_IDS){
     const n=S.inv[id]||0; if(n<=0) continue;
     const it=ITEMS[id];
-    if(!['Processor','GPU','ASIC','Frame'].includes(it.comp)) continue;
+    if(!allow.includes(it.comp)) continue;
     rows.push(`<div class="traypart ${bSel===id?'drag':''}" data-id="${id}">
       <img src="${THUMB[id]||''}" draggable="false"><b>${it.name}</b><small>${it.comp} · ${it.hash} H</small><span class="n">×${n} in inventory</span></div>`);
   }
@@ -3987,7 +4039,9 @@ function benchTray(){
     el.addEventListener('pointerdown',e=>{ e.preventDefault(); benchDragStart(+el.dataset.id, e); });
   });
   const sub=$('bench-sub');
-  if(sub&&r) sub.textContent=`side panel off · ${r.cpu?'1':'0'}/1 CPU · ${r.gpus.length}/${gpuCap(r)} GPU slots · components at real-life scale`;
+  if(sub&&r) sub.textContent=benchIsTower
+    ? `dual-CPU server board · ${r.cpus.length}/${TOWER_MAXCPU} CPUs · ${r.gpus.length}/${TOWER_MAXGPU} GPUs · click an installed part to remove it`
+    : `side panel off · ${r.cpu?'1':'0'}/1 CPU · ${r.gpus.length}/${gpuCap(r)} GPU slots · components at real-life scale`;
 }
 /* ---------- drag & snap ---------- */
 function benchRayAt(e){
@@ -4041,13 +4095,12 @@ function benchDragEnd(){
   else if(!d.moved){ bSel=(bSel===d.id?null:d.id); benchTray(); } // tap = arm for tap-on-slot
 }
 function benchInstall(slot,id){
-  const before=S.rigs[benchRi].gpus.length + (S.rigs[benchRi].cpu?1:0);
-  installPart(benchRi,id);
-  const after=S.rigs[benchRi].gpus.length + (S.rigs[benchRi].cpu?1:0) + (S.rigs[benchRi].asic?1:0) + (S.rigs[benchRi].frame?1:0);
+  if(benchIsTower){ if(!towerInstallItem(id)) return; }
+  else installPart(benchRi,id);
   bSel=null;
   benchSync();
   // snap pop on the mount point
-  const w=slot.floor?slot.world:bBoardG.localToWorld(new THREE.Vector3(slot.x,SLOT_Y,slot.z));
+  const w=slot.floor?slot.world:bBoardG.localToWorld(new THREE.Vector3(slot.x,slot.y||SLOT_Y,slot.z));
   for(let i=0;i<10;i++){
     const m=new THREE.Mesh(partGeo, partMatCyan.clone());
     m.position.copy(w); m.userData.v=new THREE.Vector3((Math.random()-0.5)*2,(Math.random())*2,(Math.random()-0.5)*2);
@@ -4059,8 +4112,14 @@ function benchPointerWire(){
   el.addEventListener('pointermove',benchDragMove);
   el.addEventListener('pointerup',benchDragEnd);
   bR.domElement.addEventListener('pointerdown',e=>{
-    if(bDrag||!bSel) return;
+    if(bDrag) return;
     benchRayAt(e);
+    // click an already-installed part to pop it back to inventory (tower parts carry a mount tag)
+    if(!bSel && bMountHits.length){
+      const mh=bRay.intersectObjects(bMountHits,true);
+      if(mh.length){ towerRemoveMount(mh[0].object.userData.mount); return; }
+    }
+    if(!bSel) return;
     const hits=bRay.intersectObjects(bSlots.filter(s=>!s.filled).map(s=>s.hit),true);
     if(hits.length){
       const slot=hits[0].object.userData.slot;
@@ -4072,14 +4131,25 @@ function benchPointerWire(){
 /* ---------- open/close/loop ---------- */
 function openBench(ri){
   if(!S.rigs[ri]) return;
-  benchRi=ri; benchSetup();
-  $('bench-rig').textContent=ri+1;
+  benchIsTower=false; benchRi=ri; benchSetup();
+  $('bench-rig').textContent='RIG '+(ri+1);
   $('bench').classList.add('open');
   benchOpen=true; bSel=null;
   benchSync();
   SFX.install();
 }
-function closeBench(){ benchOpen=false; $('bench').classList.remove('open'); bSel=null; if(bDrag){ bScene.remove(bDrag.ghost); bDrag=null; } }
+/* Open the Server Tower's dual-CPU board — a buildable rig (up to 2 CPUs + 6 GPUs). */
+function openTowerBench(){
+  if(!S.tower){ SFX.err(); toast('Buy the Server Tower in the shop first','red'); return; }
+  if(!S.towerRig) S.towerRig={cpus:[],gpus:[],on:1};
+  benchIsTower=true; benchRi=-1; benchSetup();
+  $('bench-rig').textContent='SERVER TOWER';
+  $('bench').classList.add('open');
+  benchOpen=true; bSel=null;
+  benchSync();
+  SFX.install();
+}
+function closeBench(){ benchOpen=false; benchIsTower=false; $('bench').classList.remove('open'); bSel=null; if(bDrag){ bScene.remove(bDrag.ghost); bDrag=null; } }
 function benchLoop(dt){
   if(!benchOpen||!bR) return;
   bT+=dt;
@@ -4325,9 +4395,9 @@ function buyItem(id){
     toast('🏅 GENESIS BADGE acquired! +10% luck · +10% efficiency','gold');
   } else if(it.comp==='Peripheral'){ S.periph[id]=1; rebuildAllRigs();
     toast(`🖱 ${it.name} — +2% luck on every desk${periphCount()===3?' · FULL BATTLESTATION SET +3%':''}`, periphCount()===3?'gold':'grn');
-  } else if(id===19){ S.tower=1; setTowerOwned(true);
+  } else if(id===19){ S.tower=1; if(!S.towerRig) S.towerRig={cpus:[],gpus:[],on:1}; setTowerOwned(true);
     burst(new THREE.Vector3(5.4,2.2,-ROOM.D/2+1.9),40,partMatCyan,3.5);
-    toast('🗼 SERVER TOWER online — +40 stake weight · +20% stake income','gold');
+    toast('🗄 SERVER TOWER online — +40 stake weight · +20% stake income. CLICK it to open its dual-CPU board and install up to 2 CPUs + 6 GPUs.','gold',9000);
   } else { S.inv[id]++; toast(`${it.name} added to inventory — open a rig to install`,'grn'); }
   SFX.buy(); renderHud(); renderShop(); save();
 }
@@ -6903,6 +6973,13 @@ function pick(e){
   if(ch.length&&(!hits.length||ch[0].distance<hits[0].distance)) return {chair:ch[0].object.userData.chairSlot};
   return hits.length?hits[0].object.userData.rig:-1;
 }
+function towerHitAt(e){
+  if(typeof towerVis==='undefined'||!towerVis||!towerVis.visible) return false;
+  const r=canvas.getBoundingClientRect();
+  mouse.x=((e.clientX-r.left)/r.width)*2-1; mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+  ray.setFromCamera(mouse,cam);
+  return ray.intersectObject(towerVis,true).length>0;
+}
 canvas.addEventListener('pointermove',e=>{
   if(TRAILER) return;
   if(moveSel){ if(e.buttons&1) moveDragTo(e); canvas.style.cursor='grabbing'; return; }
@@ -6917,6 +6994,7 @@ canvas.addEventListener('pointerup',e=>{
   if(TRAILER||!pdown) return;
   const dx=e.clientX-pdown[0], dy=e.clientY-pdown[1]; pdown=null;
   if(dx*dx+dy*dy>36) return;
+  if(towerHitAt(e)){ SFX.click(); openTowerBench(); return; }   // click the Server Tower → build it
   const h=pick(e);
   if(h&&h.chair!==undefined){ sitDown(h.chair); return; }
   if(SIT.on){ standUp(); return; }

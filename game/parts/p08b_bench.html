@@ -1,9 +1,25 @@
 /* ================= WORKBENCH — open case, real-scale motherboard, drag-snap install ================= */
 /* bench scale: 6 units per meter. ATX board 305x244mm, GPU 300mm, CPU package 40mm. */
 const BM=6;
-let benchOpen=false, benchRi=0, benchInit=false;
+let benchOpen=false, benchRi=0, benchInit=false, benchIsTower=false;
 let bR=null, bScene=null, bCam=null, bBoardG=null, bMountG=null, bSlotG=null;
-let bSlots=[], bDrag=null, bSel=null, bT=0, bPuffs=[];
+let bSlots=[], bDrag=null, bSel=null, bT=0, bPuffs=[], bMountHits=[];
+// what the bench is editing: a Gaming PC rig, or the Server Tower's dual-CPU board.
+function benchTarget(){ return benchIsTower ? S.towerRig : S.rigs[benchRi]; }
+const TOWER_MAXCPU=2, TOWER_MAXGPU=6;
+function towerInstallItem(id){
+  const t=S.towerRig, it=ITEMS[id]; if(!t) return false;
+  if((S.inv[id]||0)<=0){ SFX.err(); return false; }
+  if(it.comp==='Processor'){ if(t.cpus.length>=TOWER_MAXCPU){ SFX.err(); toast('Both CPU sockets are full','red'); return false; } t.cpus.push(id); }
+  else if(it.comp==='GPU'){ if(t.gpus.length>=TOWER_MAXGPU){ SFX.err(); toast('All 6 GPU slots are full','red'); return false; } t.gpus.push(id); }
+  else { SFX.err(); toast('The server board takes CPUs and GPUs only','red'); return false; }
+  S.inv[id]--; SFX.install(); if(typeof syncTowerGlow==='function')syncTowerGlow(); renderHud&&renderHud(); save&&save(); return true;
+}
+function towerRemoveMount(u){
+  const t=S.towerRig; if(!t||!u) return;
+  const arr=u.kind==='cpu'?t.cpus:t.gpus; const id=arr[u.ix]; if(id==null) return;
+  arr.splice(u.ix,1); S.inv[id]=(S.inv[id]||0)+1; SFX.click(); benchSync(); if(typeof syncTowerGlow==='function')syncTowerGlow(); renderHud&&renderHud(); save&&save();
+}
 const bRay=new THREE.Raycaster(), bPtr=new THREE.Vector2();
 const BOARD_TILT=0.98; // rad, test-bench tilt toward camera (component face up)
 function benchSetup(){
@@ -52,6 +68,14 @@ function benchSetup(){
 const SLOT_Y=0.32;
 function benchSlotDefs(r){
   const defs=[];
+  if(benchIsTower){
+    // dual-CPU server board: 2 CPU sockets across the top, 6 PCIe x16 slots down the board
+    defs.push({kind:'cpu', cidx:0, x:-0.42, z:-0.55, y:0.46, label:'CPU SOCKET 1', filled:!!r.cpus[0]});
+    defs.push({kind:'cpu', cidx:1, x: 0.42, z:-0.55, y:0.46, label:'CPU SOCKET 2', filled:!!r.cpus[1]});
+    for(let k=0;k<TOWER_MAXGPU;k++)
+      defs.push({kind:'gpu', idx:k, x:0, z:-0.24+k*0.18, label:'PCIe x16 · '+(k+1), filled:!!r.gpus[k]});
+    return defs;
+  }
   defs.push({kind:'cpu', x:-0.28, z:-0.52, y:0.46, label:'CPU SOCKET', filled:!!r.cpu});
   const cap=gpuCap(r), onBoard=Math.min(cap,4);
   for(let k=0;k<onBoard;k++)
@@ -82,12 +106,16 @@ function benchCompMesh(kind, id){
   return new THREE.Group();
 }
 let bSceneBits=[];
+function addMountHit(x,y,z,kind,ix){
+  const h=new THREE.Mesh(new THREE.SphereGeometry(kind==='gpu'?0.3:0.24,8,8), new THREE.MeshBasicMaterial({visible:false}));
+  h.position.set(x,y,z); h.userData.mount={kind,ix}; bMountG.add(h); bMountHits.push(h);
+}
 function benchSync(){
-  const r=S.rigs[benchRi]; if(!r) return;
+  const r=benchTarget(); if(!r) return;
   while(bSlotG.children.length) bSlotG.remove(bSlotG.children[0]);
   while(bMountG.children.length) bMountG.remove(bMountG.children[0]);
   bSceneBits.forEach(o=>bScene.remove(o)); bSceneBits=[];
-  bSlots=[];
+  bSlots=[]; bMountHits=[];
   for(const d of benchSlotDefs(r)){
     if(d.floor && d.filled) continue;
     let marker;
@@ -114,7 +142,14 @@ function benchSync(){
     bSlots.push(slot);
   }
   // mounted components
-  const r2=S.rigs[benchRi];
+  const r2=benchTarget();
+  if(benchIsTower){
+    r2.cpus.forEach((cid,k)=>{ const m=benchCompMesh('cpu',cid); const x=k===0?-0.42:0.42; m.position.set(x,0.42,-0.55); bMountG.add(m); addMountHit(x,0.52,-0.55,'cpu',k); });
+    r2.gpus.forEach((gid,k)=>{ const m=benchCompMesh('gpu',gid);
+      const bb=new THREE.Box3().setFromObject(m); const sz=new THREE.Vector3(); bb.getSize(sz);
+      m.rotation.x=-Math.PI/2; m.position.set(0, SLOT_Y-0.03+sz.z/2, -0.24+k*0.18); bMountG.add(m); addMountHit(0,SLOT_Y+0.22,-0.24+k*0.18,'gpu',k); });
+    benchTray(); return;
+  }
   if(r2.cpu){ const m=benchCompMesh('cpu',r2.cpu); m.position.set(-0.28,0.42,-0.52); bMountG.add(m); }
   r2.gpus.forEach((gid,k)=>{
     if(k<4){
@@ -156,12 +191,13 @@ function benchCompat(slot,it){
 }
 function benchTray(){
   const t=$('bench-tray'); if(!t) return;
-  const r=S.rigs[benchRi];
+  const r=benchTarget();
+  const allow=benchIsTower?['Processor','GPU']:['Processor','GPU','ASIC','Frame'];
   const rows=[];
   for(const id of INV_IDS){
     const n=S.inv[id]||0; if(n<=0) continue;
     const it=ITEMS[id];
-    if(!['Processor','GPU','ASIC','Frame'].includes(it.comp)) continue;
+    if(!allow.includes(it.comp)) continue;
     rows.push(`<div class="traypart ${bSel===id?'drag':''}" data-id="${id}">
       <img src="${THUMB[id]||''}" draggable="false"><b>${it.name}</b><small>${it.comp} · ${it.hash} H</small><span class="n">×${n} in inventory</span></div>`);
   }
@@ -170,7 +206,9 @@ function benchTray(){
     el.addEventListener('pointerdown',e=>{ e.preventDefault(); benchDragStart(+el.dataset.id, e); });
   });
   const sub=$('bench-sub');
-  if(sub&&r) sub.textContent=`side panel off · ${r.cpu?'1':'0'}/1 CPU · ${r.gpus.length}/${gpuCap(r)} GPU slots · components at real-life scale`;
+  if(sub&&r) sub.textContent=benchIsTower
+    ? `dual-CPU server board · ${r.cpus.length}/${TOWER_MAXCPU} CPUs · ${r.gpus.length}/${TOWER_MAXGPU} GPUs · click an installed part to remove it`
+    : `side panel off · ${r.cpu?'1':'0'}/1 CPU · ${r.gpus.length}/${gpuCap(r)} GPU slots · components at real-life scale`;
 }
 /* ---------- drag & snap ---------- */
 function benchRayAt(e){
@@ -224,13 +262,12 @@ function benchDragEnd(){
   else if(!d.moved){ bSel=(bSel===d.id?null:d.id); benchTray(); } // tap = arm for tap-on-slot
 }
 function benchInstall(slot,id){
-  const before=S.rigs[benchRi].gpus.length + (S.rigs[benchRi].cpu?1:0);
-  installPart(benchRi,id);
-  const after=S.rigs[benchRi].gpus.length + (S.rigs[benchRi].cpu?1:0) + (S.rigs[benchRi].asic?1:0) + (S.rigs[benchRi].frame?1:0);
+  if(benchIsTower){ if(!towerInstallItem(id)) return; }
+  else installPart(benchRi,id);
   bSel=null;
   benchSync();
   // snap pop on the mount point
-  const w=slot.floor?slot.world:bBoardG.localToWorld(new THREE.Vector3(slot.x,SLOT_Y,slot.z));
+  const w=slot.floor?slot.world:bBoardG.localToWorld(new THREE.Vector3(slot.x,slot.y||SLOT_Y,slot.z));
   for(let i=0;i<10;i++){
     const m=new THREE.Mesh(partGeo, partMatCyan.clone());
     m.position.copy(w); m.userData.v=new THREE.Vector3((Math.random()-0.5)*2,(Math.random())*2,(Math.random()-0.5)*2);
@@ -242,8 +279,14 @@ function benchPointerWire(){
   el.addEventListener('pointermove',benchDragMove);
   el.addEventListener('pointerup',benchDragEnd);
   bR.domElement.addEventListener('pointerdown',e=>{
-    if(bDrag||!bSel) return;
+    if(bDrag) return;
     benchRayAt(e);
+    // click an already-installed part to pop it back to inventory (tower parts carry a mount tag)
+    if(!bSel && bMountHits.length){
+      const mh=bRay.intersectObjects(bMountHits,true);
+      if(mh.length){ towerRemoveMount(mh[0].object.userData.mount); return; }
+    }
+    if(!bSel) return;
     const hits=bRay.intersectObjects(bSlots.filter(s=>!s.filled).map(s=>s.hit),true);
     if(hits.length){
       const slot=hits[0].object.userData.slot;
@@ -255,14 +298,25 @@ function benchPointerWire(){
 /* ---------- open/close/loop ---------- */
 function openBench(ri){
   if(!S.rigs[ri]) return;
-  benchRi=ri; benchSetup();
-  $('bench-rig').textContent=ri+1;
+  benchIsTower=false; benchRi=ri; benchSetup();
+  $('bench-rig').textContent='RIG '+(ri+1);
   $('bench').classList.add('open');
   benchOpen=true; bSel=null;
   benchSync();
   SFX.install();
 }
-function closeBench(){ benchOpen=false; $('bench').classList.remove('open'); bSel=null; if(bDrag){ bScene.remove(bDrag.ghost); bDrag=null; } }
+/* Open the Server Tower's dual-CPU board — a buildable rig (up to 2 CPUs + 6 GPUs). */
+function openTowerBench(){
+  if(!S.tower){ SFX.err(); toast('Buy the Server Tower in the shop first','red'); return; }
+  if(!S.towerRig) S.towerRig={cpus:[],gpus:[],on:1};
+  benchIsTower=true; benchRi=-1; benchSetup();
+  $('bench-rig').textContent='SERVER TOWER';
+  $('bench').classList.add('open');
+  benchOpen=true; bSel=null;
+  benchSync();
+  SFX.install();
+}
+function closeBench(){ benchOpen=false; benchIsTower=false; $('bench').classList.remove('open'); bSel=null; if(bDrag){ bScene.remove(bDrag.ghost); bDrag=null; } }
 function benchLoop(dt){
   if(!benchOpen||!bR) return;
   bT+=dt;
