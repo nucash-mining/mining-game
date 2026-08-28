@@ -3409,16 +3409,41 @@ function normalizeW(o, targetW){
 }
 /* server tower (garage structure, back wall) */
 let towerVis=null;
+/* Procedural server-tower fallback: the tower model lives in the gen2.glb bundle,
+   which only loads from ordinal gateways — when that's slow/down PROTO.tower is
+   unset and the tower never rendered (nothing to click). Every other structure
+   has a procedural fallback; the tower now does too, so it ALWAYS appears. */
+function makeProcTower(){
+  const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(1.4,2.8,1.5),
+    new THREE.MeshStandardMaterial({color:0x15182a, roughness:0.5, metalness:0.75}));
+  body.position.y=1.4; g.add(body);
+  const bez=new THREE.Mesh(new THREE.BoxGeometry(1.3,2.7,0.06),
+    new THREE.MeshStandardMaterial({color:0x0b0d16, roughness:0.6, metalness:0.5}));
+  bez.position.set(0,1.4,0.76); g.add(bez);
+  const slatMat=new THREE.MeshStandardMaterial({color:0x1d2340, roughness:0.5, metalness:0.6});
+  for(let i=0;i<8;i++){ const s=new THREE.Mesh(new THREE.BoxGeometry(1.06,0.15,0.05), slatMat);
+    s.position.set(0, 2.32-i*0.29, 0.78); g.add(s); }
+  const led=new THREE.Mesh(new THREE.BoxGeometry(0.55,0.05,0.03), new THREE.MeshBasicMaterial({color:0x2ee6d6}));
+  led.position.set(0,0.35,0.8); g.add(led);
+  const pw=new THREE.Mesh(new THREE.CircleGeometry(0.06,16), new THREE.MeshBasicMaterial({color:0x3dff8a}));
+  pw.position.set(0.42,2.5,0.8); g.add(pw);
+  return g;
+}
 function setTowerOwned(own){
   if(towerVis){ towerVis.visible=own; return; }
-  if(!own||!PROTO.tower) return;
+  if(!own) return;
   towerVis=new THREE.Group();
-  const m=instOf('tower');
-  const box=new THREE.Box3().setFromObject(m); const size=new THREE.Vector3(); box.getSize(size);
-  const s=Math.min(2.8/size.y, 2.2/size.x, 2.2/size.z); m.scale.setScalar(s);
-  const box2=new THREE.Box3().setFromObject(m); const c=new THREE.Vector3(); box2.getCenter(c);
-  m.position.x-=c.x; m.position.z-=c.z; m.position.y-=box2.min.y;
-  towerVis.add(m);
+  if(PROTO.tower){
+    const m=instOf('tower');
+    const box=new THREE.Box3().setFromObject(m); const size=new THREE.Vector3(); box.getSize(size);
+    const s=Math.min(2.8/size.y, 2.2/size.x, 2.2/size.z); m.scale.setScalar(s);
+    const box2=new THREE.Box3().setFromObject(m); const c=new THREE.Vector3(); box2.getCenter(c);
+    m.position.x-=c.x; m.position.z-=c.z; m.position.y-=box2.min.y;
+    towerVis.add(m);
+  } else {
+    towerVis.add(makeProcTower());   // fallback: tower always renders + stays clickable
+  }
   // generous invisible click/grab hitbox — the tower mesh is thin/irregular, so
   // raycasting it directly missed most clicks. Rigs use boxes for this reason too.
   const thit=new THREE.Mesh(new THREE.BoxGeometry(2.8,3.2,2.8), new THREE.MeshBasicMaterial({visible:false,depthWrite:false}));
