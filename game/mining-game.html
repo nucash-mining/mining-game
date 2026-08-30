@@ -172,6 +172,9 @@ button{font-family:inherit;cursor:pointer}
 #splash p{color:var(--dim);max-width:520px;font-size:13.5px;line-height:1.55}
 #mintbtn{margin-top:10px;background:linear-gradient(90deg,#8247e5,#5f2ec7);color:#fff;border:none;font-size:17px;font-weight:800;letter-spacing:.05em;padding:16px 38px;border-radius:14px;box-shadow:0 8px 40px rgba(130,71,229,.45);transition:transform .15s}
 #mintbtn:hover{transform:scale(1.05)}
+#splashlinks{display:flex;gap:10px;margin-top:2px;flex-wrap:wrap;justify-content:center}
+#splashlinks a{display:inline-flex;align-items:center;gap:6px;text-decoration:none;border:1px solid var(--line);background:var(--panel);color:var(--txt);border-radius:10px;padding:8px 14px;font-size:12.5px;font-weight:600;letter-spacing:.04em;transition:all .15s}
+#splashlinks a:hover{border-color:var(--pur);background:var(--panel2);color:var(--gold);transform:translateY(-1px)}
 #splash .chain{display:flex;gap:14px;margin-top:8px;font-size:11px;color:var(--dim)}
 #splash .chain span{display:flex;align-items:center;gap:5px}
 #splash .cd{width:7px;height:7px;border-radius:50%}
@@ -488,6 +491,10 @@ body.touch.walkoff #joy{display:none}
   Mint your free Gaming PC, bolt in CPUs and GPUs, feed the rig <b style="color:var(--gold)">⚡WATT</b> as electricity,
   and race the difficulty curve mining blocks on Polygon and Altcoinchain.</p>
   <button id="mintbtn">⚡ FREE MINT — Gaming PC</button>
+  <div id="splashlinks">
+    <a href="https://mining-game.wattxchange.app/whitepaper.html" target="_blank" rel="noopener" title="Read the Mining Game whitepaper">📄 WHITEPAPER</a>
+    <a href="https://stake.mining-game.wattxchange.app/" target="_blank" rel="noopener" title="Stake NFTs and claim WATT">🥩 STAKE</a>
+  </div>
   <div class="chain">
     <span><span class="cd" style="background:#8247e5"></span>Polygon</span>
     <span><span class="cd" style="background:#ffd23f"></span>Altcoinchain</span>
