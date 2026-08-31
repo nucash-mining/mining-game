@@ -5125,7 +5125,9 @@ const POOL_ABI={
   'function stopMining(address,uint256)',
   'function claim(address,uint256)',
   'function pendingRewards(address,uint256) view returns (uint256)',
-  'function getSession(address,uint256) view returns (tuple(address owner,address nftContract,uint256 rigId,uint256 poolId,uint256 targetId,uint256 startTime,uint256 lastClaimTime,uint256 wattDeposited,uint256 wattSettled,uint256 earned,uint256 owed,bool active,uint256 power,uint256 rewardDebt))'],
+  'function getSession(address,uint256) view returns (tuple(address owner,address nftContract,uint256 rigId,uint256 poolId,uint256 targetId,uint256 startTime,uint256 lastClaimTime,uint256 wattDeposited,uint256 wattSettled,uint256 earned,uint256 owed,bool active,uint256 power,uint256 rewardDebt))',
+  'function sessionsOf(address) view returns (bytes32[])',
+  'function sessions(bytes32) view returns (tuple(address owner,address nftContract,uint256 rigId,uint256 poolId,uint256 targetId,uint256 startTime,uint256 lastClaimTime,uint256 wattDeposited,uint256 wattSettled,uint256 earned,uint256 owed,bool active,uint256 power,uint256 rewardDebt))'],
  rig:[
   'function mint() payable returns (uint256)','function mintPrice() view returns (uint256)',
   'function balanceOf(address) view returns (uint256)',
@@ -5663,6 +5665,18 @@ async function ocStop(rigId){
   }catch(e){ SFX.err(); toast('stopMining failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
   fillChainPools();
 }
+/* CLAIM without stopping: realize this rig's accumulated mined rewards to your
+   registered payout address (you pay the gas — engine.claim, owner-only) and
+   keep the rig mining. Works for every coin (WTX/HTH/ALT/BITN/…). */
+async function ocClaim(rigId){
+  const c=poolCfg(); if(!c) return;
+  try{ const eng=await poolCtr('engine',true);
+    toast(`Claiming RIG #${rigId} rewards…`,'gold',6000);
+    await (await eng.claim(c.pools.rigNft,rigId)).wait();
+    SFX.buy(); toast(`💰 RIG #${rigId} rewards claimed → credited to your payout address. The operator pays it out; the rig keeps mining.`,'grn',10000);
+  }catch(e){ SFX.err(); toast('claim failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
+  fillChainPools();
+}
 /* ===== ITEM SHOP — buy game items as real NFTs (Live mode) ===== */
 const SHOP_ABI=[
   'function buyWithWatt(uint256,uint256)',
@@ -5966,19 +5980,26 @@ async function fillChainPools(){
         }
       }catch(e){}
     }
-    /* rigs currently in sessions are owned by the engine — check my recent ones via events is heavy; keep a local note */
-    const mySessions=(S.ocRigs||[]).filter(Boolean);
+    /* Every active mining session for THIS wallet, read straight from the engine
+       (sessionsOf) — not a local note — so your accumulated mined balance always
+       shows, on any device. Standalone 💰 CLAIM realizes the rewards to your
+       registered payout address (you pay the gas) and KEEPS the rig mining;
+       STOP + CLAIM also ends the session and returns the rig. */
     let sesRows='';
-    for(const rid of mySessions){
-      try{ const s=await eng.getSession(c.pools.rigNft,rid);
-        if(s.active&&s.owner.toLowerCase()===W3.addr.toLowerCase()){
-          const pr=await eng.pendingRewards(c.pools.rigNft,rid);
-          const csym=WEB3CFG.targets[Number(s.targetId)]?.sym||'?';
-          sesRows+=`<div class="prow sel"><div class="pi"><b>⛏ RIG #${rid} — MINING ${csym}</b><small>pool #${s.poolId} · earned ${ocFmt(s.earned,4)} + pending ${ocFmt(pr,4)} ${csym}</small></div>
-            <button class="hbtn" data-ocstop="${rid}">STOP + CLAIM</button></div>`;
-        }
-      }catch(e){}
-    }
+    try{
+      const keys=await eng.sessionsOf(W3.addr).catch(()=>[]);
+      for(const key of keys){
+        const s=await eng.sessions(key).catch(()=>null);
+        if(!s||!s.active||s.owner.toLowerCase()!==W3.addr.toLowerCase()) continue;
+        const rid=Number(s.rigId);
+        const pr=await eng.pendingRewards(c.pools.rigNft,rid).catch(()=>0n);
+        const total=(s.earned||0n)+(pr||0n);
+        const csym=WEB3CFG.targets[Number(s.targetId)]?.sym||'?';
+        sesRows+=`<div class="prow sel"><div class="pi"><b>⛏ RIG #${rid} — MINING ${csym}</b><small>pool #${s.poolId} · mined balance <b style="color:var(--grn)">${ocFmt(total,6)} ${csym}</b> — claim to your payout address</small></div>
+          <button class="hbtn gold" data-occlaim="${rid}"${total>0n?'':' disabled'}>💰 CLAIM</button>
+          <button class="hbtn" data-ocstop="${rid}">STOP + CLAIM</button></div>`;
+      }
+    }catch(e){}
     /* Coin MENU for a new pool: check every coin your nodes actually earn.
        POL stays disabled until a Polygon validator exists to back it. */
     const tgtChecks=WEB3CFG.targets.map(t=>{ const dis=t.sym==='POL';
@@ -6043,6 +6064,7 @@ async function fillChainPools(){
       S.ocRigs=Array.from(new Set([...(S.ocRigs||[]),id])); save();
       ocMine(id, +($('oc-pool-'+id)?.value||0)); });
     el.querySelectorAll('[data-ocstop]').forEach(b=>b.onclick=()=>ocStop(+b.dataset.ocstop));
+    el.querySelectorAll('[data-occlaim]').forEach(b=>b.onclick=()=>ocClaim(+b.dataset.occlaim));
     el.querySelectorAll('[data-ocstake]').forEach(b=>b.onclick=()=>ocStakeRig(+b.dataset.ocstake));
     el.querySelectorAll('[data-ocunstake]').forEach(b=>b.onclick=()=>ocUnstakeRig(+b.dataset.ocunstake));
     el.querySelectorAll('[data-ocstkclaim]').forEach(b=>b.onclick=()=>ocClaimStakeRewards(+b.dataset.ocstkclaim));
