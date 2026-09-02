@@ -197,7 +197,22 @@ button{font-family:inherit;cursor:pointer}
   #hudbtns .hbtn{padding:7px 9px;font-size:11px}
   #rigp{width:calc(100vw - 20px);top:auto;bottom:10px;max-height:55vh}
   #feed{width:210px;bottom:76px}
-  #wallet{top:96px}
+  /* Keep the top strips as single, horizontally-scrollable rows instead of
+     letting them wrap into overlapping rows (the "jumble" on phones). */
+  #hud{gap:5px;padding:6px 8px}
+  #hudbtns{flex-wrap:wrap;gap:5px}
+  #stats{flex-wrap:nowrap;overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  #stats::-webkit-scrollbar{display:none}
+  #stats .stat{flex:0 0 auto}
+  #wallet{top:96px;flex-wrap:nowrap;overflow-x:auto;max-width:calc(100vw - 16px);-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  #wallet::-webkit-scrollbar{display:none}
+  #wallet .coin{flex:0 0 auto}
+  /* Pool-Hub / list rows: stack the controls under the label so CLAIM / STOP /
+     coin-selects don't crush together on a narrow screen. */
+  .prow{flex-wrap:wrap}
+  .prow .pi{flex:1 1 100%;min-width:0}
+  .prow .hbtn,.prow>button,.prow>select{flex:1 1 auto;min-width:0}
+  .mbox{padding:14px}
 }
 /* on-screen walk joystick (touch devices only; toggled by body.touch in p11) */
 #joy{display:none;position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom));
