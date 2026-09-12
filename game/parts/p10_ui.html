@@ -245,7 +245,13 @@ function renderUpg(){
     <div class="uprow"><div class="uic">${S.chair?'🏎️':'🪑'}</div>
       <div class="ubody"><h3>Gaming Chair <small style="color:var(--dim)">${S.chair?'owned':'Lv 0/1'}</small></h3>
       <p>${S.chair?'Racing-style chair with RGB trim on every desk — +3% luck comfort bonus.':'Upgrade every desk chair to a racing-style gaming chair. Sim comfort: +3% luck.'}</p></div>
-      <button class="ubuy" data-chair="1" ${S.chair||upBal<CFG.chairPrice?'disabled':''}>${S.chair?'OWNED ✓':fmt(CFG.chairPrice)+' ⚡'+(upLive?' ⛓':'')}</button></div>`);
+      <button class="ubuy" data-chair="1" ${S.chair||upBal<CFG.chairPrice?'disabled':''}>${S.chair?'OWNED ✓':fmt(CFG.chairPrice)+' ⚡'+(upLive?' ⛓':'')}</button></div>
+    <div class="uprow"><div class="uic">🧭</div>
+      <div class="ubody"><h3>Pose Lab <small style="color:var(--dim)">free · hotkey P</small></h3>
+      <p>Set how each GPU, CPU and ASIC sits in its mount — the open-air frame, the PCIe slots, the server tower board. Changes apply to every rig instantly.</p></div>
+      <button class="ubuy" data-poselab="1">OPEN</button></div>`);
+  const plb=document.querySelector('[data-poselab]');
+  if(plb) plb.onclick=()=>{ closeModal('m-upg'); openPoseLab(); };
   document.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{
     S.monSize=+b.dataset.mon; SFX.click(); rebuildAllRigs(); renderUpg(); save();
     toast(`🖥 Monitors swapped to ${S.monSize}&Prime; on every desk`,'cyan'); });

@@ -18,6 +18,7 @@
     <button class="hbtn gold" id="b-shop">🛒 SHOP</button>
     <button class="hbtn accent" id="b-upg">🔧 GARAGE</button>
     <button class="hbtn" id="b-pool">🏊 POOLS</button>
+    <button class="hbtn" id="b-lounge" title="Enter the shared multiplayer lounge (6)">🛋 LOUNGE</button>
     <button class="hbtn" id="b-stats">📊</button>
     <button class="hbtn" id="b-mute">🔊</button>
   </div>
@@ -89,6 +90,42 @@
   <div id="bench-scale">REAL-SCALE RATIOS<br>ATX board 305×244mm · GPU 300mm<br>CPU package 40×40mm</div>
 </div>
 
+<!-- ============ POSE LAB (component orientation calibrator) ============ -->
+<div id="poselab">
+  <div id="pl-top">
+    <h3>🧭 POSE LAB</h3>
+    <small id="pl-sub">orient a component in its mount · changes apply to every rig instantly</small>
+    <span style="flex:1"></span>
+    <button class="hbtn" id="pl-export">⬇ EXPORT TABLE</button>
+    <button class="hbtn" id="pl-close">✕ CLOSE</button>
+  </div>
+  <div id="pl-side">
+    <div class="pl-lbl">MOUNT</div>
+    <div id="pl-ctx" class="pl-chips"></div>
+    <div class="pl-lbl">COMPONENT</div>
+    <div id="pl-parts" class="pl-list"></div>
+    <div class="pl-lbl">SCOPE</div>
+    <div id="pl-scope" class="pl-chips">
+      <button class="pl-chip on" data-scope="all">every mount</button>
+      <button class="pl-chip" data-scope="ctx">this mount only</button>
+    </div>
+  </div>
+  <div id="pl-panel">
+    <div class="pl-lbl">ROTATE <small>(the model's own orientation)</small></div>
+    <div class="pl-axes" id="pl-rot"></div>
+    <div class="pl-lbl">NUDGE <small>(offset from the mount point)</small></div>
+    <div class="pl-axes" id="pl-off"></div>
+    <div class="pl-lbl">SIZE</div>
+    <div class="pl-axes" id="pl-scale"></div>
+    <div id="pl-read"></div>
+    <div class="pl-row">
+      <button class="hbtn" id="pl-reset">↺ RESET PART</button>
+      <button class="hbtn accent" id="pl-copy">⧉ COPY</button>
+    </div>
+  </div>
+  <div id="pl-hint">drag to orbit · <b>arrows</b> rotate X/Y · <b>Q</b>/<b>E</b> roll · <b>shift</b> = 5° steps · <b>WASD</b>/<b>R</b>/<b>F</b> nudge · <b>P</b> or <b>esc</b> closes</div>
+</div>
+
 <!-- ============ GARAGE UPGRADES ============ -->
 <div class="modal" id="m-upg"><div class="mbox" style="max-width:560px">
   <div class="mhead"><h2>🔧 GARAGE UPGRADES</h2><button class="x" data-close="m-upg">✕</button></div>
@@ -130,7 +167,7 @@
   <p>The 3D crypto-mining simulator built from the <b style="color:var(--txt)">real Mining Game NFT hardware</b>.
   Mint your free Gaming PC, bolt in CPUs and GPUs, feed the rig <b style="color:var(--gold)">⚡WATT</b> as electricity,
   and race the difficulty curve mining blocks on Polygon and Altcoinchain.</p>
-  <button id="mintbtn">⚡ FREE MINT — Gaming PC</button>
+  <button id="mintbtn">▶ ENTER</button>
   <div id="splashlinks">
     <a href="https://mining-game.wattxchange.app/whitepaper.html" target="_blank" rel="noopener" title="Read the Mining Game whitepaper">📄 WHITEPAPER</a>
     <a href="https://stake.mining-game.wattxchange.app/" target="_blank" rel="noopener" title="Stake NFTs and claim WATT">🥩 STAKE</a>

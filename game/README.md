@@ -20,9 +20,32 @@ in this repo. Live at **https://mining-game.games.bu.app/**
 game/
   mining-game.html   built, playable single file (open it in a browser)
   build.sh           concatenates parts/ -> mining-game.html + syntax check
-  parts/p01..p12     the source, split into ordered sections
+  parts/p01..p15     the source, split into ordered sections
+  tools/posetest.mjs regression harness for the component POSE system
   CLAUDE.md          task list for finishing the asset work (Blender etc.)
 ```
+
+## Component orientation (the POSE table)
+
+The hardware GLBs were authored in different orientations, so every mount used
+to guess how a card should sit. One table in `parts/p04_data.html` — `PART_POSE`
+— now owns it, and **POSE LAB** (hotkey `P`, or GARAGE → Pose Lab) is where you
+set it: pick a mount (open-air frame, PCIe slot, server tower board, server
+tower bay, CPU socket, floor pad) and a component, turn it with the buttons or
+the keyboard, and watch every rig in the farm update.
+
+The Server Tower shows its build: install CPUs and GPUs on its board and the
+case goes smoked-glass with the hardware inside — the motherboard standing on
+its tray and the cards plugged into stacked PCIe slots, laid out the way a real
+tower is. Edits are saved per player in `S.pose`;
+**EXPORT TABLE** copies a replacement `PART_POSE` to paste back into
+`parts/p04_data.html` so your calibration ships as the default.
+
+Fans spin, too: the hardware models' own blades are lifted out of the mesh at
+load and turn clockwise whenever a rig is actually mining, stopping dead when it
+is off, crashed, worn out or out of WATT.
+
+Run `node tools/posetest.mjs` after touching the table or any mount code.
 
 ## Controls
 
@@ -33,7 +56,7 @@ game/
 | drag | look · scroll: zoom |
 | click a chair | sit at that desk · **esc** stands up |
 | **1** shop · **2** garage · **3** pools · **4** stats · **5** wallet | menus |
-| **B** workbench · **O** rig OS · **N** switch network | |
+| **B** workbench · **O** rig OS · **P** pose lab · **N** switch network | |
 
 > Menu hotkeys moved to the number row in 2026-07: `W` (wallet) and `S` (shop)
 > collided head-on with walking forward and back.

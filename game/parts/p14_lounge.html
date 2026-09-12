@@ -1,0 +1,234 @@
+<script type="module">
+/* ================= LOUNGE FURNITURE (drag + sit) =================
+   Spawns a shared table + stools when you enter the full lounge. Everyone can
+   DRAG a piece across the floor (server-authoritative resting spot, synced) and
+   SIT in a stool (a short click; drag = move, click = sit). Uses the p13 netcode
+   hooks: MGNET.onObj / sendObj / setSit / scene / cam. Reads controls from
+   window.MG. Its own THREE binding via the importmap. */
+import * as THREE from 'three';
+
+(() => {
+  const UPS = 2.25;
+  const N = () => window.MGNET;
+  const G = () => window.MG;
+
+  const SEND_MS = 50;
+  const items = new Map();          // oid -> { mesh, kind }
+  const heldRemote = new Set();     // oids currently dragged by someone else
+  let spawned = false;
+  let mySeat = null;                // oid of the stool I'm sitting in
+  let seatSave = null;              // cam/target to restore on stand
+  let drag = null;                  // { oid, lastSent }
+  let standBtn = null;
+
+  const ray = new THREE.Raycaster();
+  const FLOOR = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+  // ── furniture models (simple, low-poly) ─────────────────────────────────────
+  function mat(c, r = 0.7) { return new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: 0.1 }); }
+  function makeStool() {
+    const g = new THREE.Group();
+    const seat = new THREE.Mesh(new THREE.CylinderGeometry(UPS * 0.22, UPS * 0.22, UPS * 0.08, 16), mat(0x8a5a3c));
+    seat.position.y = UPS * 0.46;
+    const cush = new THREE.Mesh(new THREE.CylinderGeometry(UPS * 0.2, UPS * 0.2, UPS * 0.06, 16), mat(0x3d6ee0, 0.6));
+    cush.position.y = UPS * 0.52;
+    for (let i = 0; i < 3; i++) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(UPS * 0.02, UPS * 0.02, UPS * 0.46, 8), mat(0x2b2f3a));
+      const a = i / 3 * Math.PI * 2;
+      leg.position.set(Math.cos(a) * UPS * 0.16, UPS * 0.23, Math.sin(a) * UPS * 0.16);
+      g.add(leg);
+    }
+    g.add(seat, cush);
+    g.userData.seatY = UPS * 0.55;
+    return g;
+  }
+  function makeTable() {
+    const g = new THREE.Group();
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(UPS * 0.7, UPS * 0.7, UPS * 0.08, 24), mat(0x6a4a32));
+    top.position.y = UPS * 0.72;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(UPS * 0.08, UPS * 0.1, UPS * 0.72, 12), mat(0x2b2f3a));
+    post.position.y = UPS * 0.36;
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(UPS * 0.32, UPS * 0.32, UPS * 0.04, 20), mat(0x2b2f3a));
+    base.position.y = UPS * 0.02;
+    g.add(top, post, base);
+    return g;
+  }
+  function tint(mesh, on) {
+    mesh.traverse((o) => { if (o.isMesh) o.material.emissive && o.material.emissive.setHex(on ? 0x2a3550 : 0x000000); });
+  }
+
+  // ── spawn / despawn with lounge mode ────────────────────────────────────────
+  // Furniture lives in the LOUNGE ROOM (a separate region at z≈LZ, built by p15),
+  // not the mining room. LZ must match p15's lounge centre.
+  const LZ = -120;
+  const LAYOUT = (() => {
+    const arr = [{ oid: 'ltable', kind: 'table', x: 0, z: LZ, ry: 0 }];
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      arr.push({ oid: 'lstool' + i, kind: 'stool', x: Math.cos(a) * UPS * 1.5, z: LZ + Math.sin(a) * UPS * 1.5, ry: -a });
+    }
+    return arr;
+  })();
+
+  function spawn() {
+    if (spawned) return; const scene = N() && N().scene; if (!scene) return;
+    for (const d of LAYOUT) {
+      const mesh = d.kind === 'table' ? makeTable() : makeStool();
+      mesh.position.set(d.x, 0, d.z); mesh.rotation.y = d.ry;
+      mesh.userData.oid = d.oid; mesh.userData.kind = d.kind;
+      scene.add(mesh); items.set(d.oid, { mesh, kind: d.kind });
+    }
+    spawned = true;
+  }
+  function despawn() {
+    if (!spawned) return; const scene = N() && N().scene;
+    standUp();
+    for (const { mesh } of items.values()) { if (scene) scene.remove(mesh); mesh.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
+    items.clear(); heldRemote.clear(); spawned = false;
+  }
+
+  window.addEventListener('mg-lounge-mode', (e) => {
+    const m = e.detail && e.detail.mode;
+    if (m === 'full') spawn(); else despawn();
+  });
+
+  // ── incoming item events from the server ────────────────────────────────────
+  function applyState(oid, x, z, ry) {
+    const it = items.get(oid); if (!it) return;
+    it.mesh.position.x = x; it.mesh.position.z = z; if (typeof ry === 'number') it.mesh.rotation.y = ry;
+  }
+  function wireNet() {
+    const net = N(); if (!net || !net.onObj) return false;
+    net.onObj((m) => {
+      if (m.t === 'objects') { for (const o of m.objects) { applyState(o.oid, o.x, o.z, o.ry); if (o.heldBy) heldRemote.add(o.oid); } return; }
+      if (m.t === 'objstate') { applyState(m.oid, m.x, m.z, m.ry); return; }
+      if (m.t === 'grabbed') { heldRemote.add(m.oid); const it = items.get(m.oid); if (it) tint(it.mesh, true); return; }
+      if (m.t === 'dropped') { heldRemote.delete(m.oid); applyState(m.oid, m.x, m.z, m.ry); const it = items.get(m.oid); if (it) tint(it.mesh, false); return; }
+      if (m.t === 'grabdenied') { if (drag && drag.oid === m.oid) endDrag(false); return; }
+    });
+    return true;
+  }
+
+  // ── pointer: drag furniture / click-to-sit ──────────────────────────────────
+  function ndc(ev, canvas) {
+    const r = canvas.getBoundingClientRect();
+    return new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  }
+  function pickItem(ev, canvas) {
+    ray.setFromCamera(ndc(ev, canvas), N().cam);
+    const meshes = [...items.values()].map((i) => i.mesh);
+    const hit = ray.intersectObjects(meshes, true)[0];
+    if (!hit) return null;
+    let o = hit.object; while (o && !o.userData.oid) o = o.parent;
+    return o ? o.userData.oid : null;
+  }
+  function floorPoint(ev, canvas) {
+    ray.setFromCamera(ndc(ev, canvas), N().cam);
+    const p = new THREE.Vector3();
+    return ray.ray.intersectPlane(FLOOR, p) ? p : null;
+  }
+
+  let down = null;   // { oid, x, y, t, moved }
+  function onDown(ev) {
+    if (!N() || !N().isFull()) return;
+    const canvas = G().controls.domElement;
+    const oid = pickItem(ev, canvas);
+    if (!oid) return;                          // empty space → let OrbitControls orbit
+    ev.stopImmediatePropagation(); ev.preventDefault();
+    down = { oid, x: ev.clientX, y: ev.clientY, t: performance.now(), moved: false };
+  }
+  function onMove(ev) {
+    if (!down) return;
+    if (!down.moved && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) {
+      // became a drag — grab it (unless someone else holds it)
+      if (heldRemote.has(down.oid)) { down = null; return; }
+      down.moved = true; startDrag(down.oid);
+    }
+    if (drag) {
+      const p = floorPoint(ev, G().controls.domElement); if (!p) return;
+      const it = items.get(drag.oid); if (!it) return;
+      it.mesh.position.x = p.x; it.mesh.position.z = p.z;
+      const now = performance.now();
+      if (now - drag.lastSent > SEND_MS) {
+        drag.lastSent = now;
+        N().sendObj({ t: 'objmove', oid: drag.oid, x: +p.x.toFixed(3), z: +p.z.toFixed(3), ry: +it.mesh.rotation.y.toFixed(3) });
+      }
+    }
+  }
+  function onUp(ev) {
+    if (!down) return;
+    const wasClick = !down.moved && (performance.now() - down.t < 400);
+    const oid = down.oid;
+    if (drag) endDrag(true);
+    else if (wasClick) toggleSit(oid);
+    down = null;
+  }
+  function startDrag(oid) {
+    drag = { oid, lastSent: 0 };
+    G().controls.enabled = false;
+    N().sendObj({ t: 'grab', oid });
+  }
+  function endDrag(commit) {
+    const it = drag && items.get(drag.oid);
+    if (commit && it) N().sendObj({ t: 'drop', oid: drag.oid, x: +it.mesh.position.x.toFixed(3), z: +it.mesh.position.z.toFixed(3), ry: +it.mesh.rotation.y.toFixed(3) });
+    drag = null;
+    if (G().controls) G().controls.enabled = !(G().SIT && G().SIT.on) && !mySeat;
+  }
+
+  // ── sitting ──────────────────────────────────────────────────────────────────
+  function toggleSit(oid) {
+    const it = items.get(oid); if (!it || it.kind !== 'stool') return;
+    if (mySeat === oid) { standUp(); return; }
+    if (mySeat) standUp();
+    sitIn(oid);
+  }
+  function sitIn(oid) {
+    const it = items.get(oid); if (!it) return;
+    const cam = N().cam, controls = G().controls;
+    seatSave = { pos: cam.position.clone(), tgt: controls.target.clone() };
+    const s = it.mesh.position;
+    cam.position.set(s.x, it.mesh.userData.seatY + UPS * 1.05, s.z);   // eye height above the seat
+    controls.target.set(0, UPS * 0.7, LZ);                            // look toward the table
+    controls.enabled = false;
+    mySeat = oid;
+    N().setSit(true, oid);
+    if (standBtn) standBtn.style.display = 'block';
+  }
+  function standUp() {
+    if (!mySeat) return;
+    const cam = N() && N().cam, controls = G() && G().controls;
+    if (seatSave && cam && controls) { cam.position.copy(seatSave.pos); controls.target.copy(seatSave.tgt); }
+    if (controls) controls.enabled = true;
+    mySeat = null; seatSave = null;
+    if (N()) N().setSit(false);
+    if (standBtn) standBtn.style.display = 'none';
+  }
+
+  // stand button + Esc
+  function buildStand() {
+    standBtn = document.createElement('button');
+    standBtn.textContent = '🧍 STAND UP';
+    standBtn.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:80px;z-index:70;display:none;background:rgba(12,16,26,0.9);border:1px solid #232c44;border-radius:10px;color:#e8ecf6;padding:8px 16px;cursor:pointer;font:600 13px system-ui';
+    standBtn.onclick = () => standUp();
+    document.body.appendChild(standBtn);
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && mySeat) { e.stopPropagation(); standUp(); } }, true);
+  }
+
+  // ── boot: wait for netcode + canvas, attach capture-phase pointer handlers ───
+  (function boot(tries = 0) {
+    const net = N(), g = G();
+    if (net && net.onObj && g && g.controls && g.controls.domElement) {
+      buildStand();
+      wireNet();
+      const canvas = g.controls.domElement;
+      canvas.addEventListener('pointerdown', onDown, true);   // capture: beat OrbitControls
+      window.addEventListener('pointermove', onMove, true);
+      window.addEventListener('pointerup', onUp, true);
+      if (net.isFull()) spawn();
+      return;
+    }
+    if (tries > 200) return;
+    setTimeout(() => boot(tries + 1), 100);
+  })();
+})();
+</script>

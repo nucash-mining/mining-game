@@ -65,18 +65,32 @@ function benchSetup(){
   benchPointerWire();
 }
 /* board-local slot layout (board length axis = z, width = x, surface y≈0.29) */
-const SLOT_Y=0.32;
+const SLOT_Y=0.32, CPU_Y=SLOT_Y-0.03;   // board surface: PCIe slot line, and the socket the cooler bolts to
+/* Seat a posed card in a PCIe slot. The POSE table hands every card over in
+   the same canonical stance — standing on its connector edge, long axis x,
+   thin axis z — which is how the slots run on this board, so seating is pure
+   placement: drop the group's origin (the card's bottom edge) onto the slot.
+
+   This is where the cards used to end up lying FLAT on the motherboard: the
+   bench assumed a card arrived lying down and stood it up with a hard -90,
+   which was wrong for every gen1 card (they are authored standing) and only
+   accidentally right for the two gen2 models carrying the old `flip` flag.
+   Shared with the POSE LAB so the calibrator seats a card exactly like this. */
+function seatCard(m, x, z){
+  m.position.set(x, SLOT_Y-0.03, z);              // edge connector IN the slot, no float gap
+  return m;
+}
 function benchSlotDefs(r){
   const defs=[];
   if(benchIsTower){
     // dual-CPU server board: 2 CPU sockets across the top, 6 PCIe x16 slots down the board
-    defs.push({kind:'cpu', cidx:0, x:-0.42, z:-0.55, y:0.46, label:'CPU SOCKET 1', filled:!!r.cpus[0]});
-    defs.push({kind:'cpu', cidx:1, x: 0.42, z:-0.55, y:0.46, label:'CPU SOCKET 2', filled:!!r.cpus[1]});
+    defs.push({kind:'cpu', cidx:0, x:-0.42, z:-0.55, label:'CPU SOCKET 1', filled:!!r.cpus[0]});
+    defs.push({kind:'cpu', cidx:1, x: 0.42, z:-0.55, label:'CPU SOCKET 2', filled:!!r.cpus[1]});
     for(let k=0;k<TOWER_MAXGPU;k++)
       defs.push({kind:'gpu', idx:k, x:0, z:-0.24+k*0.18, label:'PCIe x16 · '+(k+1), filled:!!r.gpus[k]});
     return defs;
   }
-  defs.push({kind:'cpu', x:-0.28, z:-0.52, y:0.46, label:'CPU SOCKET', filled:!!r.cpu});
+  defs.push({kind:'cpu', x:-0.28, z:-0.52, label:'CPU SOCKET', filled:!!r.cpu});
   const cap=gpuCap(r), onBoard=Math.min(cap,4);
   for(let k=0;k<onBoard;k++)
     defs.push({kind:'gpu', idx:k, x:0, z:0.12+k*0.26, label:'PCIe x16 · '+(k+1), filled:!!r.gpus[k]});
@@ -90,19 +104,16 @@ function benchSlotDefs(r){
   defs.push({kind:'frame', x:2.6, z:0.4, floor:true, label:'RACK ZONE', filled:!!r.frame});
   return defs;
 }
-function benchGpuMesh(gid, target){
-  const it=ITEMS[gid];
-  const raw=instOf(it.key); if(it.flip) raw.rotation.x=Math.PI;
-  const m=normalizeFit(raw, target);
-  const bb=new THREE.Box3().setFromObject(m); const sz=new THREE.Vector3(); bb.getSize(sz);
-  if(sz.z>sz.x){ const p=new THREE.Group(); p.add(m); m.rotation.y=Math.PI/2; return p; } // long axis → x
-  const p=new THREE.Group(); p.add(m); return p;
-}
+/* Every part on the bench is built through the shared POSE table, so a card
+   sits the same way here as it does on the desk rig and in the POSE LAB. The
+   old per-item `flip` flag and the long-axis guess lived only here and fought
+   the rack's own table — that is what mixed the gen2 cards up. */
 function benchCompMesh(kind, id){
-  if(kind==='gpu') return benchGpuMesh(id, 0.30*BM); // 300mm
-  if(kind==='cpu'){ const g=new THREE.Group(); g.add(normalizeFit(instOf(ITEMS[id].key), 0.62)); return g; } // cooler on 40mm socket
-  if(kind==='asic'){ const g=new THREE.Group(); g.add(normalizeFit(instOf('asic'), 1.5)); return g; }
-  if(kind==='frame'){ const g=new THREE.Group(); g.add(normalizeFit(instOf('frame'), 1.7)); return g; }
+  const ctx = kind==='gpu' ? (benchIsTower?'tower':'pcie') : kind==='cpu' ? 'socket' : 'pad';
+  if(kind==='gpu')   return poseMesh(ctx, ITEMS[id].key, POSE_CTX[ctx].fit);    // 1.8 = a 300mm card at 6u/m
+  if(kind==='cpu')   return poseMesh(ctx, ITEMS[id].key, POSE_CTX.socket.fit);  // cooler on a 40mm socket
+  if(kind==='asic')  return poseMesh(ctx, 'asic', 1.5);
+  if(kind==='frame') return poseMesh(ctx, 'frame', 1.7);
   return new THREE.Group();
 }
 let bSceneBits=[];
@@ -144,27 +155,22 @@ function benchSync(){
   // mounted components
   const r2=benchTarget();
   if(benchIsTower){
-    r2.cpus.forEach((cid,k)=>{ const m=benchCompMesh('cpu',cid); const x=k===0?-0.42:0.42; m.position.set(x,0.42,-0.55); bMountG.add(m); addMountHit(x,0.52,-0.55,'cpu',k); });
-    r2.gpus.forEach((gid,k)=>{ const m=benchCompMesh('gpu',gid);
-      const bb=new THREE.Box3().setFromObject(m); const sz=new THREE.Vector3(); bb.getSize(sz);
-      m.rotation.x=-Math.PI/2; m.position.set(0, SLOT_Y-0.03+sz.z/2, -0.24+k*0.18); bMountG.add(m); addMountHit(0,SLOT_Y+0.22,-0.24+k*0.18,'gpu',k); });
+    r2.cpus.forEach((cid,k)=>{ const m=benchCompMesh('cpu',cid); const x=k===0?-0.42:0.42; m.position.set(x,CPU_Y,-0.55); bMountG.add(m); addMountHit(x,CPU_Y+0.2,-0.55,'cpu',k); });
+    r2.gpus.forEach((gid,k)=>{ const m=seatCard(benchCompMesh('gpu',gid), 0, -0.24+k*0.18);
+      bMountG.add(m); addMountHit(0,SLOT_Y+0.22,-0.24+k*0.18,'gpu',k); });
     benchTray(); return;
   }
-  if(r2.cpu){ const m=benchCompMesh('cpu',r2.cpu); m.position.set(-0.28,0.42,-0.52); bMountG.add(m); }
+  if(r2.cpu){ const m=benchCompMesh('cpu',r2.cpu); m.position.set(-0.28,CPU_Y,-0.52); bMountG.add(m); }
   r2.gpus.forEach((gid,k)=>{
     if(k<4){
       /* FASTENED into the PCIe slot: card stands perpendicular to the board,
          edge connector seated IN the slot (no float gap). */
-      const m=benchCompMesh('gpu',gid);
-      const bb=new THREE.Box3().setFromObject(m); const sz=new THREE.Vector3(); bb.getSize(sz);
-      m.rotation.x=-Math.PI/2;                       // stand the card up, connector down
-      m.position.set(0, SLOT_Y-0.03+sz.z/2, 0.12+k*0.26);
-      bMountG.add(m);
+      bMountG.add(seatCard(benchCompMesh('gpu',gid), 0, 0.12+k*0.26));
     } else {
       /* overflow cards live on the open-air rack, wired back with risers */
       const rcols=gpuCap(r2)>8?3:2, col=(k-4)%rcols, lvl=Math.floor((k-4)/rcols);
       const rg=new THREE.Group(); rg.position.set(2.75,0,-0.3); rg.rotation.y=-0.55;
-      const m=benchCompMesh('gpu',gid); m.scale.multiplyScalar(0.48);   // fit the 1.7u frame
+      const m=poseMesh('rack', ITEMS[gid].key, 0.30*BM*0.48);   // rack pose, sized for the 1.7u frame
       m.position.set(-(rcols-1)*0.4+col*0.8, 0.32+lvl*0.55, 0.25);
       rg.add(m); bScene.add(rg); bSceneBits.push(rg);
       /* PCI-e riser cable: card -> board edge, sagging between */

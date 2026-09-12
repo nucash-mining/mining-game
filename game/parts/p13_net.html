@@ -1,0 +1,573 @@
+<script type="module">
+/* ================= LOUNGE NETCODE (presence + chat) =================
+   Turns the solo room into a shared space: connects to the lounge server,
+   spawns a simple avatar for every other person, syncs their walk/sit, and
+   adds a chat panel with floating name tags. Voice (WebRTC mesh + proximity)
+   and shared item-dragging are the next two parts; the server already speaks
+   both, this part just doesn't drive them yet.
+
+   This is its OWN module (separate <script type="module">), so it can't see the
+   game's module-scope consts by scope. The game publishes them on window.MG
+   (cam, controls, scene, THREE, live SIT getter); this part reads from there.
+   It imports its own THREE binding (same classes via the importmap). */
+import * as THREE from 'three';
+
+const NET = (() => {
+  const URL = 'wss://lounge.wattxchange.app';
+  const SEND_MS = 80;            // ~12 position updates/sec
+  const UPS = 2.25;              // world units per metre (matches the game)
+  // Game handles, resolved from window.MG at start().
+  let scene, cam, SITref = () => ({ on: false, slot: -1 });
+  const state = {
+    ws: null, id: 0, name: '', wallet: null,
+    peers: new Map(),           // id -> {name,look,tgt,sit,seat, group?}  group only in 'full'
+    connected: false, retry: 0, lastSent: null,
+    // mode: 'off' (solo), 'chat' (lounge chat from your lab, no avatars/movement),
+    // 'full' (immersive shared space). want = should we hold a connection.
+    mode: 'off', want: false,
+  };
+
+  // ── identity (guest for now; wallet is a display hint until phase 3) ────────
+  try {
+    const qn = new URLSearchParams(location.search).get('name');
+    state.name = (qn && qn.trim().slice(0, 24)) || localStorage.getItem('mg_name') || '';
+  } catch {}
+  if (!state.name) state.name = 'guest' + Math.floor(1000 + Math.random() * 9000);
+
+  // Best-effort, time-boxed: a wallet provider's request can hang, and it must
+  // NEVER block connecting — wallet is only a display hint until phase 3.
+  function detectWallet() {
+    const p = window.wattx || window.ethereum;
+    if (!p || !p.request) { state.wallet = null; return; }
+    const race = Promise.race([
+      p.request({ method: 'eth_accounts' }).then((a) => (a && a[0]) || null),
+      new Promise((r) => setTimeout(() => r(null), 1500)),
+    ]);
+    race.then((addr) => { state.wallet = addr || null; }).catch(() => { state.wallet = null; });
+  }
+
+  // ── procedural avatar (no humanoid model shipped, so build a simple one) ────
+  function colorFromLook(look) {
+    if (look && typeof look.color === 'string') { try { return new THREE.Color(look.color); } catch {} }
+    return new THREE.Color().setHSL(Math.random(), 0.55, 0.55);
+  }
+  function makeAvatar(look) {
+    const g = new THREE.Group();
+    const skin = new THREE.Color(0xd8a97a);
+    const body = colorFromLook(look);
+    const M = (c, rough = 0.7) => new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: 0.05 });
+    // metres → units
+    const u = (m) => m * UPS;
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(u(0.20), u(0.24), u(0.62), 12), M(body));
+    torso.position.y = u(0.95);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(u(0.13), 16, 12), M(skin, 0.6));
+    head.position.y = u(1.40);
+    const legL = new THREE.Mesh(new THREE.CylinderGeometry(u(0.09), u(0.09), u(0.66), 8), M(0x2b2f3a));
+    const legR = legL.clone(); legL.position.set(u(0.10), u(0.33), 0); legR.position.set(-u(0.10), u(0.33), 0);
+    const armL = new THREE.Mesh(new THREE.CylinderGeometry(u(0.07), u(0.07), u(0.55), 8), M(body));
+    const armR = armL.clone(); armL.position.set(u(0.30), u(0.98), 0); armR.position.set(-u(0.30), u(0.98), 0);
+    g.add(torso, head, legL, legR, armL, armR);
+    g.userData.head = head;
+    g.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+    return g;
+  }
+
+  // ── floating name tag (canvas sprite) ──────────────────────────────────────
+  function makeTag(text) {
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+    const ctx = cv.getContext('2d');
+    ctx.font = 'bold 30px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(8,11,20,0.72)';
+    const w = Math.min(250, ctx.measureText(text).width + 26);
+    ctx.beginPath(); ctx.roundRect((256 - w) / 2, 12, w, 40, 10); ctx.fill();
+    ctx.fillStyle = '#eef2ff'; ctx.fillText(text, 128, 33);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+    spr.scale.set(2.0, 0.5, 1); spr.position.y = UPS * 1.72;
+    spr.renderOrder = 999;
+    return spr;
+  }
+
+  // Track a peer's DATA always; only build its 3D avatar in 'full' mode. This is
+  // what lets chat-only mode stay in your lab (no meshes) yet upgrade to the
+  // full space instantly (the positions are already known).
+  function addPeer(p) {
+    if (p.id === state.id || state.peers.has(p.id)) return;
+    const peer = {
+      group: null, tag: null, name: p.name, look: p.look || null,
+      sit: !!p.sit, seat: p.seat || null,
+      tgt: { x: p.x || 0, z: p.z || 0, ry: p.ry || 0 },
+    };
+    state.peers.set(p.id, peer);
+    if (state.mode === 'full') createMesh(peer);
+  }
+  function createMesh(peer) {
+    if (peer.group) return;
+    const group = makeAvatar(peer.look);
+    const tag = makeTag(peer.name || 'guest');
+    group.add(tag);
+    group.position.set(peer.tgt.x, 0, peer.tgt.z);
+    group.rotation.y = peer.tgt.ry;
+    scene.add(group);
+    peer.group = group; peer.tag = tag;
+  }
+  function destroyMesh(peer) {
+    if (!peer.group) return;
+    scene.remove(peer.group);
+    peer.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+    peer.group = null; peer.tag = null;
+  }
+  function removePeer(id) {
+    const peer = state.peers.get(id);
+    if (!peer) return;
+    destroyMesh(peer);
+    state.peers.delete(id);
+  }
+
+  // ── message handling ────────────────────────────────────────────────────────
+  function onMsg(m) {
+    switch (m.t) {
+      case 'welcome':
+        state.id = m.id;
+        (m.peers || []).forEach(addPeer);
+        // hand the furniture module the current item layout (late-joiner sync)
+        if (m.objects && m.objects.length) for (const cb of objCbs) try { cb({ t: 'objects', objects: m.objects }); } catch {}
+        chatLog('— connected as ' + state.name + ' (' + state.peers.size + ' here) —', '#8b94ab');
+        updateCount();
+        break;
+      case 'join':
+        addPeer(m.peer);
+        chatLog('→ ' + (m.peer.name || ('guest' + m.peer.id)) + ' joined', '#3ddc84');
+        if (voice.on && state.mode === 'full') voiceConnect(m.peer.id, state.id < m.peer.id);
+        updateCount();
+        break;
+      case 'leave': {
+        const peer = state.peers.get(m.id);
+        if (peer) chatLog('← ' + (peer.name || ('guest' + m.id)) + ' left', '#8b94ab');
+        voiceDrop(m.id);
+        removePeer(m.id);
+        updateCount();
+        break;
+      }
+      case 'state': {
+        const peer = state.peers.get(m.id);
+        if (!peer) return;
+        peer.tgt.x = m.x; peer.tgt.z = m.z; peer.tgt.ry = m.ry;
+        peer.sit = !!m.sit; peer.seat = m.seat || null;
+        break;
+      }
+      case 'look': {
+        const peer = state.peers.get(m.id);
+        if (!peer) return;
+        peer.look = m.look;
+        if (peer.group) {                 // rebuild the avatar only if it's rendered
+          const old = peer.group, tag = peer.tag;
+          const g = makeAvatar(m.look);
+          g.position.copy(old.position); g.rotation.y = old.rotation.y;
+          g.add(tag); scene.add(g); scene.remove(old);
+          old.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+          peer.group = g;
+        }
+        break;
+      }
+      case 'chat':
+        chatLog((m.name || ('guest' + m.id)) + ': ' + m.text, '#cfe3ff', true);
+        break;
+      case 'voice':
+        onVoiceMsg(m.from, m.kind, m.data);
+        break;
+      // moveable-item events → forwarded to the furniture module (p14)
+      case 'grabbed': case 'objstate': case 'dropped': case 'grabdenied':
+        for (const cb of objCbs) try { cb(m); } catch {}
+        break;
+      case 'full':
+        chatLog('— room is full —', '#ffae42');
+        break;
+    }
+  }
+
+  // ── connection ──────────────────────────────────────────────────────────────
+  function connect() {
+    detectWallet();                       // fire-and-forget; never blocks the socket
+    let ws;
+    try { ws = new WebSocket(URL); } catch { scheduleRetry(); return; }
+    state.ws = ws;
+    ws.onopen = () => {
+      state.connected = true; state.retry = 0;
+      setDot('#3ddc84');
+      ws.send(JSON.stringify({ t: 'hello', name: state.name, wallet: state.wallet, room: NET._room }));
+    };
+    ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } if (m && m.t) onMsg(m); };
+    ws.onclose = () => {
+      state.connected = false; setDot('#5b6478'); cleanupPeers();
+      if (state.want) scheduleRetry();    // only reconnect if we still want to be in
+      else updateAll();
+    };
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  }
+  function scheduleRetry() {
+    if (!state.want) return;
+    state.retry = Math.min(state.retry + 1, 6);
+    setTimeout(() => { if (state.want) connect(); }, 1000 * state.retry);
+  }
+  function cleanupPeers() { for (const id of [...state.peers.keys()]) removePeer(id); }
+
+  // ── local player → server (sample the camera) ───────────────────────────────
+  function yawFromCamera() {
+    const d = new THREE.Vector3(); cam.getWorldDirection(d); d.y = 0;
+    return Math.atan2(d.x, d.z);
+  }
+  setInterval(() => {
+    // Only broadcast movement in the full immersive space; chat-only stays put.
+    if (state.mode !== 'full' || !state.connected || !state.ws || state.ws.readyState !== 1) return;
+    const S = SITref() || { on: false, slot: -1 };
+    // seated either at a desk (game SIT) or in a lounge chair (p14 override)
+    const seated = !!S.on || !!(sitOverride && sitOverride.sit);
+    const seat = sitOverride && sitOverride.sit ? sitOverride.seat : (S.on ? 'slot' + S.slot : null);
+    const msg = {
+      t: 'move',
+      x: +cam.position.x.toFixed(3), z: +cam.position.z.toFixed(3),
+      ry: +yawFromCamera().toFixed(3),
+      sit: seated, seat,
+    };
+    const s = JSON.stringify(msg);
+    if (s === state.lastSent) return;     // don't spam identical frames
+    state.lastSent = s;
+    state.ws.send(s);
+  }, SEND_MS);
+
+  // Keepalive: a stationary player's move-sender dedupes to nothing, so without
+  // this the idle WebSocket gets dropped by the tunnel (and the server would reap
+  // it at 45s). A tiny ping every 20s keeps the socket warm and lastSeen fresh.
+  setInterval(() => {
+    if (state.connected && state.ws && state.ws.readyState === 1) {
+      state.ws.send(JSON.stringify({ t: 'ping' }));
+    }
+  }, 20000);
+
+  // ── remote interpolation (own rAF; independent of the game's frame loop) ─────
+  function tick() {
+    requestAnimationFrame(tick);
+    for (const peer of state.peers.values()) {
+      const g = peer.group;
+      if (!g) continue;                    // no mesh in chat-only mode
+      g.position.x += (peer.tgt.x - g.position.x) * 0.18;
+      g.position.z += (peer.tgt.z - g.position.z) * 0.18;
+      // shortest-arc yaw lerp
+      let dy = peer.tgt.ry - g.rotation.y;
+      while (dy > Math.PI) dy -= Math.PI * 2;
+      while (dy < -Math.PI) dy += Math.PI * 2;
+      g.rotation.y += dy * 0.18;
+      // sit = drop the whole avatar a bit so it reads as seated
+      const wantY = peer.sit ? UPS * -0.35 : 0;
+      g.position.y += (wantY - g.position.y) * 0.15;
+    }
+    voiceTick();
+  }
+  requestAnimationFrame(tick);
+
+  // Hooks for the furniture module (p14): forward item events + let it drive the
+  // seated flag that presence broadcasts.
+  const objCbs = [];
+  let sitOverride = null;   // {sit, seat} set by p14 when you sit in a lounge chair
+
+  // ── voice: WebRTC mesh + proximity audio ────────────────────────────────────
+  // Signaling rides the server's `voice` relay (already built); audio is peer-to-
+  // peer. Each remote stream plays through a Web Audio PannerNode positioned at
+  // that person's avatar, so voices get louder as you walk closer. Mesh is fine
+  // for a lounge-sized room; an SFU is the later upgrade.
+  // ICE config comes from the lounge server's /turn endpoint (STUN + a TURN
+  // relay with time-limited credentials) so voice connects across strict NATs.
+  // Falls back to public STUN if the fetch fails.
+  let ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  let iceFetched = 0;
+  async function refreshIce() {
+    if (Date.now() - iceFetched < 5 * 60 * 1000) return;   // creds live ~1h; refetch at most every 5m
+    try {
+      const base = new URL('/turn', 'https://lounge.wattxchange.app').href;
+      const r = await fetch(base, { cache: 'no-store' });
+      const j = await r.json();
+      if (j && Array.isArray(j.iceServers) && j.iceServers.length) { ICE = { iceServers: j.iceServers }; iceFetched = Date.now(); }
+    } catch { /* keep the STUN fallback */ }
+  }
+  const voice = { on: false, stream: null, pcs: new Map(), audio: new Map(), ctx: null };
+
+  async function voiceStart() {
+    if (voice.on || state.mode !== 'full') return;
+    await refreshIce();                        // get a fresh TURN relay before dialing
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }); }
+    catch { notify('🎤 mic blocked — voice stays off'); updateMic(); return; }
+    voice.stream = stream; voice.on = true;
+    voice.ctx = voice.ctx || new (window.AudioContext || window.webkitAudioContext)();
+    if (voice.ctx.state === 'suspended') { try { await voice.ctx.resume(); } catch {} }
+    notify('🎤 voice on — walk closer to hear people');
+    updateMic();
+    for (const id of state.peers.keys()) voiceConnect(id, state.id < id);   // lower id initiates (no glare)
+  }
+  function voiceStop() {
+    if (!voice.on) return;
+    voice.on = false;
+    for (const pc of voice.pcs.values()) { try { pc.close(); } catch {} }
+    voice.pcs.clear();
+    for (const a of voice.audio.values()) { try { a.el.pause(); a.el.srcObject = null; } catch {} }
+    voice.audio.clear();
+    if (voice.stream) { voice.stream.getTracks().forEach((t) => t.stop()); voice.stream = null; }
+    updateMic();
+  }
+  function voiceConnect(peerId, initiator) {
+    if (!voice.on || peerId === state.id || voice.pcs.has(peerId)) return;
+    const pc = new RTCPeerConnection(ICE);
+    voice.pcs.set(peerId, pc);
+    voice.stream.getTracks().forEach((t) => pc.addTrack(t, voice.stream));
+    pc.onicecandidate = (e) => { if (e.candidate) sendVoice(peerId, 'ice', e.candidate); };
+    pc.ontrack = (e) => attachRemote(peerId, e.streams[0]);
+    pc.onconnectionstatechange = () => {
+      if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) voiceDrop(peerId);
+    };
+    if (initiator) {
+      pc.createOffer().then((o) => pc.setLocalDescription(o))
+        .then(() => sendVoice(peerId, 'offer', pc.localDescription)).catch(() => {});
+    }
+  }
+  function voiceDrop(peerId) {
+    const pc = voice.pcs.get(peerId); if (pc) { try { pc.close(); } catch {} voice.pcs.delete(peerId); }
+    const a = voice.audio.get(peerId); if (a) { try { a.el.pause(); a.el.srcObject = null; } catch {} voice.audio.delete(peerId); }
+  }
+  function sendVoice(to, kind, data) {
+    if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ t: 'voice', to, kind, data }));
+  }
+  async function onVoiceMsg(from, kind, data) {
+    if (!voice.on) return;                       // our mic is off; nothing to negotiate
+    let pc = voice.pcs.get(from);
+    try {
+      if (kind === 'offer') {
+        if (!pc) { voiceConnect(from, false); pc = voice.pcs.get(from); }
+        await pc.setRemoteDescription(data);
+        const ans = await pc.createAnswer(); await pc.setLocalDescription(ans);
+        sendVoice(from, 'answer', pc.localDescription);
+      } else if (kind === 'answer') { if (pc) await pc.setRemoteDescription(data); }
+      else if (kind === 'ice') { if (pc) await pc.addIceCandidate(data); }
+    } catch { /* renegotiation race — ignore */ }
+  }
+  function attachRemote(peerId, stream) {
+    const ctx = voice.ctx; if (!ctx) return;
+    try {
+      const src = ctx.createMediaStreamSource(stream);
+      const panner = ctx.createPanner();
+      panner.panningModel = 'HRTF'; panner.distanceModel = 'inverse';
+      panner.refDistance = UPS * 2.5; panner.maxDistance = UPS * 45; panner.rolloffFactor = 1.1;
+      src.connect(panner); panner.connect(ctx.destination);
+      // Chrome needs the stream attached to a (muted) element for audio to flow.
+      const el = new Audio(); el.srcObject = stream; el.muted = true; el.play().catch(() => {});
+      voice.audio.set(peerId, { panner, src, el });
+    } catch { /* older browser — skip proximity */ }
+  }
+  // Keep the Web Audio listener on the camera and each voice at its avatar.
+  function voiceTick() {
+    if (!voice.on || !voice.ctx) return;
+    const L = voice.ctx.listener, p = cam.position;
+    const f = new THREE.Vector3(); cam.getWorldDirection(f);
+    if (L.positionX) { L.positionX.value = p.x; L.positionY.value = p.y; L.positionZ.value = p.z;
+      L.forwardX.value = f.x; L.forwardY.value = f.y; L.forwardZ.value = f.z; L.upX.value = 0; L.upY.value = 1; L.upZ.value = 0; }
+    else { L.setPosition(p.x, p.y, p.z); L.setOrientation(f.x, f.y, f.z, 0, 1, 0); }
+    for (const [id, a] of voice.audio) {
+      const peer = state.peers.get(id); if (!peer) continue;
+      const g = peer.group; const x = g ? g.position.x : peer.tgt.x, y = g ? g.position.y + UPS : UPS, z = g ? g.position.z : peer.tgt.z;
+      if (a.panner.positionX) { a.panner.positionX.value = x; a.panner.positionY.value = y; a.panner.positionZ.value = z; }
+      else a.panner.setPosition(x, y, z);
+    }
+  }
+  let micEl;
+  function updateMic() {
+    if (!micEl) return;
+    micEl.style.display = state.mode === 'full' ? 'inline' : 'none';
+    micEl.textContent = voice.on ? '🎤' : '🔇';
+    micEl.title = voice.on ? 'voice on — click to mute' : 'click to talk (mic)';
+    micEl.style.opacity = voice.on ? '1' : '0.55';
+  }
+
+  // ── chat + status UI (collapsible Lounge panel) ─────────────────────────────
+  let logEl, dotEl, bodyEl, countEl, chevEl, wrapEl, unread = 0;
+  let open = true;
+  try { open = localStorage.getItem('mg_lounge_open') !== '0'; } catch {}
+
+  function buildUI() {
+    const wrap = document.createElement('div');
+    wrap.id = 'net-ui'; wrapEl = wrap;
+    wrap.style.cssText = 'position:fixed;left:12px;bottom:12px;width:min(340px,42vw);z-index:60;font:13px/1.4 system-ui,sans-serif;pointer-events:none;display:flex;flex-direction:column;gap:6px;align-items:flex-start';
+
+    // collapsible body: log + input
+    bodyEl = document.createElement('div');
+    bodyEl.style.cssText = 'width:100%;display:flex;flex-direction:column;gap:6px;pointer-events:auto';
+    logEl = document.createElement('div');
+    logEl.style.cssText = 'max-height:24vh;overflow-y:auto;display:flex;flex-direction:column;gap:2px;mask-image:linear-gradient(to top,#000 72%,transparent)';
+    const input = document.createElement('input');
+    input.placeholder = 'chat…  (Enter to send, /name to rename)';
+    input.maxLength = 400;
+    input.style.cssText = 'width:100%;box-sizing:border-box;background:rgba(12,16,26,0.88);border:1px solid #232c44;border-radius:8px;color:#e8ecf6;padding:7px 10px;outline:none';
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();                         // don't trigger walk keys while typing
+      if (e.key !== 'Enter') return;
+      const v = input.value.trim(); input.value = '';
+      if (!v) return;
+      if (v.startsWith('/name ')) {
+        const nn = v.slice(6).trim().slice(0, 24);
+        if (nn) { state.name = nn; try { localStorage.setItem('mg_name', nn); } catch {}
+          chatLog('— you are now ' + nn + ' (rejoin to update others) —', '#8b94ab'); }
+        return;
+      }
+      if (v === '/leave') { setMode('off'); return; }
+      if (v === '/enter') { setMode('full'); return; }
+      if (v === '/lab') { setMode('chat'); return; }
+      if (state.connected && state.ws && state.ws.readyState === 1) {
+        state.ws.send(JSON.stringify({ t: 'chat', text: v }));
+        chatLog('you: ' + v, '#9fe6b4', true);
+      }
+    });
+    input.addEventListener('keyup', (e) => e.stopPropagation());
+    bodyEl.append(logEl, input);
+
+    // the Lounge pill: dot + label + count + chevron + leave. When OFF, clicking
+    // it joins chat-only (you stay in your lab); when connected, it expands/
+    // collapses the chat; the ✕ leaves entirely.
+    const pill = document.createElement('div');
+    pill.style.cssText = 'pointer-events:auto;display:flex;gap:8px;align-items:center;background:rgba(12,16,26,0.9);border:1px solid #232c44;border-radius:20px;color:#e8ecf6;padding:6px 12px;font:inherit';
+    dotEl = document.createElement('span');
+    dotEl.style.cssText = 'width:9px;height:9px;border-radius:50%;background:#5b6478;flex:0 0 auto';
+    const label = document.createElement('span'); label.textContent = 'Lounge'; label.style.cssText = 'font-weight:600;cursor:pointer';
+    countEl = document.createElement('span'); countEl.style.cssText = 'color:#8b94ab;cursor:pointer';
+    chevEl = document.createElement('span'); chevEl.style.cssText = 'color:#8b94ab;cursor:pointer';
+    micEl = document.createElement('span'); micEl.textContent = '🔇';
+    micEl.style.cssText = 'cursor:pointer;display:none;margin-left:2px';
+    leaveEl = document.createElement('span'); leaveEl.textContent = '✕'; leaveEl.title = 'leave lounge';
+    leaveEl.style.cssText = 'color:#8b94ab;cursor:pointer;display:none;margin-left:2px';
+    const hit = document.createElement('span'); hit.style.cssText = 'display:flex;gap:8px;align-items:center;cursor:pointer';
+    hit.append(dotEl, label, countEl, chevEl);
+    hit.addEventListener('click', () => { if (state.mode === 'off') setMode('chat'); else setOpen(!open); });
+    micEl.addEventListener('click', (e) => { e.stopPropagation(); if (voice.on) voiceStop(); else voiceStart(); });
+    leaveEl.addEventListener('click', (e) => { e.stopPropagation(); setMode('off'); });
+    pill.append(hit, micEl, leaveEl);
+
+    wrap.append(bodyEl, pill);
+    document.body.appendChild(wrap);
+    setOpen(open); updateAll();
+  }
+
+  function setOpen(v) {
+    open = v;
+    try { localStorage.setItem('mg_lounge_open', v ? '1' : '0'); } catch {}
+    // chat body only shows when connected AND open
+    if (bodyEl) bodyEl.style.display = (v && state.mode !== 'off') ? 'flex' : 'none';
+    if (chevEl) chevEl.textContent = v ? '▾' : '▸';
+    if (v) { unread = 0; updateCount(); }
+  }
+  function updateCount() {
+    if (!countEl) return;
+    if (state.mode === 'off') { countEl.textContent = '· tap to chat'; if (chevEl) chevEl.textContent = ''; return; }
+    const n = state.peers.size + (state.connected ? 1 : 0);
+    let txt = state.connected ? (n === 1 ? 'just you' : n + ' here') : 'connecting…';
+    if (!open && unread) txt += ' · ' + unread + ' new';
+    countEl.textContent = '· ' + txt;
+    if (chevEl) chevEl.textContent = open ? '▾' : '▸';
+  }
+  function updateButton() {
+    const b = document.getElementById('b-lounge');
+    if (!b) return;
+    if (state.mode === 'full') { b.textContent = '🛋 LEAVE'; b.classList.add('accent'); }
+    else { b.textContent = '🛋 LOUNGE'; b.classList.remove('accent'); }
+  }
+  function updateAll() {
+    if (leaveEl) leaveEl.style.display = state.mode === 'off' ? 'none' : 'inline';
+    if (bodyEl) bodyEl.style.display = (open && state.mode !== 'off') ? 'flex' : 'none';
+    updateCount(); updateButton(); updateMic();
+  }
+  function chatLog(text, color = '#cfe3ff', bubble = false) {
+    if (!logEl) return;
+    const d = document.createElement('div');
+    d.textContent = text;
+    d.style.cssText = 'color:' + color + ';' + (bubble
+      ? 'background:rgba(12,16,26,0.88);border:1px solid #232c44;border-radius:8px;padding:4px 9px;align-self:flex-start;max-width:100%'
+      : 'padding:1px 2px');
+    logEl.appendChild(d);
+    while (logEl.children.length > 60) logEl.removeChild(logEl.firstChild);
+    logEl.scrollTop = logEl.scrollHeight;
+    if (!open && bubble) { unread++; updateCount(); }   // badge unread while collapsed
+  }
+  function setDot(c) { if (dotEl) dotEl.style.background = c; updateCount(); }
+
+  // ── mode control: off ↔ chat ↔ full ─────────────────────────────────────────
+  let leaveEl;
+  function setMode(m) {
+    if (m === state.mode) { if (m !== 'off') setOpen(true); return; }
+    state.mode = m;
+    if (m === 'off') {
+      state.want = false;
+      voiceStop();
+      if (state.ws) { try { state.ws.close(); } catch {} }   // onclose cleans peers + updateAll
+      setOpen(false);
+      notify('🛋 left the lounge');
+    } else {
+      state.want = true;
+      if (m === 'chat') voiceStop();                          // no voice from the lab
+      if (!state.connected) connect();                        // welcome→addPeer respects mode
+      else if (m === 'full') for (const p of state.peers.values()) createMesh(p);
+      else for (const p of state.peers.values()) destroyMesh(p);
+      if (m === 'chat') setOpen(true);
+      notify(m === 'full'
+        ? '🛋 entered the lounge — others can see you now'
+        : '💬 lounge chat on — you are still in your lab');
+    }
+    updateAll();
+    try { window.dispatchEvent(new CustomEvent('mg-lounge-mode', { detail: { mode: state.mode } })); } catch {}
+  }
+  function notify(msg) { chatLog(msg, '#8b94ab'); }   // log into the chat panel
+
+  return {
+    start() {
+      const q = new URLSearchParams(location.search);
+      if (q.has('trailer') || q.has('solo')) return true;    // netcode off, but "ready"
+      const MG = window.MG;
+      if (!MG || !MG.scene || !MG.cam) return false;         // game not ready yet
+      scene = MG.scene; cam = MG.cam;
+      SITref = () => (MG.SIT || { on: false, slot: -1 });
+      NET._room = q.get('room') || 'lounge';                 // ?room=<id> → user-made lounges
+      buildUI();
+      // Default button wiring is netcode-only; the lounge-room module (p15) may
+      // re-wire it to teleport you into the physical lounge. It loads after this.
+      const b = document.getElementById('b-lounge');
+      if (b) b.onclick = () => setMode(state.mode === 'full' ? 'off' : 'full');
+      updateAll();
+      // Chat-only can auto-start here; entering the full lounge ROOM (teleport +
+      // presence) is owned by p15, which handles ?lounge / the lounge host.
+      if (q.has('chat')) setMode('chat');
+      return true;
+    },
+    toggle() { setMode(state.mode === 'full' ? 'off' : 'full'); },   // HUD button / key 6 = immersive
+    enter() { setMode('full'); },
+    chat() { setMode('chat'); },
+    leave() { setMode('off'); },
+    // furniture module (p14) API
+    sendObj(msg) { if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify(msg)); },
+    onObj(cb) { objCbs.push(cb); },
+    setSit(sit, seat) { sitOverride = sit ? { sit: true, seat: seat || null } : null; },
+    get scene() { return scene; },
+    get cam() { return cam; },
+    isFull() { return state.mode === 'full' && state.connected; },
+    _room: 'lounge',
+    debug() {
+      const peers = [...state.peers.entries()].map(([id, p]) => ({ id, name: p.name, tgt: p.tgt, sit: p.sit, mesh: !!p.group }));
+      return { id: state.id, connected: state.connected, mode: state.mode, room: NET._room, peers, sitOverride, voiceOn: voice.on };
+    },
+  };
+})();
+window.MGNET = NET;
+
+// Wire up once the game's module has published window.MG. Netcode stays OFF
+// (solo) until the player enters via the LOUNGE button, key 6, or the chat pill.
+(function waitForGame(tries = 0) {
+  if (NET.start() !== false) return;
+  if (tries > 200) return;                            // ~20s then give up quietly
+  setTimeout(() => waitForGame(tries + 1), 100);
+})();
+</script>

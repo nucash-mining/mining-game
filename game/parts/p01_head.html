@@ -26,7 +26,8 @@ body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
 button{font-family:inherit;cursor:pointer}
 /* ---------- HUD ---------- */
-#hud{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;padding:8px 10px;pointer-events:none;z-index:20}
+#hud{position:fixed;top:0;left:0;right:0;display:flex;align-items:flex-start;gap:8px;padding:8px 10px;pointer-events:none;z-index:20}
+#logo{flex:0 0 auto}
 #hud>*{pointer-events:auto}
 #logo{display:flex;flex-direction:column;line-height:1;padding:7px 12px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
 #logo b{font-size:13px;letter-spacing:.12em;color:var(--gold)}

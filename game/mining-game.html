@@ -26,7 +26,8 @@ body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
 button{font-family:inherit;cursor:pointer}
 /* ---------- HUD ---------- */
-#hud{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;padding:8px 10px;pointer-events:none;z-index:20}
+#hud{position:fixed;top:0;left:0;right:0;display:flex;align-items:flex-start;gap:8px;padding:8px 10px;pointer-events:none;z-index:20}
+#logo{flex:0 0 auto}
 #hud>*{pointer-events:auto}
 #logo{display:flex;flex-direction:column;line-height:1;padding:7px 12px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
 #logo b{font-size:13px;letter-spacing:.12em;color:var(--gold)}
@@ -366,6 +367,42 @@ body.touch.walkoff #joy{display:none}
 #coin-pool:hover{border-color:var(--cyan)}
 #standbtn{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:30;background:var(--panel);border:1px solid var(--cyan);color:var(--txt);border-radius:12px;padding:10px 22px;font:700 13px monospace;cursor:pointer;box-shadow:0 0 18px #35e0ff33}
 #standbtn small{color:var(--dim);font-weight:400}
+/* ---------- POSE LAB (component orientation calibrator) ---------- */
+#poselab{position:fixed;inset:0;z-index:95;display:none;background:radial-gradient(ellipse at 50% 35%,#0f1a2e 0%,#05070f 72%)}
+#poselab.open{display:block}
+#poselab canvas{position:absolute;inset:0}
+#pl-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:10px;padding:12px 14px;z-index:3}
+#pl-top h3{margin:0;font-size:15px;color:var(--cyan);letter-spacing:.06em}
+#pl-top small{color:var(--dim);font-size:11px}
+#pl-side{position:absolute;left:12px;top:58px;width:186px;z-index:3;background:#080b18d8;border:1px solid var(--line);border-radius:12px;padding:10px}
+#pl-panel{position:absolute;right:12px;top:58px;width:246px;z-index:3;background:#080b18d8;border:1px solid var(--line);border-radius:12px;padding:10px}
+.pl-lbl{font-size:9.5px;letter-spacing:.14em;color:var(--dim);margin:9px 0 5px}
+.pl-lbl:first-child{margin-top:0}
+.pl-lbl small{letter-spacing:0;text-transform:none;opacity:.75}
+.pl-chips{display:flex;flex-wrap:wrap;gap:4px}
+.pl-chip{background:#0d1424;border:1px solid var(--line);color:var(--dim);border-radius:7px;padding:5px 8px;font:600 10.5px monospace;cursor:pointer}
+.pl-chip:hover{color:var(--txt);border-color:var(--cyan)}
+.pl-chip.on{background:rgba(46,230,214,.14);border-color:var(--cyan);color:var(--cyan)}
+.pl-list{display:flex;flex-direction:column;gap:4px;max-height:38vh;overflow:auto}
+.pl-part{display:flex;align-items:center;gap:7px;background:#0d1424;border:1px solid var(--line);border-radius:8px;padding:5px 7px;cursor:pointer}
+.pl-part:hover{border-color:var(--cyan)}
+.pl-part.on{border-color:var(--cyan);background:rgba(46,230,214,.1)}
+.pl-part img{width:24px;height:24px;object-fit:contain;border-radius:4px;background:#0a0818}
+.pl-part b{font-size:11px;font-weight:600}
+.pl-part i{font-style:normal;font-size:9px;color:var(--gold);margin-left:auto}
+.pl-axes{display:flex;flex-direction:column;gap:4px}
+.pl-ax{display:flex;align-items:center;gap:4px}
+.pl-ax>span{width:52px;font:700 10px monospace;color:var(--dim);letter-spacing:.08em}
+.pl-ax button{flex:1;background:#0d1424;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:4px 0;font:700 11px monospace;cursor:pointer}
+.pl-ax button:hover{border-color:var(--cyan);color:var(--cyan)}
+.pl-ax b{width:54px;text-align:right;font:700 11px monospace;color:var(--cyan)}
+#pl-read{margin-top:10px;background:#05070f;border:1px solid var(--line);border-radius:8px;padding:7px;font:600 10px/1.55 monospace;color:var(--dim);word-break:break-all}
+#pl-read b{color:var(--gold);font-weight:700}
+.pl-row{display:flex;gap:6px;margin-top:8px}
+.pl-row .hbtn{flex:1;font-size:11px;padding:7px 0}
+#pl-hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:3;font-size:11px;color:var(--dim);background:#0d0a1fd0;border:1px solid var(--line);border-radius:9px;padding:6px 13px;white-space:nowrap}
+#pl-hint b{color:var(--txt)}
+@media (max-width:820px){#pl-side,#pl-panel{width:150px;padding:8px}#pl-hint{display:none}}
 #farmpill{display:flex;align-items:center;gap:5px;background:linear-gradient(90deg,#2a1c00,#3a2a08);border:1px solid var(--gold);border-radius:10px;padding:6px 11px;font-size:11px;color:var(--gold);letter-spacing:.08em}
 #farmpill b{font-size:12px}
 </style>
@@ -393,6 +430,7 @@ body.touch.walkoff #joy{display:none}
     <button class="hbtn gold" id="b-shop">🛒 SHOP</button>
     <button class="hbtn accent" id="b-upg">🔧 GARAGE</button>
     <button class="hbtn" id="b-pool">🏊 POOLS</button>
+    <button class="hbtn" id="b-lounge" title="Enter the shared multiplayer lounge (6)">🛋 LOUNGE</button>
     <button class="hbtn" id="b-stats">📊</button>
     <button class="hbtn" id="b-mute">🔊</button>
   </div>
@@ -464,6 +502,42 @@ body.touch.walkoff #joy{display:none}
   <div id="bench-scale">REAL-SCALE RATIOS<br>ATX board 305×244mm · GPU 300mm<br>CPU package 40×40mm</div>
 </div>
 
+<!-- ============ POSE LAB (component orientation calibrator) ============ -->
+<div id="poselab">
+  <div id="pl-top">
+    <h3>🧭 POSE LAB</h3>
+    <small id="pl-sub">orient a component in its mount · changes apply to every rig instantly</small>
+    <span style="flex:1"></span>
+    <button class="hbtn" id="pl-export">⬇ EXPORT TABLE</button>
+    <button class="hbtn" id="pl-close">✕ CLOSE</button>
+  </div>
+  <div id="pl-side">
+    <div class="pl-lbl">MOUNT</div>
+    <div id="pl-ctx" class="pl-chips"></div>
+    <div class="pl-lbl">COMPONENT</div>
+    <div id="pl-parts" class="pl-list"></div>
+    <div class="pl-lbl">SCOPE</div>
+    <div id="pl-scope" class="pl-chips">
+      <button class="pl-chip on" data-scope="all">every mount</button>
+      <button class="pl-chip" data-scope="ctx">this mount only</button>
+    </div>
+  </div>
+  <div id="pl-panel">
+    <div class="pl-lbl">ROTATE <small>(the model's own orientation)</small></div>
+    <div class="pl-axes" id="pl-rot"></div>
+    <div class="pl-lbl">NUDGE <small>(offset from the mount point)</small></div>
+    <div class="pl-axes" id="pl-off"></div>
+    <div class="pl-lbl">SIZE</div>
+    <div class="pl-axes" id="pl-scale"></div>
+    <div id="pl-read"></div>
+    <div class="pl-row">
+      <button class="hbtn" id="pl-reset">↺ RESET PART</button>
+      <button class="hbtn accent" id="pl-copy">⧉ COPY</button>
+    </div>
+  </div>
+  <div id="pl-hint">drag to orbit · <b>arrows</b> rotate X/Y · <b>Q</b>/<b>E</b> roll · <b>shift</b> = 5° steps · <b>WASD</b>/<b>R</b>/<b>F</b> nudge · <b>P</b> or <b>esc</b> closes</div>
+</div>
+
 <!-- ============ GARAGE UPGRADES ============ -->
 <div class="modal" id="m-upg"><div class="mbox" style="max-width:560px">
   <div class="mhead"><h2>🔧 GARAGE UPGRADES</h2><button class="x" data-close="m-upg">✕</button></div>
@@ -505,7 +579,7 @@ body.touch.walkoff #joy{display:none}
   <p>The 3D crypto-mining simulator built from the <b style="color:var(--txt)">real Mining Game NFT hardware</b>.
   Mint your free Gaming PC, bolt in CPUs and GPUs, feed the rig <b style="color:var(--gold)">⚡WATT</b> as electricity,
   and race the difficulty curve mining blocks on Polygon and Altcoinchain.</p>
-  <button id="mintbtn">⚡ FREE MINT — Gaming PC</button>
+  <button id="mintbtn">▶ ENTER</button>
   <div id="splashlinks">
     <a href="https://mining-game.wattxchange.app/whitepaper.html" target="_blank" rel="noopener" title="Read the Mining Game whitepaper">📄 WHITEPAPER</a>
     <a href="https://stake.mining-game.wattxchange.app/" target="_blank" rel="noopener" title="Stake NFTs and claim WATT">🥩 STAKE</a>
@@ -2716,11 +2790,11 @@ const ITEMS = {
   /* Gen2 hardware — from the official repo's unreleased Components lineup */
   14:{id:14,key:'frame', name:'Mining Rig Frame', brand:'Minga', comp:'Frame', gen:1, hash:0, watt:0, sw:10, supply:5000, price:8000, scene:'14_Mining_Rig_Frame',
      desc:'Open-air frame. Expands a rig from 2 to 4 GPU slots.'},
-  8:{id:8,key:'tx190', name:'TX190 GPU',   brand:'Oblivia',comp:'GPU',     gen:2, hash:60, watt:22, sw:30, supply:3000, price:6000, scene:'8_TX_190', gen2:1, flip:1,
+  8:{id:8,key:'tx190', name:'TX190 GPU',   brand:'Oblivia',comp:'GPU',     gen:2, hash:60, watt:22, sw:30, supply:3000, price:6000, scene:'8_TX_190', gen2:1,
      desc:'Second-generation Oblivia silicon. Triple the hash of the TX120.'},
   9:{id:9,key:'xl190', name:'XL190 CPU',   brand:'Kirtex', comp:'Processor',gen:2, hash:35, watt:8,  sw:22, supply:2500, price:4500, scene:'9_XL_190_CPU', gen2:1,
      desc:'Kirtex second-gen processor. Massive uplift over the XL1.'},
-  10:{id:10,key:'gp720',name:'GP720 GPU',  brand:'MAD',    comp:'GPU',     gen:2, hash:110,watt:38, sw:48, supply:1200, price:14000, scene:'10_GP_720_GPU', gen2:1, flip:1,
+  10:{id:10,key:'gp720',name:'GP720 GPU',  brand:'MAD',    comp:'GPU',     gen:2, hash:110,watt:38, sw:48, supply:1200, price:14000, scene:'10_GP_720_GPU', gen2:1,
      desc:'MAD flagship. Hashes harder than three GP50s.'},
   12:{id:12,key:'xxl270',name:'XXL270 CPU',brand:'Kirtex', comp:'Processor',gen:2, hash:70, watt:15, sw:40, supply:800, price:12000, scene:'10_XXL_270_CPU', gen2:1,
      desc:'The biggest chip Kirtex ever fabbed. Server-grade.'},
@@ -2807,6 +2881,87 @@ const SLOTS = [ // rig positions [x,z,shelfY] — 0-8 garage desks, 9-20 contain
   [-9,27,0.55],[-9,27,1.9],[-9,27,3.25],[-3,27,0.55],[-3,27,1.9],[-3,27,3.25],
   [ 3,27,0.55],[ 3,27,1.9],[ 3,27,3.25],[ 9,27,0.55],[ 9,27,1.9],[ 9,27,3.25],
 ];
+/* ================= COMPONENT MOUNTING POSES =================
+   Every hardware GLB carries its own authored orientation. The gen1 cards
+   (tx120/gp50) are long-axis=x with the fan face toward +z; the gen2 bundle's
+   scenes are not — tx190/gp720 were authored lying flat fans-down, gpx880
+   stands on end. Placement code used to compensate ad hoc: an item `flip` flag
+   on the workbench, a separate RACK_POSE table on the open-air frame. The two
+   disagreed, so the same card sat one way inside the case and another way on
+   the rack, and nothing covered the server tower at all.
+
+   One table owns it now. A pose is applied to the RAW model BEFORE it is
+   fitted and grounded, so editing a pose never moves the mount point:
+     rx/ry/rz   degrees, applied XYZ to the authored model
+     x/y/z      nudge in mount units, after the fit (mount origin = part bottom)
+     s          multiplier on the fitted size
+
+   Lookup, later wins:  POSE_DEF -> '*:key' -> 'ctx:*' -> 'ctx:key'
+                        -> the player's calibration in S.pose (same key shapes)
+   '*:key' is the model's own authoring fix and is normally the one to edit;
+   'ctx:key' is for a mount that genuinely wants something different.
+   Everything here is editable live in the POSE LAB (hotkey P), which writes
+   S.pose and can export a replacement for this table. */
+/* the mounts a part can sit in: the label the POSE LAB shows, the size the
+   mount fits a part to (rack 25cm card at 2.25u/m; the board mounts are at the
+   workbench's 6u/m, so 1.8 = a 300mm card), and which components belong there */
+const POSE_CTX={
+  rack  :{label:'Open-air rig frame',   fit:0.56, comps:['GPU']},
+  pcie  :{label:'PC board · PCIe slot', fit:1.80, comps:['GPU']},
+  tower :{label:'Server tower board',   fit:1.80, comps:['GPU']},
+  towerbay:{label:'Server tower bay',   fit:0.72, comps:['GPU']},
+  socket:{label:'CPU socket',           fit:0.62, comps:['Processor']},
+  pad   :{label:'Floor / shelf pad',    fit:0.95, comps:['ASIC','Frame']},
+};
+const POSE_DEF={rx:0,ry:0,rz:0,x:0,y:0,z:0,s:1};
+const PART_POSE={
+  /* authored-orientation fixes — verified in-browser by bbox scan + fan-side
+     check (2026-08-11), now shared by every mount instead of the rack only */
+  '*:tx190' :{rx:-90},
+  '*:gp720' :{rx:-90},
+  '*:gpx880':{ry:-90},
+};
+const DEG=Math.PI/180;
+function poseFor(ctx,key){
+  const u=(S&&S.pose)||{};
+  return Object.assign({},POSE_DEF,
+    PART_POSE['*:'+key], PART_POSE[ctx+':*'], PART_POSE[ctx+':'+key],
+    u['*:'+key], u[ctx+':*'], u[ctx+':'+key]);
+}
+/* what the player has actually changed, for the POSE LAB export */
+function poseOverride(ctx,key,scope){ const u=(S&&S.pose)||{}; return u[(scope==='all'?'*':ctx)+':'+key]||null; }
+function poseSet(ctx,key,scope,p){
+  if(!S) return; if(!S.pose) S.pose={};
+  const k=(scope==='all'?'*':ctx)+':'+key;
+  const clean={}; for(const f in POSE_DEF) if(Math.abs(p[f]-POSE_DEF[f])>1e-6) clean[f]=+p[f].toFixed(4);
+  if(Object.keys(clean).length) S.pose[k]=clean; else delete S.pose[k];
+  save();
+}
+/* Build one mounted component: authored GLB -> calibrated pose -> fitted size.
+   Returns a GROUP whose origin is the mount point — the fitted part is centred
+   in x/z with its lowest point at y=0 — so mount code just positions the group
+   and never has to know the model's own bounds or authored orientation. */
+function poseMesh(ctx,itemKey,fit){
+  const g=new THREE.Group();
+  g.userData.pose={ctx,key:itemKey,fit};
+  if(!PROTO[itemKey]) return g;
+  const p=poseFor(ctx,itemKey);
+  const raw=instOf(itemKey);
+  raw.rotation.set(p.rx*DEG,p.ry*DEG,p.rz*DEG);
+  const m=normalizeFit(raw, fit*(p.s||1));
+  m.position.x+=p.x; m.position.y+=p.y; m.position.z+=p.z;
+  g.add(m);
+  return g;
+}
+/* fitted bounds of a posed part (mount code needs the standing height) */
+function poseSize(o){ const v=new THREE.Vector3(); new THREE.Box3().setFromObject(o).getSize(v); return v; }
+/* every item that can be posed, as [ctx, itemId] pairs for the lab's part list */
+function poseParts(ctx){
+  const comps=POSE_CTX[ctx].comps, out=[];
+  for(const id in ITEMS){ const it=ITEMS[id];
+    if(comps.includes(it.comp)&&(PROTO[it.key]||it.model||it.scene)) out.push(+id); }
+  return out;
+}
 const SAVEKEY='tmg3d_v1';          // DEMO world save (unchanged key — old saves keep working)
 const LIVEKEY='tmg3d_live_v1';     // LIVE world save — a separate world holding ONLY wallet-backed state
 const MODEKEY='tmg3d_mode';        // which world to boot into next visit
@@ -2819,6 +2974,7 @@ function freshState(){ const inv={},bought={2:0,17:0,18:0,19:0,23:0}; INV_IDS.fo
   upg:{power:0,cooling:0,rack:0,rackgpu:0}, gen:1, blocks:0, blocksNet:{pol:0,alt:0,wtx:0}, lucky:0,
   temp:24, muted:false, tut:0, created:now(), lastSeen:now(), sold:{pol:0,alt:0,wtx:0}, netSwitchT:0,
   payCur:'watt', w3claim:{}, ocRigs:[], mode:'demo', monSize:27, chair:0,
+  pose:{},   // POSE LAB calibration: 'ctx:key' -> {rx,ry,rz,x,y,z,s}
   usdt:0, dai:0, containers:0, warehouse:0,
   stakedWatt:0, shopPool:25000, shopEarned:0,
   pool:{pol:'nucash',alt:'nucash',wtx:'genesis'}, myPools:{}, pend:{pol:0,alt:0,wtx:0}, payThresh:3,
@@ -2845,6 +3001,7 @@ function load(mode){ mode=mode==='live'?'live':'demo';
   st.blocksNet.wtx=st.blocksNet.wtx||0; st.sold.wtx=st.sold.wtx||0;
   st.pool=Object.assign({pol:'nucash',alt:'nucash',wtx:'genesis'},o.pool||{});
   st.myPools=o.myPools||{}; st.pend=Object.assign({pol:0,alt:0,wtx:0},o.pend||{});
+  st.pose=(o.pose&&typeof o.pose==='object')?o.pose:{};
   for(const c of ['pol','alt','wtx']) if(st.pool[c]==='solo'&&!st.myPools[c]) st.pool[c]=c==='wtx'?'genesis':'nucash';
   st.poolEarnC=Object.assign({pol:0,alt:0,wtx:0},o.poolEarnC||{});
   /* the slot decides the mode — a pre-split save that stored mode:'live' in the
@@ -3372,6 +3529,192 @@ function loadTex(f){
   })(0);
   return tex;
 }
+/* ---------- spinnable fans ----------
+   The gen2 models arrive as ONE merged mesh with one atlas material, so there
+   is no fan node to grab and no material name to match on. The blades are still
+   separate GEOMETRY though: this finds a model's connected components, keeps
+   the ones shaped like a fan, lifts each into its own mesh pivoted on its hub
+   (rotating the merged mesh would swing the fans around the card instead of
+   spinning them), and tags it with the axis it turns about. Runs once per model
+   at load; instOf() clones inherit the result.
+
+   Thresholds are tuned against the real assets: a GP720's blades come out as
+   four 0.79-wide discs 0.15 thick, its backplate as a 112-triangle sheet and
+   its I/O bracket as a long thin strip; an XXL270's blades are one 1.21 disc
+   0.06 thick sitting inside a 0.20-thick shroud ring of the same width and
+   centre — which is why concentric candidates keep only the densest one, or the
+   shroud would spin along with the blades. Only hardware models are scanned:
+   a case's flat square side panel would otherwise read as a very large fan. */
+/* flat: a blower's squirrel cage is chunkier than an axial fan's blades, so
+   this is looser than a disc would need. minRel is small because the ASIC is a
+   big brick with little fans on it. */
+const FAN={ flat:0.45, round:0.75, minTris:250, minRel:0.05, maxRel:0.90, spin:9 };
+/* connected components of one geometry, as triangle lists + bounds */
+function meshComponents(geo){
+  const pos=geo.attributes.position, idx=geo.index?geo.index.array:null;
+  const n=pos.count, par=new Int32Array(n);
+  for(let i=0;i<n;i++) par[i]=i;
+  const find=i=>{ while(par[i]!==i){ par[i]=par[par[i]]; i=par[i]; } return i; };
+  const uni=(a,b)=>{ a=find(a); b=find(b); if(a!==b) par[b]=a; };
+  // weld first: exporters split a vertex per corner, which would leave every
+  // triangle its own component
+  const seen=new Map();
+  for(let i=0;i<n;i++){
+    const k=Math.round(pos.getX(i)*1e4)+','+Math.round(pos.getY(i)*1e4)+','+Math.round(pos.getZ(i)*1e4);
+    if(seen.has(k)) uni(seen.get(k),i); else seen.set(k,i);
+  }
+  const tris=idx?idx.length/3:n/3;
+  for(let t=0;t<tris;t++){
+    const a=idx?idx[t*3]:t*3, b=idx?idx[t*3+1]:t*3+1, c=idx?idx[t*3+2]:t*3+2;
+    uni(a,b); uni(b,c);
+  }
+  const out=new Map();
+  for(let t=0;t<tris;t++){
+    const r=find(idx?idx[t*3]:t*3);
+    let e=out.get(r);
+    if(!e){ e={tris:[], min:[1e9,1e9,1e9], max:[-1e9,-1e9,-1e9]}; out.set(r,e); }
+    e.tris.push(t);
+    for(let k=0;k<3;k++){
+      const i=idx?idx[t*3+k]:t*3+k, v=[pos.getX(i),pos.getY(i),pos.getZ(i)];
+      for(let c=0;c<3;c++){ if(v[c]<e.min[c]) e.min[c]=v[c]; if(v[c]>e.max[c]) e.max[c]=v[c]; }
+    }
+  }
+  return [...out.values()];
+}
+/* does this lump of geometry look like a fan? */
+function fanTest(c, gmax){
+  const s=[c.max[0]-c.min[0], c.max[1]-c.min[1], c.max[2]-c.min[2]];
+  const ord=[0,1,2].sort((a,b)=>s[a]-s[b]);
+  const mn=s[ord[0]], md=s[ord[1]], mx=s[ord[2]];
+  if(mx<FAN.minRel*gmax || mx>FAN.maxRel*gmax) return null;  // not a screw, not the whole part
+  if(mn>FAN.flat*mx) return null;                            // a fan is flat
+  if(md<FAN.round*mx) return null;                           // and round: a disc's box is square
+  if(c.tris.length<FAN.minTris) return null;                 // blades are dense; a backplate is not
+  return {c, axis:ord[0], mx};
+}
+/* Some cards model every blade as its own piece — a TX190's blower is seven
+   separate 44-triangle blades, so its fan is not one component but a ring of
+   identical small ones. Group components by triangle count, cluster each group
+   by position, and hand back the rings. A heatsink's fins are also identical
+   and repeated, but they sit in a LINE, so the roundness test in fanTest drops
+   them while a blade ring passes. */
+function bladeRings(comps){
+  const ctr=c=>[0,1,2].map(i=>(c.min[i]+c.max[i])/2);
+  const span=c=>Math.max(c.max[0]-c.min[0], c.max[1]-c.min[1], c.max[2]-c.min[2]);
+  const buckets=new Map();
+  for(const c of comps){
+    const k=Math.round(Math.log(Math.max(1,c.tris.length))/Math.log(1.15));
+    let a=buckets.get(k); if(!a){ a=[]; buckets.set(k,a); } a.push(c);
+  }
+  const out=[];
+  for(const group of buckets.values()){
+    if(group.length<5) continue;
+    const reach=Math.max(...group.map(span))*2.2;
+    const used=new Array(group.length).fill(false);
+    for(let i=0;i<group.length;i++){
+      if(used[i]) continue;
+      used[i]=true; const stack=[i], cl=[];
+      while(stack.length){
+        const j=stack.pop(); cl.push(group[j]);
+        const cj=ctr(group[j]);
+        for(let k=0;k<group.length;k++){
+          if(used[k]) continue;
+          const ck=ctr(group[k]);
+          if(Math.hypot(cj[0]-ck[0], cj[1]-ck[1], cj[2]-ck[2])<=reach){ used[k]=true; stack.push(k); }
+        }
+      }
+      if(cl.length<5) continue;
+      out.push({ tris:[].concat(...cl.map(m=>m.tris)),
+        min:[0,1,2].map(i=>Math.min(...cl.map(m=>m.min[i]))),
+        max:[0,1,2].map(i=>Math.max(...cl.map(m=>m.max[i]))) });
+    }
+  }
+  return out;
+}
+function splitMeshFans(mesh, gmax){
+  const geo=mesh.geometry;
+  if(!geo||!geo.attributes.position) return;
+  geo.computeBoundingBox();
+  const comps=meshComponents(geo);
+  const cand=[];
+  for(const c of comps){ const f=fanTest(c,gmax); if(f) cand.push(f); }
+  for(const r of bladeRings(comps)){ const f=fanTest(r,gmax); if(f) cand.push(f); }
+  if(!cand.length) return;
+  /* Every fan on one part turns about the same axis — a card's fans all face
+     the same way. So when candidates disagree, the minority is not a fan
+     (GPX880 offered a stray one on x beside its four real ones), and a part
+     that spins something which is not a fan reads worse than one that spins
+     nothing. */
+  const votes={};
+  for(const f of cand) votes[f.axis]=(votes[f.axis]||0)+1;
+  const axis=+Object.keys(votes).reduce((a,b)=>votes[a]>=votes[b]?a:b);
+  const kept=cand.filter(f=>f.axis===axis);
+  /* a blade set inside its own shroud ring: same axis, same centre — keep the
+     densest. The centre bucket has to be one fixed size for every candidate,
+     or a shroud lands in a different bucket than the blades it surrounds. */
+  const keep=new Map(), bucket=gmax*0.12;
+  for(const f of kept){
+    const ctr=[0,1,2].map(i=>(f.c.min[i]+f.c.max[i])/2);
+    const k=f.axis+':'+[0,1,2].filter(i=>i!==f.axis).map(i=>Math.round(ctr[i]/bucket)).join(',');
+    const prev=keep.get(k);
+    if(!prev||prev.c.tris.length<f.c.tris.length) keep.set(k,f);
+  }
+  const idx=geo.index?geo.index.array:null;
+  const names=Object.keys(geo.attributes);
+  const get=(src,i,c)=>c===0?src.getX(i):c===1?src.getY(i):c===2?src.getZ(i):src.getW(i);
+  const dropped=new Set();
+  for(const f of keep.values()){
+    const tris=f.c.tris, ng=new THREE.BufferGeometry();
+    for(const name of names){
+      const src=geo.attributes[name], it=src.itemSize;
+      const arr=new Float32Array(tris.length*3*it); let o=0;
+      for(const t of tris) for(let k=0;k<3;k++){
+        const i=idx?idx[t*3+k]:t*3+k;
+        for(let c=0;c<it;c++) arr[o++]=get(src,i,c);
+      }
+      ng.setAttribute(name, new THREE.BufferAttribute(arr,it));
+    }
+    const ctr=new THREE.Vector3(...[0,1,2].map(i=>(f.c.min[i]+f.c.max[i])/2));
+    ng.translate(-ctr.x,-ctr.y,-ctr.z);      // pivot on the hub, so it spins in place
+    const fm=new THREE.Mesh(ng, mesh.material);
+    fm.position.copy(ctr);
+    fm.userData.fanAxis='xyz'[f.axis];
+    mesh.add(fm);
+    for(const t of tris) dropped.add(t);
+  }
+  // the host mesh must stop drawing the triangles the fans took with them
+  const total=idx?idx.length/3:geo.attributes.position.count/3, keptIdx=[];
+  for(let t=0;t<total;t++){
+    if(dropped.has(t)) continue;
+    for(let k=0;k<3;k++) keptIdx.push(idx?idx[t*3+k]:t*3+k);
+  }
+  geo.setIndex(keptIdx);
+}
+/* only hardware: a chassis panel is also flat and square, and must not spin.
+   Sizes are judged against the whole MODEL, not the mesh a component lives in —
+   the gen1 assets keep each fan as its own mesh, which would otherwise fill its
+   mesh completely and be rejected as "the whole part". */
+function splitFans(root){
+  root.updateMatrixWorld(true);
+  const bb=new THREE.Box3().setFromObject(root), bs=new THREE.Vector3(); bb.getSize(bs);
+  const modelMax=Math.max(bs.x,bs.y,bs.z)||1;
+  const meshes=[]; root.traverse(n=>{ if(n.isMesh) meshes.push(n); });
+  const sc=new THREE.Vector3(), p=new THREE.Vector3(), q=new THREE.Quaternion();
+  for(const m of meshes){
+    m.matrixWorld.decompose(p,q,sc);
+    const k=Math.max(Math.abs(sc.x),Math.abs(sc.y),Math.abs(sc.z))||1;
+    splitMeshFans(m, modelMax/k);          // the model's size in this mesh's own units
+  }
+}
+function collectFans(o){ const out=[]; o.traverse(n=>{ if(n.userData&&n.userData.fanAxis) out.push(n); }); return out; }
+/* Spin them clockwise (seen from the fan's own face) while the rig is mining,
+   and stop them dead when it is not — an idle rig should read as idle. */
+function spinFans(fans, dt, mining){
+  if(!fans||!fans.length) return;
+  const step=mining?FAN.spin*dt:0;
+  if(!step) return;
+  for(const f of fans) f.rotation[f.userData.fanAxis]-=step;   // negative = clockwise from the face
+}
 async function loadModels(progress){
   const defs=[['pc','pc.glb'],['cpu','cpu.glb'],['tx120','gpu_tx120.glb'],['gp50','gpu_gp50.glb'],['board','pcboard.glb'],
     /* furniture & farm structures (procedural fallback if the host doesn't serve them) */
@@ -3392,6 +3735,10 @@ async function loadModels(progress){
   for(const id in ITEMS){ const it=ITEMS[id]; if(!it.scene) continue;
     const sc=g2.scenes.find(s=>s.name===it.scene);
     if(sc) PROTO[it.key]=sc;
+  }
+  /* lift the fan blades out of every hardware model so they can spin */
+  for(const id in ITEMS){ const it=ITEMS[id];
+    if(PROTO[it.key] && ['GPU','Processor','ASIC'].includes(it.comp)) splitFans(PROTO[it.key]);
   }
   progress&&progress(1);
 }
@@ -3453,7 +3800,9 @@ function makeProcTower(){
   return g;
 }
 function setTowerOwned(own){
-  if(towerVis){ towerVis.visible=own; return; }
+  /* re-shown after a world switch or a reset: the tower is the same object but
+     its build belongs to the new save, so resync what is inside it */
+  if(towerVis){ towerVis.visible=own; syncTowerBuild(); return; }
   if(!own) return;
   towerVis=new THREE.Group();
   if(PROTO.tower){
@@ -3466,6 +3815,7 @@ function setTowerOwned(own){
   } else {
     towerVis.add(makeProcTower());   // fallback: tower always renders + stays clickable
   }
+  towerMeasure();
   // generous invisible click/grab hitbox — the tower mesh is thin/irregular, so
   // raycasting it directly missed most clicks. Rigs use boxes for this reason too.
   const thit=new THREE.Mesh(new THREE.BoxGeometry(2.8,3.2,2.8), new THREE.MeshBasicMaterial({visible:false,depthWrite:false}));
@@ -3485,6 +3835,173 @@ function syncTowerGlow(){
   if(typeof towerVis==='undefined'||!towerVis||!towerVis.userData.glow) return;
   const load=(typeof towerHash==='function')?towerHash():0;
   towerVis.userData.glow.intensity=26+Math.min(50,load*0.15);
+  syncTowerBuild();
+}
+/* ---------- the Server Tower's build, shown inside the case ----------
+   The tower is a real rig — up to 2 CPUs and 6 GPUs on its dual-CPU board —
+   but the case only ever glowed, so nothing you bolted in was visible. The
+   gen2 bundle merges the whole chassis into ONE mesh, so there is no side
+   panel to take off: a tower with hardware in it switches its shell to smoked
+   glass and lights the interior instead, which is how you would see a build
+   through a tempered-glass panel anyway.
+
+   Every measurement below comes from the case's OWN bounds, so a re-exported
+   or replaced tower model still lays out correctly. */
+/* PCIe pitch is the card's own THICKNESS, not its height: a dual-slot card is
+   ~40mm thick and 120mm tall, which is why six of them stack inside a case at
+   all. slotGap is that pitch as a multiple of the card's thickness. */
+const TOWER_BAY={ wall:0.10, glass:0.30, boardFill:0.84, cardOfBoard:0.92, slotGap:1.30 };
+/* the case's local bounds + its shell materials, taken once at build time
+   (towerVis is still untransformed here, so the box is tower-local) */
+function towerMeasure(){
+  const mdl=towerVis.children[0]; if(!mdl) return;
+  const bb=new THREE.Box3().setFromObject(mdl), bs=new THREE.Vector3(); bb.getSize(bs);
+  towerVis.userData.box={min:bb.min.clone(), size:bs};
+  const shell=[];
+  mdl.traverse(n=>{ if(n.isMesh&&n.material){
+    n.material=n.material.clone();   // never fade the shared PROTO material (thumbnails use it)
+    shell.push({mesh:n, mat:n.material, o:n.material.opacity, t:n.material.transparent, w:n.material.depthWrite});
+  }});
+  towerVis.userData.shell=shell;
+}
+/* The interior, as a real case is laid out: the motherboard tray is the far
+   inner wall, so the board stands with its plane parallel to the glass, its
+   PCIe slots running along the case (x) and stacking up it (y). Measured from
+   the case's own bounds — this case is 2.2 x 1.8 x 0.83, i.e. the big face the
+   player looks at IS the side panel, exactly like a tower. */
+function towerBayOf(box){
+  const w=TOWER_BAY.wall;
+  const iw=box.size.x-w*2, ih=box.size.y-w*2, id=box.size.z-w*2;
+  const boardW=Math.min(iw*TOWER_BAY.boardFill, ih*1.25);
+  return {
+    x    : box.min.x+box.size.x/2,        // along the slots
+    tray : box.min.z+w,                   // the board's back face: the far inner wall
+    yBot : box.min.y+w+ih*0.16,           // the board stands off the floor — PSU space under it
+    yTop : box.min.y+box.size.y-w*1.4,
+    iw, ih, id, boardW,                   // towerFitOf sizes the cards; it owns `len`
+  };
+}
+/* Size the build from the case AND the cards it holds. The binding constraint
+   is almost always the case DEPTH: a card standing in a slot has to fit between
+   the motherboard tray and the glass, and how far it stands off is its own
+   height, which differs per model. Measuring a probe card at unit length gives
+   the ratios, so nothing here is a guessed number. */
+function towerFitOf(bay, ids){
+  const key=ids&&ids.length?ITEMS[ids[0]].key:null;
+  if(!key||!PROTO[key]) return {len:bay.iw*0.55, pitch:bay.iw*0.06, boardW:bay.iw*0.6, board:0};
+  const r=poseSize(poseMesh('towerbay', key, 1));   // x = length, y = standoff, z = thickness
+  /* the board eats depth first — its heatsinks and slots stand off the tray
+     before a card even starts — so budget the two together, per unit of card
+     length, and solve for the length that fits between tray and glass */
+  const bt=PROTO.board ? poseSize(normalizeFit(instOf('board'),1)).y : 0.06;
+  const perLen=Math.max(0.01, r.y + bt/TOWER_BAY.cardOfBoard);
+  const len=Math.min(bay.iw*0.86, bay.id*0.95/perLen);
+  return { len, pitch:len*r.z*TOWER_BAY.slotGap, ratio:r, board:bt,
+           boardW:Math.min(len/TOWER_BAY.cardOfBoard, bay.iw*0.86) };
+}
+/* The motherboard, standing on the tray with its components facing the glass. */
+function placeTowerBoard(parent, bay, fit){
+  const g=new THREE.Group();
+  const boardW=(fit&&fit.boardW)||bay.boardW;
+  if(PROTO.board){
+    const m=normalizeFit(instOf('board'), boardW);
+    m.rotation.x=Math.PI/2;               // lay it up against the tray, component side out
+    g.add(m);
+  } else {
+    const m=new THREE.Mesh(new THREE.BoxGeometry(boardW, boardW*0.8, 0.02),
+      new THREE.MeshStandardMaterial({color:0x0b3d1e, roughness:.8, metalness:.1}));
+    m.position.y=boardW*0.4; g.add(m);
+  }
+  parent.add(g);
+  // seat it: back face on the tray, bottom on the bay floor, centred across the case
+  const b=new THREE.Box3().setFromObject(g);
+  g.position.x+=bay.x-(b.min.x+b.max.x)/2;
+  g.position.y+=bay.yBot-b.min.y;
+  g.position.z+=bay.tray-b.min.z;
+  const b2=new THREE.Box3().setFromObject(g);
+  return {group:g, bottom:b2.min.y, top:b2.max.y, face:b2.max.z, h:b2.max.y-b2.min.y};
+}
+/* Plug the installed cards into the board's PCIe slots.
+
+   A card in a slot: its LENGTH runs along the slot (x), its THICKNESS is the
+   stacking axis (y) — that is the PCIe pitch — and its body stands off the
+   board toward the glass (z), which puts the fans face down. The POSE table
+   hands every card over standing on its connector edge (long x, tall y, thin
+   z), so one +90 deg roll about x is the whole mount, and the group origin IS
+   the connector edge: park it on the board face and the card is seated.
+
+   Cards shrink together only if the board is too short for the stack. Shared
+   with the POSE LAB, which previews this exact bay. */
+function placeTowerBayGpus(parent, ids, bay, board, fit){
+  const out=[]; if(!ids.length) return out;
+  fit=fit||towerFitOf(bay, ids);
+  const face=board?board.face:bay.tray, bot=board?board.bottom:bay.yBot,
+        room=(board?board.h:bay.yTop-bay.yBot)*0.92;
+  const build=len=>ids.map(id=>poseMesh('towerbay', ITEMS[id].key, len));
+  let len=fit.len, cards=build(len);
+  const pitchOf=cs=>Math.max(...cs.map(c=>poseSize(c).z))*TOWER_BAY.slotGap;
+  const need=pitchOf(cards)*ids.length;
+  if(need>room){ len*=room/need; cards=build(len); }   // more cards than the board is tall
+  const pitch=pitchOf(cards);
+  const slotMat=new THREE.MeshStandardMaterial({color:0x14151f, roughness:.6, metalness:.4});
+  cards.forEach((c,k)=>{
+    const y=bot+pitch*(k+0.6);
+    /* the slot itself: an x16 connector on the board face, set toward the rear
+       of the card — this case's intake fan is on its -x face, so +x is the rear
+       where a card's I/O bracket and its slot belong */
+    const slot=new THREE.Mesh(new THREE.BoxGeometry(len*0.30, pitch*0.34, 0.022), slotMat);
+    slot.position.set(bay.x+len*0.18, y, face+0.011); parent.add(slot);
+    c.rotation.x=Math.PI/2;               // seat it in the slot, standing off the board
+    c.position.set(bay.x, y, face);
+    parent.add(c); out.push(c);
+  });
+  return out;
+}
+/* Seat the CPU coolers on the board, above the PCIe stack.
+
+   Unlike the cards these get NO roll: the CPU models are authored fan-up (which
+   is why the workbench, whose board lies flat, has always shown them right), so
+   identity is already the pose that points the fan at the ceiling. They stand
+   clear of the board face rather than straddling it. */
+function placeTowerCpus(parent, ids, bay, board, size){
+  const out=[]; if(!ids.length) return out;
+  ids.forEach((cid,k)=>{
+    const m=poseMesh('socket', ITEMS[cid].key, size);
+    const s=poseSize(m);
+    m.position.set(bay.x + (ids.length>1?(k?1:-1)*size*0.7:0),
+                   board.top-s.y-board.h*0.04,      // just under the top edge of the board
+                   board.face+s.z/2);               // fully proud of the board, not sunk into it
+    parent.add(m); out.push(m);
+  });
+  return out;
+}
+function syncTowerBuild(){
+  if(typeof towerVis==='undefined'||!towerVis) return;
+  const t=(typeof S!=='undefined'&&S)?S.towerRig:null;
+  const gpus=(t&&t.gpus)||[], cpus=(t&&t.cpus)||[];
+  const filled=gpus.length+cpus.length;
+  if(towerVis.userData.build){ towerVis.remove(towerVis.userData.build); towerVis.userData.build=null; }
+  towerVis.userData.fans=null;
+  /* glass only once there is something to look at — an empty tower stays a
+     closed case. renderOrder keeps the shell drawing after its own contents. */
+  for(const s of (towerVis.userData.shell||[])){
+    s.mat.transparent = filled?true:s.t;
+    s.mat.opacity     = filled?TOWER_BAY.glass:s.o;
+    s.mat.depthWrite  = filled?false:s.w;
+    s.mesh.renderOrder= filled?1:0;
+  }
+  const box=towerVis.userData.box;
+  if(!filled||!box) return;
+  const g=new THREE.Group(); towerVis.userData.build=g; towerVis.add(g);
+  const bay=towerBayOf(box), fit=towerFitOf(bay, gpus);
+  const board=placeTowerBoard(g, bay, fit);
+  placeTowerBayGpus(g, gpus, bay, board, fit);
+  placeTowerCpus(g, cpus, bay, board, Math.min(fit.boardW*0.22, board.h*0.3));
+  // interior light, so the hardware reads through the smoked pane
+  const lit=new THREE.PointLight(0x9fd8ff, 7, box.size.x*1.8);
+  lit.position.set(bay.x, (board.bottom+board.top)/2, board.face+box.size.z*0.3);
+  g.add(lit);
+  towerVis.userData.fans=collectFans(g);   // spun by the main loop while the tower mines
 }
 /* offscreen thumbnails of each model */
 function makeThumbs(){
@@ -3509,9 +4026,9 @@ function makeThumbs(){
   for(const k in views){
     if(!PROTO[k]) continue;
     const [h,cp,ct]=views[k];
-    const raw=instOf(k);
-    if(g2keys[k]&&ITEMS[ids[k]].flip) raw.rotation.x=Math.PI;
-    const inst=g2keys[k]?normalizeFit(raw,1.05):normalize(raw,h); tScene.add(inst);
+    /* gen2 scenes carry their own authored orientation — the POSE table's
+       '*:key' entry is the one fix, so the thumbnail matches the mounted part */
+    const inst=g2keys[k]?poseMesh('thumb',k,1.05):normalize(instOf(k),h); tScene.add(inst);
     if(g2keys[k]) inst.rotation.y=-0.55;
     tc.position.set(...cp); tc.lookAt(...ct);
     r2.toneMappingExposure=g2keys[k]?0.85:1.5;
@@ -3602,6 +4119,60 @@ function setBadgeOwned(own){
 /* ---------- rig visuals ---------- */
 const rigVis=[]; // idx -> {group, led, gpuMeshes, cpuMesh, pcMesh}
 function clearRigVis(i){ if(rigVis[i]){ scene.remove(rigVis[i].group); rigVis[i]=null; } }
+/* ---------- open-air rig frame: the shared card layout ----------
+   Rows of 4 on BOTH rails (bottom fills first, then the top rail), every card
+   PARALLEL to the rack with its fan face out toward the player — the
+   wall-of-fans look. Orientation per model comes from the POSE table
+   (`poseMesh`), never from a per-call flip, so the workbench, the desk rig and
+   the POSE LAB all mount a card the same way.
+
+   `base` is the mount origin in `parent` space (centre of the bottom rail).
+   `opt.fans` adds an RGB fan in front of each card; `opt.cable(from,k)` may
+   return a curve for that card's riser ribbon (omit it and no cable is drawn).
+   Returns {cards,fans} for the animation loop. */
+function placeRackGpus(parent, ids, base, opt){
+  opt=opt||{};
+  const out={cards:[],fans:[]};
+  const gn=ids.length, perRow=gn>16?5:4;              // 17-19 cards: 5-wide rails so it stays 2 rows deep
+  const span=0.46, railGap=0.72, rowGap=0.62;
+  const pcbMat=new THREE.MeshStandardMaterial({color:0x0b3d1e,roughness:.75,metalness:.1});
+  const riserGeo=new THREE.BoxGeometry(0.20,0.02,0.085);
+  ids.forEach((gid,k)=>{
+    const m=poseMesh('rack', ITEMS[gid].key, 0.56);   // ~25cm card at 2.25u/m
+    const rail=Math.floor(k/perRow)%2;                // 0 = bottom rail, 1 = top rail
+    const depth=Math.floor(k/(perRow*2));             // >8 cards: next pair of rails behind
+    const col=k%perRow;
+    const inRow=Math.min(perRow, gn-Math.floor(k/perRow)*perRow);
+    const x0=-(inRow-1)*span/2;
+    /* dense row: neighbours slightly overlap in x, so stagger alternate cards
+       a hair in z — reads layered instead of z-fighting */
+    const gx=base.x+x0+col*span, gy=base.y+rail*railGap, gz=base.z-depth*rowGap+(col%2)*0.04;
+    m.position.set(gx,gy,gz);
+    parent.add(m); out.cards.push(m);
+    /* PCI-e riser BOARD snapped onto the card's bottom edge — the posed group's
+       origin IS the card's lowest point, so park the riser's top face there. */
+    const riser=new THREE.Mesh(riserGeo, pcbMat);
+    riser.position.set(gx, gy-0.01, gz);
+    parent.add(riser);
+    if(opt.cable){
+      const curve=opt.cable(new THREE.Vector3(gx, gy-0.02, gz+0.05), k);
+      if(curve){
+        const cable=new THREE.Mesh(new THREE.TubeGeometry(curve,14,0.012,5),
+          new THREE.MeshStandardMaterial({color:0x101322,roughness:.6,metalness:.3}));
+        parent.add(cable);
+      }
+    }
+    /* Cooling upgrade => an RGB fan IN FRONT OF THIS CARD, its BOTTOM resting
+       on the same rail the card sits on (ring outer radius 0.188 => center
+       gy+0.20 puts the ring bottom just on the rail). */
+    if(opt.fans){
+      const fan=makeRGBFan();
+      fan.position.set(gx, gy+0.20, gz+0.24);
+      parent.add(fan); out.fans.push(fan);
+    }
+  });
+  return out;
+}
 function buildRigVis(i){
   clearRigVis(i);
   const r=S.rigs[i]; if(!r) return;
@@ -3653,74 +4224,27 @@ function buildRigVis(i){
   if(PROTO.mouse){ const mm=normalizeW(instOf('mouse'),0.16);
     mm.position.x+=1.35; mm.position.z+=0.58; mm.position.y+=DESK.SURF+0.02; mm.rotation.y=-0.3; g.add(mm); }
   // CPU + GPUs live INSIDE the case (see 🔧 WORKBENCH) unless an open-air frame is racked
-  let cpuM=null;
+  let cpuM=null, asicM=null;
   // Bit Hammer ASIC on the TOP SHELF beside the GPU rack (real ASIC ≈ 40cm long)
-  if(r.asic&&PROTO.asic){ const am=normalizeFit(instOf('asic'),0.95);
-    am.position.x+=1.65; am.position.z+=-0.62; am.position.y+=DESK.SHELF+0.05;
-    am.rotation.y=-0.25; g.add(am); }
-  const gpuMs=[]; const fanMs=[];
+  if(r.asic&&PROTO.asic){ const am=poseMesh('pad','asic',0.95);
+    am.position.set(1.65, DESK.SHELF+0.05, -0.62);
+    am.rotation.y=-0.25; g.add(am); asicM=am; }
+  const gpuMs=[]; const fanMs=[]; const modelFans=[];   // the cards' own blades, lifted out at load
   if(r.frame&&PROTO.frame){
     // open-air mining rig frame on the shelf (never larger than the desk).
-    const fm=normalizeFit(instOf('frame'),1.9);
-    fm.position.x+=0; fm.position.z+=-0.62; fm.position.y+=DESK.SHELF+0.05; g.add(fm);
-    /* Real open-air rig (user-picked pose 2026-08-11): rows of 4 on BOTH rails
-       (bottom fills first, then the top rail), every card PARALLEL to the rack
-       with its FAN FACE OUT toward the player — the wall-of-fans look. Verified
-       against the inscribed GLBs in an isolated harness: BOTH GP50 and TX120
-       are authored long-axis=x, fans=+z, so IDENTITY rotation is exactly this
-       pose; ignore the per-item `flip` flag (it's what mixed the old cards). */
-    const FRAME_GPU_FLIP=false;      // true => rotate every card 180° on X together
-    const gn=r.gpus.length, perRow=gn>16?5:4, span=0.46, railGap=0.72, rowGap=0.62;   // 17-19 cards: 5-wide rails so it stays 2 rows deep
-    const baseZ=-0.60, baseY=DESK.SHELF+0.22;
-    /* Per-model pose correction to reach the shared fans-out pose. The gen1
-       GLBs (tx120/gp50) are authored fans=+z so identity is right; the gen2
-       bundle's scenes each carry their own baked orientation — tx190/gp720 are
-       authored LYING FLAT fans-down (why the old `flip` flag existed) and
-       gpx880 stands on end. Determined empirically in-browser 2026-08-11 by
-       bbox-scanning + visual confirm of the fan side. */
-    const RACK_POSE={ tx190:[-Math.PI/2,0,0], gp720:[-Math.PI/2,0,0], gpx880:[0,-Math.PI/2,0] };
-    // riser-board PCB material (shared)
-    const pcbMat=new THREE.MeshStandardMaterial({color:0x0b3d1e,roughness:.75,metalness:.1});
-    const riserGeo=new THREE.BoxGeometry(0.20,0.02,0.085);
-    r.gpus.forEach((gid,k)=>{
-      const it=ITEMS[gid];
-      const raw=instOf(it.key);
-      const pose=RACK_POSE[it.key]||[0,0,0];
-      raw.rotation.set(pose[0]+(FRAME_GPU_FLIP?Math.PI:0), pose[1], pose[2]); // uniform fans OUT (+z)
-      const m=normalizeFit(raw,0.56); // ~25cm card at 2.25u/m
-      const rail=Math.floor(k/perRow)%2;          // 0 = bottom rail, 1 = top rail
-      const depth=Math.floor(k/(perRow*2));       // >8 cards: next pair of rails behind
-      const col=k%perRow;
-      const inRow=Math.min(perRow, gn-Math.floor(k/perRow)*perRow);
-      const x0=-(inRow-1)*span/2;
-      /* dense row: neighbours slightly overlap in x, so stagger alternate cards
-         a hair in z — reads layered instead of z-fighting */
-      const gx=x0+col*span, gy=baseY+rail*railGap, gz=baseZ-depth*rowGap+(col%2)*0.04;
-      m.position.x+= gx; m.position.z+= gz; m.position.y+= gy;
-      g.add(m); gpuMs.push(m);
-      /* PCI-e riser BOARD snapped onto the card's bottom edge — normalizeFit
-         grounds the card at y=0 before the += gy, so the card's lowest point is
-         exactly gy: park the riser's top face there (board is 0.02 tall). */
-      const riser=new THREE.Mesh(riserGeo, pcbMat);
-      riser.position.set(gx, gy-0.01, gz);
-      g.add(riser);
-      /* riser ribbon cable: from the riser board down to the PC case (mobo). */
-      const from=new THREE.Vector3(gx, gy-0.02, gz+0.05);
-      const to=new THREE.Vector3(-1.35, DESK.SURF+0.95, 0.05);
-      const mid=new THREE.Vector3((from.x+to.x)/2, DESK.SHELF-0.25, (from.z+to.z)/2+0.25);
-      const curve=new THREE.CatmullRomCurve3([from,mid,to]);
-      const cable=new THREE.Mesh(new THREE.TubeGeometry(curve,14,0.012,5),
-        new THREE.MeshStandardMaterial({color:0x101322,roughness:.6,metalness:.3}));
-      g.add(cable);
-      /* Cooling upgrade => an RGB fan IN FRONT OF THIS CARD, its BOTTOM resting
-         on the same rail the card sits on (ring outer radius 0.188 => center
-         gy+0.20 puts the ring bottom just on the rail). */
-      if(S.upg&&S.upg.cooling>0){
-        const fan=makeRGBFan();
-        fan.position.set(gx, gy+0.20, gz+0.24);
-        g.add(fan); fanMs.push(fan);
-      }
+    const fm=poseMesh('pad','frame',1.9);
+    fm.position.set(0, DESK.SHELF+0.05, -0.62); g.add(fm);
+    const rack=placeRackGpus(g, r.gpus, {x:0, y:DESK.SHELF+0.22, z:-0.60}, {
+      fans: !!(S.upg&&S.upg.cooling>0),
+      /* riser ribbon cable: from each riser board down to the PC case (mobo) */
+      cable:(from,k)=>{
+        const to=new THREE.Vector3(-1.35, DESK.SURF+0.95, 0.05);
+        const mid=new THREE.Vector3((from.x+to.x)/2, DESK.SHELF-0.25, (from.z+to.z)/2+0.25);
+        return new THREE.CatmullRomCurve3([from,mid,to]);
+      },
     });
+    gpuMs.push(...rack.cards); fanMs.push(...rack.fans);
+    for(const c of rack.cards) modelFans.push(...collectFans(c));
   } else if(r.gpus.length||r.cpu){
     // closed case: soft glow through the vents scales with installed hardware
     const glow=new THREE.PointLight(0x2ee6d6, 0.35+0.2*r.gpus.length, 2.2);
@@ -3732,7 +4256,8 @@ function buildRigVis(i){
   led.position.set(0,DESK.TOP+0.12,DESK.D/2+0.02); g.add(led);
   g.position.set(px,py,pz); if(prot!=null) g.rotation.y=prot;
   scene.add(g);
-  rigVis[i]={group:g,led,gpuMeshes:gpuMs,cpuMesh:cpuM,pcMesh:pc,fans:fanMs,slot:r.slot};
+  if(asicM) modelFans.push(...collectFans(asicM));
+  rigVis[i]={group:g,led,gpuMeshes:gpuMs,cpuMesh:cpuM,pcMesh:pc,fans:fanMs,modelFans,slot:r.slot};
 }
 /* An RGB case fan: a dark ring + 7-blade hub, its emissive colour cycled and
    spun in the render loop. Cheap (targets integrated GPUs) — a torus + a few
@@ -3949,18 +4474,32 @@ function benchSetup(){
   benchPointerWire();
 }
 /* board-local slot layout (board length axis = z, width = x, surface y≈0.29) */
-const SLOT_Y=0.32;
+const SLOT_Y=0.32, CPU_Y=SLOT_Y-0.03;   // board surface: PCIe slot line, and the socket the cooler bolts to
+/* Seat a posed card in a PCIe slot. The POSE table hands every card over in
+   the same canonical stance — standing on its connector edge, long axis x,
+   thin axis z — which is how the slots run on this board, so seating is pure
+   placement: drop the group's origin (the card's bottom edge) onto the slot.
+
+   This is where the cards used to end up lying FLAT on the motherboard: the
+   bench assumed a card arrived lying down and stood it up with a hard -90,
+   which was wrong for every gen1 card (they are authored standing) and only
+   accidentally right for the two gen2 models carrying the old `flip` flag.
+   Shared with the POSE LAB so the calibrator seats a card exactly like this. */
+function seatCard(m, x, z){
+  m.position.set(x, SLOT_Y-0.03, z);              // edge connector IN the slot, no float gap
+  return m;
+}
 function benchSlotDefs(r){
   const defs=[];
   if(benchIsTower){
     // dual-CPU server board: 2 CPU sockets across the top, 6 PCIe x16 slots down the board
-    defs.push({kind:'cpu', cidx:0, x:-0.42, z:-0.55, y:0.46, label:'CPU SOCKET 1', filled:!!r.cpus[0]});
-    defs.push({kind:'cpu', cidx:1, x: 0.42, z:-0.55, y:0.46, label:'CPU SOCKET 2', filled:!!r.cpus[1]});
+    defs.push({kind:'cpu', cidx:0, x:-0.42, z:-0.55, label:'CPU SOCKET 1', filled:!!r.cpus[0]});
+    defs.push({kind:'cpu', cidx:1, x: 0.42, z:-0.55, label:'CPU SOCKET 2', filled:!!r.cpus[1]});
     for(let k=0;k<TOWER_MAXGPU;k++)
       defs.push({kind:'gpu', idx:k, x:0, z:-0.24+k*0.18, label:'PCIe x16 · '+(k+1), filled:!!r.gpus[k]});
     return defs;
   }
-  defs.push({kind:'cpu', x:-0.28, z:-0.52, y:0.46, label:'CPU SOCKET', filled:!!r.cpu});
+  defs.push({kind:'cpu', x:-0.28, z:-0.52, label:'CPU SOCKET', filled:!!r.cpu});
   const cap=gpuCap(r), onBoard=Math.min(cap,4);
   for(let k=0;k<onBoard;k++)
     defs.push({kind:'gpu', idx:k, x:0, z:0.12+k*0.26, label:'PCIe x16 · '+(k+1), filled:!!r.gpus[k]});
@@ -3974,19 +4513,16 @@ function benchSlotDefs(r){
   defs.push({kind:'frame', x:2.6, z:0.4, floor:true, label:'RACK ZONE', filled:!!r.frame});
   return defs;
 }
-function benchGpuMesh(gid, target){
-  const it=ITEMS[gid];
-  const raw=instOf(it.key); if(it.flip) raw.rotation.x=Math.PI;
-  const m=normalizeFit(raw, target);
-  const bb=new THREE.Box3().setFromObject(m); const sz=new THREE.Vector3(); bb.getSize(sz);
-  if(sz.z>sz.x){ const p=new THREE.Group(); p.add(m); m.rotation.y=Math.PI/2; return p; } // long axis → x
-  const p=new THREE.Group(); p.add(m); return p;
-}
+/* Every part on the bench is built through the shared POSE table, so a card
+   sits the same way here as it does on the desk rig and in the POSE LAB. The
+   old per-item `flip` flag and the long-axis guess lived only here and fought
+   the rack's own table — that is what mixed the gen2 cards up. */
 function benchCompMesh(kind, id){
-  if(kind==='gpu') return benchGpuMesh(id, 0.30*BM); // 300mm
-  if(kind==='cpu'){ const g=new THREE.Group(); g.add(normalizeFit(instOf(ITEMS[id].key), 0.62)); return g; } // cooler on 40mm socket
-  if(kind==='asic'){ const g=new THREE.Group(); g.add(normalizeFit(instOf('asic'), 1.5)); return g; }
-  if(kind==='frame'){ const g=new THREE.Group(); g.add(normalizeFit(instOf('frame'), 1.7)); return g; }
+  const ctx = kind==='gpu' ? (benchIsTower?'tower':'pcie') : kind==='cpu' ? 'socket' : 'pad';
+  if(kind==='gpu')   return poseMesh(ctx, ITEMS[id].key, POSE_CTX[ctx].fit);    // 1.8 = a 300mm card at 6u/m
+  if(kind==='cpu')   return poseMesh(ctx, ITEMS[id].key, POSE_CTX.socket.fit);  // cooler on a 40mm socket
+  if(kind==='asic')  return poseMesh(ctx, 'asic', 1.5);
+  if(kind==='frame') return poseMesh(ctx, 'frame', 1.7);
   return new THREE.Group();
 }
 let bSceneBits=[];
@@ -4028,27 +4564,22 @@ function benchSync(){
   // mounted components
   const r2=benchTarget();
   if(benchIsTower){
-    r2.cpus.forEach((cid,k)=>{ const m=benchCompMesh('cpu',cid); const x=k===0?-0.42:0.42; m.position.set(x,0.42,-0.55); bMountG.add(m); addMountHit(x,0.52,-0.55,'cpu',k); });
-    r2.gpus.forEach((gid,k)=>{ const m=benchCompMesh('gpu',gid);
-      const bb=new THREE.Box3().setFromObject(m); const sz=new THREE.Vector3(); bb.getSize(sz);
-      m.rotation.x=-Math.PI/2; m.position.set(0, SLOT_Y-0.03+sz.z/2, -0.24+k*0.18); bMountG.add(m); addMountHit(0,SLOT_Y+0.22,-0.24+k*0.18,'gpu',k); });
+    r2.cpus.forEach((cid,k)=>{ const m=benchCompMesh('cpu',cid); const x=k===0?-0.42:0.42; m.position.set(x,CPU_Y,-0.55); bMountG.add(m); addMountHit(x,CPU_Y+0.2,-0.55,'cpu',k); });
+    r2.gpus.forEach((gid,k)=>{ const m=seatCard(benchCompMesh('gpu',gid), 0, -0.24+k*0.18);
+      bMountG.add(m); addMountHit(0,SLOT_Y+0.22,-0.24+k*0.18,'gpu',k); });
     benchTray(); return;
   }
-  if(r2.cpu){ const m=benchCompMesh('cpu',r2.cpu); m.position.set(-0.28,0.42,-0.52); bMountG.add(m); }
+  if(r2.cpu){ const m=benchCompMesh('cpu',r2.cpu); m.position.set(-0.28,CPU_Y,-0.52); bMountG.add(m); }
   r2.gpus.forEach((gid,k)=>{
     if(k<4){
       /* FASTENED into the PCIe slot: card stands perpendicular to the board,
          edge connector seated IN the slot (no float gap). */
-      const m=benchCompMesh('gpu',gid);
-      const bb=new THREE.Box3().setFromObject(m); const sz=new THREE.Vector3(); bb.getSize(sz);
-      m.rotation.x=-Math.PI/2;                       // stand the card up, connector down
-      m.position.set(0, SLOT_Y-0.03+sz.z/2, 0.12+k*0.26);
-      bMountG.add(m);
+      bMountG.add(seatCard(benchCompMesh('gpu',gid), 0, 0.12+k*0.26));
     } else {
       /* overflow cards live on the open-air rack, wired back with risers */
       const rcols=gpuCap(r2)>8?3:2, col=(k-4)%rcols, lvl=Math.floor((k-4)/rcols);
       const rg=new THREE.Group(); rg.position.set(2.75,0,-0.3); rg.rotation.y=-0.55;
-      const m=benchCompMesh('gpu',gid); m.scale.multiplyScalar(0.48);   // fit the 1.7u frame
+      const m=poseMesh('rack', ITEMS[gid].key, 0.30*BM*0.48);   // rack pose, sized for the 1.7u frame
       m.position.set(-(rcols-1)*0.4+col*0.8, 0.32+lvl*0.55, 0.25);
       rg.add(m); bScene.add(rg); bSceneBits.push(rg);
       /* PCI-e riser cable: card -> board edge, sagging between */
@@ -4594,6 +5125,7 @@ const WEB3CFG={
     {id:3, sym:'BSV', name:'WATT on BSV'},
     {id:4, sym:'HTH', name:'HTH masternode'},
     {id:5, sym:'BITN', name:'Bitnet PoS'},
+    {id:6, sym:'THA', name:'THA staking'},
   ],
   sel:{ bal1155:'0x00fdd58e', balErc20:'0x70a08231', freemint:'0xaf2de086', buyWithWatt:'0x663e0d4c', rates:'0xdd418ae2', rewards:'0xe8a31bdc',
         positionCount:'0x42fd3880', positions:'0xc1be6677', unstake:'0x2e17de78',
@@ -4927,7 +5459,7 @@ function curPool(){ const c=CFG.nets[S.net].coin; return poolFor(c,S.pool[c]); }
    reveals what each rig is pointed at. A LIVE rig carries an on-chain `algo`
    trait mapped to its coin; a demo rig mines whatever network is selected. */
 const RIG_ALGO_COIN={0:'wtx',1:'bitn',2:'wtx',3:'alt',5:'hth'};
-const COIN_CHAIN={pol:'Polygon',alt:'Altcoinchain',wtx:'WATTxchain',bitn:'Bitnet',hth:'HTH'};
+const COIN_CHAIN={pol:'Polygon',alt:'Altcoinchain',wtx:'WATTxchain',bitn:'Bitnet',hth:'HTH',tha:'THA'};
 function rigMineCoin(r){ return (r&&r.algo!=null&&RIG_ALGO_COIN[r.algo])||CFG.nets[S.net].coin; }
 function rigPoolLabel(i){
   const r=S&&S.rigs&&S.rigs[i]; if(!r) return null;
@@ -5555,7 +6087,7 @@ async function ocUnstake(fn){
   fillChainPools();
 }
 /* off-EVM payout addresses: target 3 = BSV (WATT on BSV), target 4 = HTH (masternode rewards),
-   target 5 = BITN (Bitnet PoS stake rewards) —
+   target 5 = BITN (Bitnet PoS stake rewards), target 6 = THA (staking rewards) —
    the hub keys the declaration to msg.sender; the operator daemon reads it when it settles */
 async function ocSaveAddr(tid,inputId,label){
   const a=($(inputId)?.value||'').trim();
@@ -5565,7 +6097,7 @@ async function ocSaveAddr(tid,inputId,label){
   }catch(e){ SFX.err(); toast((''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',8000); }
   fillChainPools();
 }
-const ocSaveBsv=()=>ocSaveAddr(3,'oc-bsv','BSV'), ocSaveHth=()=>ocSaveAddr(4,'oc-hth','HTH'), ocSaveBitn=()=>ocSaveAddr(5,'oc-bitn','BITN');
+const ocSaveBsv=()=>ocSaveAddr(3,'oc-bsv','BSV'), ocSaveHth=()=>ocSaveAddr(4,'oc-hth','HTH'), ocSaveBitn=()=>ocSaveAddr(5,'oc-bitn','BITN'), ocSaveTha=()=>ocSaveAddr(6,'oc-tha','THA');
 async function ocMintRig(){
   try{ const rig=await poolCtr('rig',true);
     const price=await rig.mintPrice();
@@ -5606,7 +6138,7 @@ function ocAddrLooksOk(sym,a){
   a=(a||'').trim(); if(!a) return false;
   if(sym==='ALT'||sym==='POL') return /^0x[0-9a-fA-F]{40}$/.test(a);
   if(sym==='WTX') return /^0x[0-9a-fA-F]{40}$/.test(a)||/^W[1-9A-HJ-NP-Za-km-z]{25,40}$/.test(a);
-  return /^[0-9a-zA-Z]{20,100}$/.test(a);   // base58-ish gate for HTH/BITN/BSV/future coins
+  return /^[0-9a-zA-Z]{20,100}$/.test(a);   // base58-ish gate for HTH/BITN/BSV/THA/future coins
 }
 function ocAskPayoutAddr(targetId,current){
   const t=WEB3CFG.targets[targetId]||{sym:'#'+targetId,name:''};
@@ -5906,6 +6438,7 @@ async function ocFillPayoutBalances(addrs){
     try{
       if(sym==='WTX'){ const j=await get('https://ord-api.wattxchange.app/address/'+addr+'/balance'); put(sym,fmt((j.confirmed||0)/1e8)); }
       else if(sym==='BITN'){ const j=await get('https://bitn-exp.wattxchange.app/api/address/'+addr); put(sym,fmt(j.balance||0)); }
+      else if(sym==='THA'){ const j=await get('https://tha-api.wattxchange.app/api/address/'+addr); put(sym,fmt(j.balance||0)); }
       else if(sym==='BSV'){ const j=await get('https://api.whatsonchain.com/v1/bsv/main/address/'+addr+'/balance'); put(sym,fmt(((j.confirmed||0)+(j.unconfirmed||0))/1e8)); }
       else put(sym,'—');
     }catch(e){ put(sym,'—'); }
@@ -5917,7 +6450,7 @@ async function fillChainPools(){
   ocRenderWallet(); // live balances strip, independent of the pools contracts
   const el=$('chainpools'); if(!el) return;
   if(!W3.addr){ el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS</b>
-    <small>Connect a wallet (🦊 WALLET) to host a real pool: <b>100,000 WATT v2</b> locked in the PoolRegistry host contract. ONE pool offers a MENU of coins (ALT / WTX / BSV / HTH / BITN …) — every miner picks which coin each rig mines.</small></div>`; return; }
+    <small>Connect a wallet (🦊 WALLET) to host a real pool: <b>100,000 WATT v2</b> locked in the PoolRegistry host contract. ONE pool offers a MENU of coins (ALT / WTX / BSV / HTH / BITN / THA …) — every miner picks which coin each rig mines.</small></div>`; return; }
   const c=poolCfg();
   if(!c){ el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS</b>
     <small>${W3.chain?W3.chain.name+' V3 pool contracts are pending deploy — switch the wallet to <b>Polygon</b> or <b>Altcoinchain</b> to host or mine now.':'Switch the wallet to Polygon or Altcoinchain.'}</small></div>`; return; }
@@ -5926,10 +6459,10 @@ async function fillChainPools(){
   try{
     const E=await poolEthers();
     const reg=await poolCtr('registry'), hub=await poolCtr('hub'), eng=await poolCtr('engine'), rig=await poolCtr('rig');
-    const [regd, actRes, engN, rigN, bsvAddr, hthAddr, bitnAddr]=await Promise.all([
+    const [regd, actRes, engN, rigN, bsvAddr, hthAddr, bitnAddr, thaAddr]=await Promise.all([
       reg.isRegistered(W3.addr), reg.getActivePools(), eng.poolCount(), rig.balanceOf(W3.addr),
       hub.payoutAddressFor(3,W3.addr), hub.payoutAddressFor(4,W3.addr).catch(()=>''),
-      hub.payoutAddressFor(5,W3.addr).catch(()=>''),
+      hub.payoutAddressFor(5,W3.addr).catch(()=>''), hub.payoutAddressFor(6,W3.addr).catch(()=>''),
     ]);
     const wtxAddr=await hub.payoutAddressFor(1,W3.addr).catch(()=>'');
     /* pending payouts across targets */
@@ -6023,8 +6556,10 @@ async function fillChainPools(){
     el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS — ${c.name}</b>
       ${pendRows?`<small>unpaid rewards (operator daemon pays these out): ${pendRows}</small>`:''}
       ${hostRow}${enginePoolRows}${poolRows}
-      ${regd?'':`<div class="hostbox" style="margin-top:8px"><b>🏗 HOST A REAL POOL — lock 100,000 ⚡WATT on-chain</b>
-        <small>Stake sits in the PoolRegistry (30-day unstake hold). ONE pool can offer MANY coins — tick every coin your nodes earn; each miner picks which coin their rig mines. Your pool earns your fee % of every miner's rewards + 1% of the WATT they burn. You can add more pools or coins and change fees any time.</small>
+      <div class="hostbox" style="margin-top:8px"><b>${regd?'🏗 HOST ANOTHER POOL — no extra stake needed':'🏗 HOST A REAL POOL — lock 100,000 ⚡WATT on-chain'}</b>
+        <small>${regd
+          ?'Your 100,000 WATT host stake already backs this wallet — one registration covers any number of pools, so launching another is gas only, no new lock. Give it a name and tick the coin(s) it offers; each miner picks which coin their rig mines.'
+          :'Stake sits in the PoolRegistry (30-day unstake hold). ONE pool can offer MANY coins — tick every coin your nodes earn; each miner picks which coin their rig mines. Your pool earns your fee % of every miner\'s rewards + 1% of the WATT they burn. You can add more pools or coins and change fees any time.'}</small>
         <div class="rowbtns" style="margin-top:6px;flex-wrap:wrap">
           <input id="oc-name" class="hbtn" placeholder="pool name" style="flex:1;min-width:110px">
           ${tgtChecks}
@@ -6033,7 +6568,7 @@ async function fillChainPools(){
           <input id="oc-stratum" class="hbtn" placeholder="stratum (optional — NFT pools need none)" style="flex:1;min-width:150px">
           <input id="oc-rpc" class="hbtn" placeholder="node RPC (optional)" style="flex:1;min-width:120px">
           <input id="oc-p2p" class="hbtn" placeholder="node P2P (optional)" style="flex:1;min-width:120px">
-          <button class="hbtn gold" id="oc-host">🏊 LOCK 100k + LAUNCH</button></div></div>`}
+          <button class="hbtn gold" id="oc-host">${regd?'🏊 LAUNCH POOL':'🏊 LOCK 100k + LAUNCH'}</button></div></div>
       <div class="valbox" style="margin-top:8px;border-color:#3dff8a33"><b>💳 PAYOUT ADDRESSES — where real coin rewards get sent</b>
         <small>Generate or import a seed wallet in your rig's OS (👛 Wallet app) to get an address for every coin, then save each one here. The pool operator pays your credited rewards to these addresses. EVM rewards (POL · ALT · WATT) always pay your connected address.</small>
         <div class="rowbtns" style="margin-top:5px;flex-wrap:wrap;align-items:center">
@@ -6056,13 +6591,18 @@ async function fillChainPools(){
           <input id="oc-bitn" class="hbtn" placeholder="BITN payout address (Bitnet PoS-reward pools)" value="${bitnAddr||''}" style="flex:1;min-width:170px">
           <button class="hbtn" id="oc-savebitn">SAVE</button>
           <small style="min-width:90px;text-align:right;color:var(--dim)">bal <b id="oc-bal-bitn">…</b></small></div>
+        <div class="rowbtns" style="margin-top:5px;flex-wrap:wrap;align-items:center">
+          <b style="min-width:38px">THA</b>
+          <input id="oc-tha" class="hbtn" placeholder="THA payout address (staking-reward pools)" value="${thaAddr||''}" style="flex:1;min-width:170px">
+          <button class="hbtn" id="oc-savetha">SAVE</button>
+          <small style="min-width:90px;text-align:right;color:var(--dim)">bal <b id="oc-bal-tha">…</b></small></div>
       </div>
       <div class="rowbtns" style="margin-top:8px;flex-wrap:wrap;align-items:center">
         <b>⛏ MY RIGS</b>
         <button class="hbtn accent" id="oc-mintrig" title="Mint a brand-new on-chain mining rig NFT (random traits)">⛏ MINT ON-CHAIN RIG</button>
         ${c.pools.migrator?'<button class="hbtn gold" id="oc-claimrig" title="Turn the classic Mining Game NFTs you already own into a mineable on-chain rig (your NFTs are escrowed, reclaim anytime)">🎫 CLAIM RIG FROM MY NFTs</button>':''}</div>
       ${rigRows}${stakedRows}${sesRows}</div>`;
-    ocFillPayoutBalances({WTX:wtxAddr,BSV:bsvAddr,HTH:hthAddr,BITN:bitnAddr});
+    ocFillPayoutBalances({WTX:wtxAddr,BSV:bsvAddr,HTH:hthAddr,BITN:bitnAddr,THA:thaAddr});
     /* wire */
     $('oc-host')?.addEventListener('click',ocHostPool);
     $('oc-mintrig')?.addEventListener('click',ocMintRig);
@@ -6071,6 +6611,7 @@ async function fillChainPools(){
     $('oc-savebsv')?.addEventListener('click',ocSaveBsv);
     $('oc-savehth')?.addEventListener('click',ocSaveHth);
     $('oc-savebitn')?.addEventListener('click',ocSaveBitn);
+    $('oc-savetha')?.addEventListener('click',ocSaveTha);
     $('oc-unstake')?.addEventListener('click',()=>ocUnstake('requestUnstake'));
     $('oc-cancelun')?.addEventListener('click',()=>ocUnstake('cancelUnstake'));
     $('oc-doneun')?.addEventListener('click',()=>ocUnstake('completeUnstake'));
@@ -6456,7 +6997,13 @@ function renderUpg(){
     <div class="uprow"><div class="uic">${S.chair?'🏎️':'🪑'}</div>
       <div class="ubody"><h3>Gaming Chair <small style="color:var(--dim)">${S.chair?'owned':'Lv 0/1'}</small></h3>
       <p>${S.chair?'Racing-style chair with RGB trim on every desk — +3% luck comfort bonus.':'Upgrade every desk chair to a racing-style gaming chair. Sim comfort: +3% luck.'}</p></div>
-      <button class="ubuy" data-chair="1" ${S.chair||upBal<CFG.chairPrice?'disabled':''}>${S.chair?'OWNED ✓':fmt(CFG.chairPrice)+' ⚡'+(upLive?' ⛓':'')}</button></div>`);
+      <button class="ubuy" data-chair="1" ${S.chair||upBal<CFG.chairPrice?'disabled':''}>${S.chair?'OWNED ✓':fmt(CFG.chairPrice)+' ⚡'+(upLive?' ⛓':'')}</button></div>
+    <div class="uprow"><div class="uic">🧭</div>
+      <div class="ubody"><h3>Pose Lab <small style="color:var(--dim)">free · hotkey P</small></h3>
+      <p>Set how each GPU, CPU and ASIC sits in its mount — the open-air frame, the PCIe slots, the server tower board. Changes apply to every rig instantly.</p></div>
+      <button class="ubuy" data-poselab="1">OPEN</button></div>`);
+  const plb=document.querySelector('[data-poselab]');
+  if(plb) plb.onclick=()=>{ closeModal('m-upg'); openPoseLab(); };
   document.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{
     S.monSize=+b.dataset.mon; SFX.click(); rebuildAllRigs(); renderUpg(); save();
     toast(`🖥 Monitors swapped to ${S.monSize}&Prime; on every desk`,'cyan'); });
@@ -7248,7 +7795,7 @@ function walkClamp(cur,next,lo,hi){
   return Math.min(lo,Math.max(cur,next));               // outside low: only inward
 }
 function walkBlocked(){
-  return TRAILER || SIT.on || OS.open || benchOpen || !running ||
+  return TRAILER || SIT.on || OS.open || benchOpen || (typeof PL!=='undefined'&&PL.open) || !running ||
     ['m-shop','m-upg','m-stats','m-web3','m-pool'].some(id=>$(id)&&$(id).classList.contains('open'));
 }
 function walkKey(e,down){
@@ -7358,6 +7905,7 @@ document.addEventListener('mousemove',e=>{
 /* ---------- menu hotkeys (number row — the letters belong to movement now) ---------- */
 addEventListener('keydown',e=>{
   if(e.target.matches('input,textarea,select')) return;
+  if(typeof PL!=='undefined'&&PL.open) return;               // the POSE LAB owns the keyboard while it is up
   if(e.key==='Escape'){ if(OS.open){ closeOS(); return; } if(benchOpen){ closeBench(); return; } selRig=-1; renderRigPanel(); ['m-shop','m-upg','m-stats','m-web3','m-pool'].forEach(closeModal); walkStop(); }
   if(OS.open) return;
   if(e.key==='1'){ openModal('m-shop'); renderShop(); walkStop(); }
@@ -7365,10 +7913,12 @@ addEventListener('keydown',e=>{
   if(e.key==='3'){ openPoolHub(); walkStop(); }
   if(e.key==='4'){ openModal('m-stats'); renderStats(); walkStop(); }
   if(e.key==='5'){ openModal('m-web3'); renderWallet(); walkStop(); }
+  if(e.key==='6'){ if(window.MGNET) window.MGNET.toggle(); }
   if(e.key==='f'||e.key==='F') lookToggle();
   if(e.key==='n'||e.key==='N') switchNet();
   if(e.key==='o'||e.key==='O'){ if(S&&S.rigs.length) openOS(selRig>=0?selRig:0); }
   if(e.key==='b'||e.key==='B'){ if(benchOpen) closeBench(); else if(S&&S.rigs.length) openBench(selRig>=0?selRig:0); }
+  if(e.key==='p'||e.key==='P') openPoseLab();
 });
 /* ================= MAIN LOOP ================= */
 let last=0, acc=0, uiT=0, scrT=0, histT=0, running=false;
@@ -7395,6 +7945,9 @@ function frame(t){
     rv.led.material.color.setHex(ledc); rv.led.material.opacity=1;
     // RGB cooling fans: spin faster when the rig is powered on/mining, and
     // cycle hue along the row so the bank shimmers like real ARGB fans.
+    /* the cards' own fans: spinning means this rig is actually earning — off,
+       crashed, worn out or out of WATT and they stop dead */
+    spinFans(rv.modelFans, dt, !noWatt && rigHash(S.rigs[ri]||{gpus:[]})>0);
     if(rv.fans&&rv.fans.length){
       const on=S.rigs[ri]&&S.rigs[ri].on!==0 && !noWatt;
       const spin=(on?9:1.2)*dt;
@@ -7406,6 +7959,8 @@ function frame(t){
       });
     }
   });
+  if(typeof towerVis!=='undefined'&&towerVis&&towerVis.visible&&towerVis.userData.fans)
+    spinFans(towerVis.userData.fans, dt, !noWatt && towerHash()>0);
   // rings pulse
   const pt=t/1000;
   rings.forEach((rg,i)=>{ if(!rg||!rg.visible) return;
@@ -7423,6 +7978,7 @@ function frame(t){
     priceHist.alt.push(S.price.alt); if(priceHist.alt.length>50) priceHist.alt.shift();
     priceHist.wtx.push(S.price.wtx); if(priceHist.wtx.length>50) priceHist.wtx.shift();
   }}
+  if(typeof PL!=='undefined'&&PL.open){ poseLabLoop(dt); return; }
   if(benchOpen){ benchLoop(dt); return; }
   renderer.render(scene,cam);
 }
@@ -7460,11 +8016,12 @@ async function init(){
   if(TRAILER){ $('splash').style.display='none'; trailerSetup(); }
   window.MG={ get S(){return S;}, tick:s=>{for(let i=0;i<s*10;i++)simTick(SIMDT);renderHud();},
     give:w=>{S.watt+=w;renderHud();}, save, mintPC, buyItem, installPart, forceBlock, cam, controls, scene, THREE,
-    openOS, closeOS, setOC, setRigNet, rebootRig, openBench, closeBench, W3, WEB3CFG, w3Connect, w3Refresh,
+    openOS, closeOS, setOC, setRigNet, rebootRig, openBench, closeBench, openTowerBench, syncTowerBuild, spinFans, collectFans, W3, WEB3CFG, w3Connect, w3Refresh,
     joinPool, hostPool, closePool, buyValidator, exitValidators, repairRig, togglePower, openPoolHub, switchNet, POOLS,
     stakeShop, unstakeShop, buildFarm, sitDown, standUp, eligibleSlots, farmStatus,
     ocAskPayoutAddr, ocAddrLooksOk, ocEnsurePayoutAddr,   // payout-address popup (testable)
-    WALK, tickWalk, walkStop, walkBlocked,
+    WALK, tickWalk, walkStop, walkBlocked, WALKBOX,   // WALKBOX for the lounge-room bounds swap
+    get SIT(){return SIT;},                       // live seated state for the netcode
     state:()=>JSON.parse(JSON.stringify(S)) };
 }
 function forceBlock(lucky=false){
@@ -7480,6 +8037,226 @@ function forceBlock(lucky=false){
   renderHud();
 }
 init();
+/* ================= POSE LAB — component orientation calibrator =================
+   The models in this collection were authored by different hands in different
+   orientations, so "install a GPU" meant guessing a rotation per mount. This
+   is the place to stop guessing: pick a mount and a component, see it seated
+   exactly the way the game seats it, and turn it until it looks right. The
+   result is written to S.pose (persists in the save, applies to every rig the
+   moment you change it) and EXPORT prints a replacement PART_POSE table to
+   paste back into parts/p04_data.html so it ships as the default. */
+const PL={ctx:'rack', id:5, scope:'all', rotStep:15, offStep:0.02, open:false, init:false};
+let plR=null, plScene=null, plCam=null, plCtl=null, plStage=null, plT=0;
+
+function poseLabSetup(){
+  if(PL.init) return; PL.init=true;
+  plScene=new THREE.Scene();
+  plCam=new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.02, 200);
+  plR=new THREE.WebGLRenderer({antialias:true, alpha:true});
+  plR.setPixelRatio(Math.min(devicePixelRatio,2)); plR.setSize(innerWidth,innerHeight);
+  $('poselab').insertBefore(plR.domElement, $('pl-top'));
+  plScene.add(new THREE.AmbientLight(0x9098c8, 0.7));
+  const key=new THREE.DirectionalLight(0xfff2d8, 2.2); key.position.set(3,6,5); plScene.add(key);
+  const rim=new THREE.DirectionalLight(0x2ee6d6, 1.4); rim.position.set(-4,2,-3); plScene.add(rim);
+  plCtl=new OrbitControls(plCam, plR.domElement);
+  plCtl.enableDamping=true; plCtl.dampingFactor=0.09;
+  plStage=new THREE.Group(); plScene.add(plStage);
+  addEventListener('resize',()=>{ if(!plR) return;
+    plCam.aspect=innerWidth/innerHeight; plCam.updateProjectionMatrix(); plR.setSize(innerWidth,innerHeight); });
+}
+/* the mount the part is being posed in, built with the SAME helpers the game
+   uses (poseMesh / placeRackGpus / seatCard) — what you see here is literally
+   what the rig renders, not a lookalike */
+function poseLabStage(){
+  if(!plStage) return;                      // nothing to build until the lab has been opened once
+  while(plStage.children.length) plStage.remove(plStage.children[0]);
+  const it=ITEMS[PL.id], ctx=PL.ctx;
+  const slotMat=new THREE.MeshBasicMaterial({color:0x2ee6d6,transparent:true,opacity:.35,side:THREE.DoubleSide});
+  if(ctx==='rack'){
+    if(PROTO.frame){ const fm=poseMesh('pad','frame',1.9); plStage.add(fm); }
+    /* frame sits at DESK.SHELF+0.05 and the bottom rail at DESK.SHELF+0.22 in
+       the real rig — same 0.17 gap here, so the rail alignment is honest */
+    placeRackGpus(plStage, [PL.id,PL.id,PL.id,PL.id], {x:0,y:0.17,z:0.02}, {fans:false});
+  } else if(ctx==='pcie'||ctx==='tower'||ctx==='socket'){
+    const board=new THREE.Group();
+    if(PROTO.board) board.add(normalizeFit(instOf('board'),2.05));
+    plStage.add(board);
+    const n = ctx==='tower'?3 : ctx==='pcie'?2 : 0;
+    for(let k=0;k<n;k++){
+      const z = ctx==='tower' ? -0.24+k*0.18 : 0.12+k*0.26;
+      const slot=new THREE.Mesh(new THREE.PlaneGeometry(1.35,0.12), slotMat);
+      slot.rotation.x=-Math.PI/2; slot.position.set(0,SLOT_Y,z); plStage.add(slot);
+      plStage.add(seatCard(poseMesh(ctx,it.key,POSE_CTX[ctx].fit), 0, z));
+    }
+    if(ctx==='socket'){
+      [[-0.42,-0.55],[0.42,-0.55]].forEach(([x,z])=>{
+        const m=poseMesh('socket',it.key,POSE_CTX.socket.fit); m.position.set(x,CPU_Y,z); plStage.add(m);
+        const ring=new THREE.Mesh(new THREE.RingGeometry(0.16,0.24,4), slotMat);
+        ring.rotation.x=-Math.PI/2; ring.rotation.z=Math.PI/4; ring.position.set(x,SLOT_Y,z); plStage.add(ring);
+      });
+    }
+  } else if(ctx==='towerbay'){
+    /* the Server Tower's interior — the real case's bounds when the player owns
+       one, otherwise the model's nominal proportions */
+    const box=(typeof towerVis!=='undefined'&&towerVis&&towerVis.userData.box)
+      ? towerVis.userData.box
+      : {min:new THREE.Vector3(-1.1,0,-0.42), size:new THREE.Vector3(2.2,1.8,0.83)};
+    const shell=new THREE.Mesh(new THREE.BoxGeometry(box.size.x,box.size.y,box.size.z),
+      new THREE.MeshStandardMaterial({color:0x15182a,roughness:.5,metalness:.7,
+        transparent:true,opacity:.16,side:THREE.BackSide}));
+    shell.position.set(box.min.x+box.size.x/2, box.min.y+box.size.y/2, box.min.z+box.size.z/2);
+    plStage.add(shell);
+    const bay=towerBayOf(box), ids=[PL.id,PL.id,PL.id,PL.id], fit=towerFitOf(bay, ids);
+    placeTowerBayGpus(plStage, ids, bay, placeTowerBoard(plStage, bay, fit), fit);
+  } else { // pad — the ASIC and the frame itself, standing on a shelf
+    const m=poseMesh('pad', it.key, it.key==='frame'?1.9:POSE_CTX.pad.fit); plStage.add(m);
+  }
+  /* frame on the HARDWARE, then dress the stage — a grid added first would
+     blow the bounds up and shrink the part to a speck */
+  const box=new THREE.Box3().setFromObject(plStage), sz=new THREE.Vector3(), ctr=new THREE.Vector3();
+  box.getSize(sz); box.getCenter(ctr);
+  const span=Math.max(sz.x,sz.y,sz.z)||1;
+  const grid=new THREE.GridHelper(span*3, 12, 0x2a4160, 0x16233a);
+  grid.position.set(ctr.x, box.min.y-0.001, ctr.z); plStage.add(grid);
+  // gold arrow on +Z: the side the player stands on, i.e. where the fans belong
+  const front=new THREE.Mesh(new THREE.ConeGeometry(span*0.045,span*0.13,4),
+    new THREE.MeshBasicMaterial({color:0xffd23f}));
+  front.rotation.x=Math.PI/2;
+  front.position.set(ctr.x, box.min.y+span*0.03, box.max.z+span*0.2); plStage.add(front);
+  if(!PL.framed || PL.framedFor!==ctx){          // keep the player's orbit while they tweak one mount
+    plCam.position.set(ctr.x+span*0.75, ctr.y+span*0.6, ctr.z+span*1.25);
+    plCtl.target.copy(ctr); plCtl.update();
+    PL.framed=true; PL.framedFor=ctx;
+  }
+  if(plR) plR.render(plScene,plCam);   // paint immediately — the main loop is paused while the tab is hidden
+}
+/* ---------- panel ---------- */
+function poseCur(){ return poseFor(PL.ctx, ITEMS[PL.id].key); }
+function poseLabRender(){
+  const ctxs=Object.keys(POSE_CTX);
+  $('pl-ctx').innerHTML=ctxs.map(c=>`<button class="pl-chip ${c===PL.ctx?'on':''}" data-ctx="${c}">${POSE_CTX[c].label}</button>`).join('');
+  const ids=poseParts(PL.ctx);
+  $('pl-parts').innerHTML=ids.map(id=>{
+    const it=ITEMS[id], edited=poseOverride(PL.ctx,it.key,PL.scope)||poseOverride(PL.ctx,it.key,'all');
+    return `<div class="pl-part ${id===PL.id?'on':''}" data-id="${id}">
+      <img src="${THUMB[id]||''}" draggable="false"><b>${it.name}</b>${edited?'<i>●</i>':''}</div>`;
+  }).join('')||'<small style="color:var(--dim)">no models loaded</small>';
+  $('pl-scope').querySelectorAll('[data-scope]').forEach(b=>b.classList.toggle('on',b.dataset.scope===PL.scope));
+  const p=poseCur();
+  const axRow=(lbl,val,unit,f,step)=>`<div class="pl-ax"><span>${lbl}</span>
+    <button data-f="${f}" data-d="-1">−</button><b>${val}${unit}</b><button data-f="${f}" data-d="1">+</button></div>`;
+  $('pl-rot').innerHTML=
+    `<div class="pl-chips" style="margin-bottom:4px">${[1,5,15,90].map(s=>`<button class="pl-chip ${s===PL.rotStep?'on':''}" data-rstep="${s}">${s}°</button>`).join('')}</div>`+
+    ['rx','ry','rz'].map((f,i)=>axRow('ROT '+'XYZ'[i], Math.round(p[f]), '°', f)).join('');
+  $('pl-off').innerHTML=
+    `<div class="pl-chips" style="margin-bottom:4px">${[0.005,0.02,0.1].map(s=>`<button class="pl-chip ${s===PL.offStep?'on':''}" data-ostep="${s}">${s}</button>`).join('')}</div>`+
+    ['x','y','z'].map((f,i)=>axRow('OFF '+'XYZ'[i], p[f].toFixed(3), '', f)).join('');
+  $('pl-scale').innerHTML=axRow('SCALE', p.s.toFixed(2), '×', 's');
+  const key=(PL.scope==='all'?'*':PL.ctx)+':'+ITEMS[PL.id].key;
+  const ov=poseOverride(PL.ctx,ITEMS[PL.id].key,PL.scope);
+  $('pl-read').innerHTML=`<b>'${key}'</b>: ${ov?JSON.stringify(ov):'{}  <span style="opacity:.6">(default)</span>'}`;
+  $('pl-sub').textContent=`${POSE_CTX[PL.ctx].label} · ${ITEMS[PL.id].name} · editing ${PL.scope==='all'?'every mount':'this mount only'}`;
+}
+function poseBump(f,dir){
+  const p=poseCur();
+  const step = f==='s' ? 0.02*dir : (f[0]==='r' ? PL.rotStep*dir : PL.offStep*dir);
+  p[f]=+(p[f]+step).toFixed(4);
+  if(f[0]==='r') p[f]=((p[f]+180)%360+360)%360-180;      // keep angles readable
+  if(f==='s') p.s=Math.max(0.1,Math.min(5,p.s));
+  poseSet(PL.ctx, ITEMS[PL.id].key, PL.scope, p);
+  poseApplyLive();
+}
+/* One edit, everywhere: the lab stage repaints on the spot, the farm and an
+   open workbench catch up a beat later — rebuilding every rig on each 1° tap
+   is the one thing that can make a big farm feel sticky. */
+let plSyncT=0;
+function poseApplyLive(){
+  poseLabStage(); poseLabRender();
+  clearTimeout(plSyncT);
+  plSyncT=setTimeout(()=>{
+    if(typeof rebuildAllRigs==='function') rebuildAllRigs();
+    if(typeof benchOpen!=='undefined' && benchOpen && typeof benchSync==='function') benchSync();
+  },140);
+}
+function poseLabWire(){
+  $('pl-close').onclick=closePoseLab;
+  $('pl-reset').onclick=()=>{
+    if(!S.pose) return;
+    delete S.pose['*:'+ITEMS[PL.id].key]; delete S.pose[PL.ctx+':'+ITEMS[PL.id].key];
+    save(); SFX.click(); poseApplyLive(); toast('Pose reset to the built-in default');
+  };
+  $('pl-copy').onclick=()=>poseExport(true);
+  $('pl-export').onclick=()=>poseExport(false);
+  $('pl-ctx').onclick=e=>{ const b=e.target.closest('[data-ctx]'); if(!b) return;
+    PL.ctx=b.dataset.ctx; const ids=poseParts(PL.ctx); if(!ids.includes(PL.id)) PL.id=ids[0];
+    SFX.click(); poseLabStage(); poseLabRender(); };
+  $('pl-parts').onclick=e=>{ const b=e.target.closest('[data-id]'); if(!b) return;
+    PL.id=+b.dataset.id; SFX.click(); poseLabStage(); poseLabRender(); };
+  $('pl-scope').onclick=e=>{ const b=e.target.closest('[data-scope]'); if(!b) return;
+    PL.scope=b.dataset.scope; SFX.click(); poseLabRender(); };
+  $('pl-panel').addEventListener('click',e=>{
+    const st=e.target.closest('[data-rstep],[data-ostep]');
+    if(st){ if(st.dataset.rstep) PL.rotStep=+st.dataset.rstep; else PL.offStep=+st.dataset.ostep; poseLabRender(); return; }
+    const b=e.target.closest('[data-f]'); if(!b) return;
+    poseBump(b.dataset.f, +b.dataset.d);
+  });
+}
+/* the table to paste back into parts/p04_data.html — built-in defaults merged
+   with everything calibrated since, so the game ships what you dialled in */
+function poseExportText(){
+  const merged=Object.assign({}, PART_POSE, (S&&S.pose)||{});
+  const keys=Object.keys(merged).sort();
+  const rows=keys.map(k=>{
+    const v=merged[k], f=Object.keys(POSE_DEF).filter(n=>v[n]!==undefined&&Math.abs(v[n]-POSE_DEF[n])>1e-6);
+    if(!f.length) return null;
+    return `  '${k}':{${f.map(n=>n+':'+v[n]).join(',')}},`;
+  }).filter(Boolean);
+  return 'const PART_POSE={\n'+rows.join('\n')+'\n};';
+}
+function poseExport(quiet){
+  const txt=poseExportText();
+  console.log('%c[POSE LAB] paste into parts/p04_data.html:','color:#2ee6d6',''); console.log(txt);
+  try{ navigator.clipboard.writeText(txt); toast('PART_POSE table copied to the clipboard'); }
+  catch(e){ toast('Table printed to the browser console','gold'); }
+  if(!quiet) $('pl-read').innerHTML='<b>exported</b><br>'+txt.replace(/</g,'&lt;').replace(/\n/g,'<br>');
+}
+/* ---------- open / close / loop ---------- */
+function openPoseLab(){
+  poseLabSetup();
+  const ids=poseParts(PL.ctx); if(!ids.includes(PL.id)) PL.id=ids[0];
+  if(PL.id==null){ SFX.err(); toast('3D models are still loading','red'); return; }
+  if(!PL.wired){ poseLabWire(); PL.wired=true; }
+  PL.open=true; $('poselab').classList.add('open');
+  poseLabStage(); poseLabRender(); SFX.install();
+}
+function closePoseLab(){ PL.open=false; $('poselab').classList.remove('open'); }
+function poseLabLoop(dt){
+  if(!PL.open||!plR) return;
+  plT+=dt; plCtl.update();
+  plR.render(plScene,plCam);
+}
+/* keyboard: the same nudges as the buttons, hands on the model */
+addEventListener('keydown',e=>{
+  if(!PL.open) return;
+  if(e.target.matches('input,textarea,select')) return;
+  const fine=e.shiftKey?0.34:1;                    // shift = finer step
+  const rot=(f,d)=>{ const save_=PL.rotStep; PL.rotStep=Math.max(1,Math.round(PL.rotStep*fine)); poseBump(f,d); PL.rotStep=save_; };
+  const off=(f,d)=>{ const save_=PL.offStep; PL.offStep=PL.offStep*fine; poseBump(f,d); PL.offStep=save_; };
+  const k=e.key.length===1?e.key.toLowerCase():e.key;
+  const map={ArrowUp:()=>rot('rx',1), ArrowDown:()=>rot('rx',-1), ArrowLeft:()=>rot('ry',-1), ArrowRight:()=>rot('ry',1),
+    q:()=>rot('rz',-1), e:()=>rot('rz',1),
+    a:()=>off('x',-1), d:()=>off('x',1), w:()=>off('z',-1), s:()=>off('z',1), r:()=>off('y',1), f:()=>off('y',-1),
+    '[':()=>poseBump('s',-1), ']':()=>poseBump('s',1),
+    Escape:closePoseLab, p:closePoseLab};
+  if(map[k]){ e.preventDefault(); e.stopPropagation(); map[k](); }
+},true);
+window.MGPOSE={ open:openPoseLab, close:closePoseLab, table:poseExportText, state:PL,
+  stage:()=>poseLabStage(), render:()=>plR&&plR.render(plScene,plCam), bump:poseBump,
+  /* measure a model's authored orientation without opening anything: the raw
+     bounding box tells you which axis the card was modelled along */
+  dims:key=>{ if(!PROTO[key]) return null; const v=poseSize(instOf(key));
+    return {x:+v.x.toFixed(4), y:+v.y.toFixed(4), z:+v.z.toFixed(4)}; },
+  posed:(ctx,key,fit)=>{ const v=poseSize(poseMesh(ctx,key,fit||1)); return {x:+v.x.toFixed(4),y:+v.y.toFixed(4),z:+v.z.toFixed(4)}; } };
 
 /* ================= TRAILER MODE (?trailer=1) ================= */
 let trailerFrame=null, comp=null, compX=null;
@@ -7672,3 +8449,1032 @@ window.__recAudioStop=async function(){ clearInterval(window.__audEvT); window._
 </script>
 </body>
 </html>
+<script type="module">
+/* ================= LOUNGE NETCODE (presence + chat) =================
+   Turns the solo room into a shared space: connects to the lounge server,
+   spawns a simple avatar for every other person, syncs their walk/sit, and
+   adds a chat panel with floating name tags. Voice (WebRTC mesh + proximity)
+   and shared item-dragging are the next two parts; the server already speaks
+   both, this part just doesn't drive them yet.
+
+   This is its OWN module (separate <script type="module">), so it can't see the
+   game's module-scope consts by scope. The game publishes them on window.MG
+   (cam, controls, scene, THREE, live SIT getter); this part reads from there.
+   It imports its own THREE binding (same classes via the importmap). */
+import * as THREE from 'three';
+
+const NET = (() => {
+  const URL = 'wss://lounge.wattxchange.app';
+  const SEND_MS = 80;            // ~12 position updates/sec
+  const UPS = 2.25;              // world units per metre (matches the game)
+  // Game handles, resolved from window.MG at start().
+  let scene, cam, SITref = () => ({ on: false, slot: -1 });
+  const state = {
+    ws: null, id: 0, name: '', wallet: null,
+    peers: new Map(),           // id -> {name,look,tgt,sit,seat, group?}  group only in 'full'
+    connected: false, retry: 0, lastSent: null,
+    // mode: 'off' (solo), 'chat' (lounge chat from your lab, no avatars/movement),
+    // 'full' (immersive shared space). want = should we hold a connection.
+    mode: 'off', want: false,
+  };
+
+  // ── identity (guest for now; wallet is a display hint until phase 3) ────────
+  try {
+    const qn = new URLSearchParams(location.search).get('name');
+    state.name = (qn && qn.trim().slice(0, 24)) || localStorage.getItem('mg_name') || '';
+  } catch {}
+  if (!state.name) state.name = 'guest' + Math.floor(1000 + Math.random() * 9000);
+
+  // Best-effort, time-boxed: a wallet provider's request can hang, and it must
+  // NEVER block connecting — wallet is only a display hint until phase 3.
+  function detectWallet() {
+    const p = window.wattx || window.ethereum;
+    if (!p || !p.request) { state.wallet = null; return; }
+    const race = Promise.race([
+      p.request({ method: 'eth_accounts' }).then((a) => (a && a[0]) || null),
+      new Promise((r) => setTimeout(() => r(null), 1500)),
+    ]);
+    race.then((addr) => { state.wallet = addr || null; }).catch(() => { state.wallet = null; });
+  }
+
+  // ── procedural avatar (no humanoid model shipped, so build a simple one) ────
+  function colorFromLook(look) {
+    if (look && typeof look.color === 'string') { try { return new THREE.Color(look.color); } catch {} }
+    return new THREE.Color().setHSL(Math.random(), 0.55, 0.55);
+  }
+  function makeAvatar(look) {
+    const g = new THREE.Group();
+    const skin = new THREE.Color(0xd8a97a);
+    const body = colorFromLook(look);
+    const M = (c, rough = 0.7) => new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: 0.05 });
+    // metres → units
+    const u = (m) => m * UPS;
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(u(0.20), u(0.24), u(0.62), 12), M(body));
+    torso.position.y = u(0.95);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(u(0.13), 16, 12), M(skin, 0.6));
+    head.position.y = u(1.40);
+    const legL = new THREE.Mesh(new THREE.CylinderGeometry(u(0.09), u(0.09), u(0.66), 8), M(0x2b2f3a));
+    const legR = legL.clone(); legL.position.set(u(0.10), u(0.33), 0); legR.position.set(-u(0.10), u(0.33), 0);
+    const armL = new THREE.Mesh(new THREE.CylinderGeometry(u(0.07), u(0.07), u(0.55), 8), M(body));
+    const armR = armL.clone(); armL.position.set(u(0.30), u(0.98), 0); armR.position.set(-u(0.30), u(0.98), 0);
+    g.add(torso, head, legL, legR, armL, armR);
+    g.userData.head = head;
+    g.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+    return g;
+  }
+
+  // ── floating name tag (canvas sprite) ──────────────────────────────────────
+  function makeTag(text) {
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+    const ctx = cv.getContext('2d');
+    ctx.font = 'bold 30px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(8,11,20,0.72)';
+    const w = Math.min(250, ctx.measureText(text).width + 26);
+    ctx.beginPath(); ctx.roundRect((256 - w) / 2, 12, w, 40, 10); ctx.fill();
+    ctx.fillStyle = '#eef2ff'; ctx.fillText(text, 128, 33);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+    spr.scale.set(2.0, 0.5, 1); spr.position.y = UPS * 1.72;
+    spr.renderOrder = 999;
+    return spr;
+  }
+
+  // Track a peer's DATA always; only build its 3D avatar in 'full' mode. This is
+  // what lets chat-only mode stay in your lab (no meshes) yet upgrade to the
+  // full space instantly (the positions are already known).
+  function addPeer(p) {
+    if (p.id === state.id || state.peers.has(p.id)) return;
+    const peer = {
+      group: null, tag: null, name: p.name, look: p.look || null,
+      sit: !!p.sit, seat: p.seat || null,
+      tgt: { x: p.x || 0, z: p.z || 0, ry: p.ry || 0 },
+    };
+    state.peers.set(p.id, peer);
+    if (state.mode === 'full') createMesh(peer);
+  }
+  function createMesh(peer) {
+    if (peer.group) return;
+    const group = makeAvatar(peer.look);
+    const tag = makeTag(peer.name || 'guest');
+    group.add(tag);
+    group.position.set(peer.tgt.x, 0, peer.tgt.z);
+    group.rotation.y = peer.tgt.ry;
+    scene.add(group);
+    peer.group = group; peer.tag = tag;
+  }
+  function destroyMesh(peer) {
+    if (!peer.group) return;
+    scene.remove(peer.group);
+    peer.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+    peer.group = null; peer.tag = null;
+  }
+  function removePeer(id) {
+    const peer = state.peers.get(id);
+    if (!peer) return;
+    destroyMesh(peer);
+    state.peers.delete(id);
+  }
+
+  // ── message handling ────────────────────────────────────────────────────────
+  function onMsg(m) {
+    switch (m.t) {
+      case 'welcome':
+        state.id = m.id;
+        (m.peers || []).forEach(addPeer);
+        // hand the furniture module the current item layout (late-joiner sync)
+        if (m.objects && m.objects.length) for (const cb of objCbs) try { cb({ t: 'objects', objects: m.objects }); } catch {}
+        chatLog('— connected as ' + state.name + ' (' + state.peers.size + ' here) —', '#8b94ab');
+        updateCount();
+        break;
+      case 'join':
+        addPeer(m.peer);
+        chatLog('→ ' + (m.peer.name || ('guest' + m.peer.id)) + ' joined', '#3ddc84');
+        if (voice.on && state.mode === 'full') voiceConnect(m.peer.id, state.id < m.peer.id);
+        updateCount();
+        break;
+      case 'leave': {
+        const peer = state.peers.get(m.id);
+        if (peer) chatLog('← ' + (peer.name || ('guest' + m.id)) + ' left', '#8b94ab');
+        voiceDrop(m.id);
+        removePeer(m.id);
+        updateCount();
+        break;
+      }
+      case 'state': {
+        const peer = state.peers.get(m.id);
+        if (!peer) return;
+        peer.tgt.x = m.x; peer.tgt.z = m.z; peer.tgt.ry = m.ry;
+        peer.sit = !!m.sit; peer.seat = m.seat || null;
+        break;
+      }
+      case 'look': {
+        const peer = state.peers.get(m.id);
+        if (!peer) return;
+        peer.look = m.look;
+        if (peer.group) {                 // rebuild the avatar only if it's rendered
+          const old = peer.group, tag = peer.tag;
+          const g = makeAvatar(m.look);
+          g.position.copy(old.position); g.rotation.y = old.rotation.y;
+          g.add(tag); scene.add(g); scene.remove(old);
+          old.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+          peer.group = g;
+        }
+        break;
+      }
+      case 'chat':
+        chatLog((m.name || ('guest' + m.id)) + ': ' + m.text, '#cfe3ff', true);
+        break;
+      case 'voice':
+        onVoiceMsg(m.from, m.kind, m.data);
+        break;
+      // moveable-item events → forwarded to the furniture module (p14)
+      case 'grabbed': case 'objstate': case 'dropped': case 'grabdenied':
+        for (const cb of objCbs) try { cb(m); } catch {}
+        break;
+      case 'full':
+        chatLog('— room is full —', '#ffae42');
+        break;
+    }
+  }
+
+  // ── connection ──────────────────────────────────────────────────────────────
+  function connect() {
+    detectWallet();                       // fire-and-forget; never blocks the socket
+    let ws;
+    try { ws = new WebSocket(URL); } catch { scheduleRetry(); return; }
+    state.ws = ws;
+    ws.onopen = () => {
+      state.connected = true; state.retry = 0;
+      setDot('#3ddc84');
+      ws.send(JSON.stringify({ t: 'hello', name: state.name, wallet: state.wallet, room: NET._room }));
+    };
+    ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } if (m && m.t) onMsg(m); };
+    ws.onclose = () => {
+      state.connected = false; setDot('#5b6478'); cleanupPeers();
+      if (state.want) scheduleRetry();    // only reconnect if we still want to be in
+      else updateAll();
+    };
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  }
+  function scheduleRetry() {
+    if (!state.want) return;
+    state.retry = Math.min(state.retry + 1, 6);
+    setTimeout(() => { if (state.want) connect(); }, 1000 * state.retry);
+  }
+  function cleanupPeers() { for (const id of [...state.peers.keys()]) removePeer(id); }
+
+  // ── local player → server (sample the camera) ───────────────────────────────
+  function yawFromCamera() {
+    const d = new THREE.Vector3(); cam.getWorldDirection(d); d.y = 0;
+    return Math.atan2(d.x, d.z);
+  }
+  setInterval(() => {
+    // Only broadcast movement in the full immersive space; chat-only stays put.
+    if (state.mode !== 'full' || !state.connected || !state.ws || state.ws.readyState !== 1) return;
+    const S = SITref() || { on: false, slot: -1 };
+    // seated either at a desk (game SIT) or in a lounge chair (p14 override)
+    const seated = !!S.on || !!(sitOverride && sitOverride.sit);
+    const seat = sitOverride && sitOverride.sit ? sitOverride.seat : (S.on ? 'slot' + S.slot : null);
+    const msg = {
+      t: 'move',
+      x: +cam.position.x.toFixed(3), z: +cam.position.z.toFixed(3),
+      ry: +yawFromCamera().toFixed(3),
+      sit: seated, seat,
+    };
+    const s = JSON.stringify(msg);
+    if (s === state.lastSent) return;     // don't spam identical frames
+    state.lastSent = s;
+    state.ws.send(s);
+  }, SEND_MS);
+
+  // Keepalive: a stationary player's move-sender dedupes to nothing, so without
+  // this the idle WebSocket gets dropped by the tunnel (and the server would reap
+  // it at 45s). A tiny ping every 20s keeps the socket warm and lastSeen fresh.
+  setInterval(() => {
+    if (state.connected && state.ws && state.ws.readyState === 1) {
+      state.ws.send(JSON.stringify({ t: 'ping' }));
+    }
+  }, 20000);
+
+  // ── remote interpolation (own rAF; independent of the game's frame loop) ─────
+  function tick() {
+    requestAnimationFrame(tick);
+    for (const peer of state.peers.values()) {
+      const g = peer.group;
+      if (!g) continue;                    // no mesh in chat-only mode
+      g.position.x += (peer.tgt.x - g.position.x) * 0.18;
+      g.position.z += (peer.tgt.z - g.position.z) * 0.18;
+      // shortest-arc yaw lerp
+      let dy = peer.tgt.ry - g.rotation.y;
+      while (dy > Math.PI) dy -= Math.PI * 2;
+      while (dy < -Math.PI) dy += Math.PI * 2;
+      g.rotation.y += dy * 0.18;
+      // sit = drop the whole avatar a bit so it reads as seated
+      const wantY = peer.sit ? UPS * -0.35 : 0;
+      g.position.y += (wantY - g.position.y) * 0.15;
+    }
+    voiceTick();
+  }
+  requestAnimationFrame(tick);
+
+  // Hooks for the furniture module (p14): forward item events + let it drive the
+  // seated flag that presence broadcasts.
+  const objCbs = [];
+  let sitOverride = null;   // {sit, seat} set by p14 when you sit in a lounge chair
+
+  // ── voice: WebRTC mesh + proximity audio ────────────────────────────────────
+  // Signaling rides the server's `voice` relay (already built); audio is peer-to-
+  // peer. Each remote stream plays through a Web Audio PannerNode positioned at
+  // that person's avatar, so voices get louder as you walk closer. Mesh is fine
+  // for a lounge-sized room; an SFU is the later upgrade.
+  // ICE config comes from the lounge server's /turn endpoint (STUN + a TURN
+  // relay with time-limited credentials) so voice connects across strict NATs.
+  // Falls back to public STUN if the fetch fails.
+  let ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  let iceFetched = 0;
+  async function refreshIce() {
+    if (Date.now() - iceFetched < 5 * 60 * 1000) return;   // creds live ~1h; refetch at most every 5m
+    try {
+      const base = new URL('/turn', 'https://lounge.wattxchange.app').href;
+      const r = await fetch(base, { cache: 'no-store' });
+      const j = await r.json();
+      if (j && Array.isArray(j.iceServers) && j.iceServers.length) { ICE = { iceServers: j.iceServers }; iceFetched = Date.now(); }
+    } catch { /* keep the STUN fallback */ }
+  }
+  const voice = { on: false, stream: null, pcs: new Map(), audio: new Map(), ctx: null };
+
+  async function voiceStart() {
+    if (voice.on || state.mode !== 'full') return;
+    await refreshIce();                        // get a fresh TURN relay before dialing
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }); }
+    catch { notify('🎤 mic blocked — voice stays off'); updateMic(); return; }
+    voice.stream = stream; voice.on = true;
+    voice.ctx = voice.ctx || new (window.AudioContext || window.webkitAudioContext)();
+    if (voice.ctx.state === 'suspended') { try { await voice.ctx.resume(); } catch {} }
+    notify('🎤 voice on — walk closer to hear people');
+    updateMic();
+    for (const id of state.peers.keys()) voiceConnect(id, state.id < id);   // lower id initiates (no glare)
+  }
+  function voiceStop() {
+    if (!voice.on) return;
+    voice.on = false;
+    for (const pc of voice.pcs.values()) { try { pc.close(); } catch {} }
+    voice.pcs.clear();
+    for (const a of voice.audio.values()) { try { a.el.pause(); a.el.srcObject = null; } catch {} }
+    voice.audio.clear();
+    if (voice.stream) { voice.stream.getTracks().forEach((t) => t.stop()); voice.stream = null; }
+    updateMic();
+  }
+  function voiceConnect(peerId, initiator) {
+    if (!voice.on || peerId === state.id || voice.pcs.has(peerId)) return;
+    const pc = new RTCPeerConnection(ICE);
+    voice.pcs.set(peerId, pc);
+    voice.stream.getTracks().forEach((t) => pc.addTrack(t, voice.stream));
+    pc.onicecandidate = (e) => { if (e.candidate) sendVoice(peerId, 'ice', e.candidate); };
+    pc.ontrack = (e) => attachRemote(peerId, e.streams[0]);
+    pc.onconnectionstatechange = () => {
+      if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) voiceDrop(peerId);
+    };
+    if (initiator) {
+      pc.createOffer().then((o) => pc.setLocalDescription(o))
+        .then(() => sendVoice(peerId, 'offer', pc.localDescription)).catch(() => {});
+    }
+  }
+  function voiceDrop(peerId) {
+    const pc = voice.pcs.get(peerId); if (pc) { try { pc.close(); } catch {} voice.pcs.delete(peerId); }
+    const a = voice.audio.get(peerId); if (a) { try { a.el.pause(); a.el.srcObject = null; } catch {} voice.audio.delete(peerId); }
+  }
+  function sendVoice(to, kind, data) {
+    if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ t: 'voice', to, kind, data }));
+  }
+  async function onVoiceMsg(from, kind, data) {
+    if (!voice.on) return;                       // our mic is off; nothing to negotiate
+    let pc = voice.pcs.get(from);
+    try {
+      if (kind === 'offer') {
+        if (!pc) { voiceConnect(from, false); pc = voice.pcs.get(from); }
+        await pc.setRemoteDescription(data);
+        const ans = await pc.createAnswer(); await pc.setLocalDescription(ans);
+        sendVoice(from, 'answer', pc.localDescription);
+      } else if (kind === 'answer') { if (pc) await pc.setRemoteDescription(data); }
+      else if (kind === 'ice') { if (pc) await pc.addIceCandidate(data); }
+    } catch { /* renegotiation race — ignore */ }
+  }
+  function attachRemote(peerId, stream) {
+    const ctx = voice.ctx; if (!ctx) return;
+    try {
+      const src = ctx.createMediaStreamSource(stream);
+      const panner = ctx.createPanner();
+      panner.panningModel = 'HRTF'; panner.distanceModel = 'inverse';
+      panner.refDistance = UPS * 2.5; panner.maxDistance = UPS * 45; panner.rolloffFactor = 1.1;
+      src.connect(panner); panner.connect(ctx.destination);
+      // Chrome needs the stream attached to a (muted) element for audio to flow.
+      const el = new Audio(); el.srcObject = stream; el.muted = true; el.play().catch(() => {});
+      voice.audio.set(peerId, { panner, src, el });
+    } catch { /* older browser — skip proximity */ }
+  }
+  // Keep the Web Audio listener on the camera and each voice at its avatar.
+  function voiceTick() {
+    if (!voice.on || !voice.ctx) return;
+    const L = voice.ctx.listener, p = cam.position;
+    const f = new THREE.Vector3(); cam.getWorldDirection(f);
+    if (L.positionX) { L.positionX.value = p.x; L.positionY.value = p.y; L.positionZ.value = p.z;
+      L.forwardX.value = f.x; L.forwardY.value = f.y; L.forwardZ.value = f.z; L.upX.value = 0; L.upY.value = 1; L.upZ.value = 0; }
+    else { L.setPosition(p.x, p.y, p.z); L.setOrientation(f.x, f.y, f.z, 0, 1, 0); }
+    for (const [id, a] of voice.audio) {
+      const peer = state.peers.get(id); if (!peer) continue;
+      const g = peer.group; const x = g ? g.position.x : peer.tgt.x, y = g ? g.position.y + UPS : UPS, z = g ? g.position.z : peer.tgt.z;
+      if (a.panner.positionX) { a.panner.positionX.value = x; a.panner.positionY.value = y; a.panner.positionZ.value = z; }
+      else a.panner.setPosition(x, y, z);
+    }
+  }
+  let micEl;
+  function updateMic() {
+    if (!micEl) return;
+    micEl.style.display = state.mode === 'full' ? 'inline' : 'none';
+    micEl.textContent = voice.on ? '🎤' : '🔇';
+    micEl.title = voice.on ? 'voice on — click to mute' : 'click to talk (mic)';
+    micEl.style.opacity = voice.on ? '1' : '0.55';
+  }
+
+  // ── chat + status UI (collapsible Lounge panel) ─────────────────────────────
+  let logEl, dotEl, bodyEl, countEl, chevEl, wrapEl, unread = 0;
+  let open = true;
+  try { open = localStorage.getItem('mg_lounge_open') !== '0'; } catch {}
+
+  function buildUI() {
+    const wrap = document.createElement('div');
+    wrap.id = 'net-ui'; wrapEl = wrap;
+    wrap.style.cssText = 'position:fixed;left:12px;bottom:12px;width:min(340px,42vw);z-index:60;font:13px/1.4 system-ui,sans-serif;pointer-events:none;display:flex;flex-direction:column;gap:6px;align-items:flex-start';
+
+    // collapsible body: log + input
+    bodyEl = document.createElement('div');
+    bodyEl.style.cssText = 'width:100%;display:flex;flex-direction:column;gap:6px;pointer-events:auto';
+    logEl = document.createElement('div');
+    logEl.style.cssText = 'max-height:24vh;overflow-y:auto;display:flex;flex-direction:column;gap:2px;mask-image:linear-gradient(to top,#000 72%,transparent)';
+    const input = document.createElement('input');
+    input.placeholder = 'chat…  (Enter to send, /name to rename)';
+    input.maxLength = 400;
+    input.style.cssText = 'width:100%;box-sizing:border-box;background:rgba(12,16,26,0.88);border:1px solid #232c44;border-radius:8px;color:#e8ecf6;padding:7px 10px;outline:none';
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();                         // don't trigger walk keys while typing
+      if (e.key !== 'Enter') return;
+      const v = input.value.trim(); input.value = '';
+      if (!v) return;
+      if (v.startsWith('/name ')) {
+        const nn = v.slice(6).trim().slice(0, 24);
+        if (nn) { state.name = nn; try { localStorage.setItem('mg_name', nn); } catch {}
+          chatLog('— you are now ' + nn + ' (rejoin to update others) —', '#8b94ab'); }
+        return;
+      }
+      if (v === '/leave') { setMode('off'); return; }
+      if (v === '/enter') { setMode('full'); return; }
+      if (v === '/lab') { setMode('chat'); return; }
+      if (state.connected && state.ws && state.ws.readyState === 1) {
+        state.ws.send(JSON.stringify({ t: 'chat', text: v }));
+        chatLog('you: ' + v, '#9fe6b4', true);
+      }
+    });
+    input.addEventListener('keyup', (e) => e.stopPropagation());
+    bodyEl.append(logEl, input);
+
+    // the Lounge pill: dot + label + count + chevron + leave. When OFF, clicking
+    // it joins chat-only (you stay in your lab); when connected, it expands/
+    // collapses the chat; the ✕ leaves entirely.
+    const pill = document.createElement('div');
+    pill.style.cssText = 'pointer-events:auto;display:flex;gap:8px;align-items:center;background:rgba(12,16,26,0.9);border:1px solid #232c44;border-radius:20px;color:#e8ecf6;padding:6px 12px;font:inherit';
+    dotEl = document.createElement('span');
+    dotEl.style.cssText = 'width:9px;height:9px;border-radius:50%;background:#5b6478;flex:0 0 auto';
+    const label = document.createElement('span'); label.textContent = 'Lounge'; label.style.cssText = 'font-weight:600;cursor:pointer';
+    countEl = document.createElement('span'); countEl.style.cssText = 'color:#8b94ab;cursor:pointer';
+    chevEl = document.createElement('span'); chevEl.style.cssText = 'color:#8b94ab;cursor:pointer';
+    micEl = document.createElement('span'); micEl.textContent = '🔇';
+    micEl.style.cssText = 'cursor:pointer;display:none;margin-left:2px';
+    leaveEl = document.createElement('span'); leaveEl.textContent = '✕'; leaveEl.title = 'leave lounge';
+    leaveEl.style.cssText = 'color:#8b94ab;cursor:pointer;display:none;margin-left:2px';
+    const hit = document.createElement('span'); hit.style.cssText = 'display:flex;gap:8px;align-items:center;cursor:pointer';
+    hit.append(dotEl, label, countEl, chevEl);
+    hit.addEventListener('click', () => { if (state.mode === 'off') setMode('chat'); else setOpen(!open); });
+    micEl.addEventListener('click', (e) => { e.stopPropagation(); if (voice.on) voiceStop(); else voiceStart(); });
+    leaveEl.addEventListener('click', (e) => { e.stopPropagation(); setMode('off'); });
+    pill.append(hit, micEl, leaveEl);
+
+    wrap.append(bodyEl, pill);
+    document.body.appendChild(wrap);
+    setOpen(open); updateAll();
+  }
+
+  function setOpen(v) {
+    open = v;
+    try { localStorage.setItem('mg_lounge_open', v ? '1' : '0'); } catch {}
+    // chat body only shows when connected AND open
+    if (bodyEl) bodyEl.style.display = (v && state.mode !== 'off') ? 'flex' : 'none';
+    if (chevEl) chevEl.textContent = v ? '▾' : '▸';
+    if (v) { unread = 0; updateCount(); }
+  }
+  function updateCount() {
+    if (!countEl) return;
+    if (state.mode === 'off') { countEl.textContent = '· tap to chat'; if (chevEl) chevEl.textContent = ''; return; }
+    const n = state.peers.size + (state.connected ? 1 : 0);
+    let txt = state.connected ? (n === 1 ? 'just you' : n + ' here') : 'connecting…';
+    if (!open && unread) txt += ' · ' + unread + ' new';
+    countEl.textContent = '· ' + txt;
+    if (chevEl) chevEl.textContent = open ? '▾' : '▸';
+  }
+  function updateButton() {
+    const b = document.getElementById('b-lounge');
+    if (!b) return;
+    if (state.mode === 'full') { b.textContent = '🛋 LEAVE'; b.classList.add('accent'); }
+    else { b.textContent = '🛋 LOUNGE'; b.classList.remove('accent'); }
+  }
+  function updateAll() {
+    if (leaveEl) leaveEl.style.display = state.mode === 'off' ? 'none' : 'inline';
+    if (bodyEl) bodyEl.style.display = (open && state.mode !== 'off') ? 'flex' : 'none';
+    updateCount(); updateButton(); updateMic();
+  }
+  function chatLog(text, color = '#cfe3ff', bubble = false) {
+    if (!logEl) return;
+    const d = document.createElement('div');
+    d.textContent = text;
+    d.style.cssText = 'color:' + color + ';' + (bubble
+      ? 'background:rgba(12,16,26,0.88);border:1px solid #232c44;border-radius:8px;padding:4px 9px;align-self:flex-start;max-width:100%'
+      : 'padding:1px 2px');
+    logEl.appendChild(d);
+    while (logEl.children.length > 60) logEl.removeChild(logEl.firstChild);
+    logEl.scrollTop = logEl.scrollHeight;
+    if (!open && bubble) { unread++; updateCount(); }   // badge unread while collapsed
+  }
+  function setDot(c) { if (dotEl) dotEl.style.background = c; updateCount(); }
+
+  // ── mode control: off ↔ chat ↔ full ─────────────────────────────────────────
+  let leaveEl;
+  function setMode(m) {
+    if (m === state.mode) { if (m !== 'off') setOpen(true); return; }
+    state.mode = m;
+    if (m === 'off') {
+      state.want = false;
+      voiceStop();
+      if (state.ws) { try { state.ws.close(); } catch {} }   // onclose cleans peers + updateAll
+      setOpen(false);
+      notify('🛋 left the lounge');
+    } else {
+      state.want = true;
+      if (m === 'chat') voiceStop();                          // no voice from the lab
+      if (!state.connected) connect();                        // welcome→addPeer respects mode
+      else if (m === 'full') for (const p of state.peers.values()) createMesh(p);
+      else for (const p of state.peers.values()) destroyMesh(p);
+      if (m === 'chat') setOpen(true);
+      notify(m === 'full'
+        ? '🛋 entered the lounge — others can see you now'
+        : '💬 lounge chat on — you are still in your lab');
+    }
+    updateAll();
+    try { window.dispatchEvent(new CustomEvent('mg-lounge-mode', { detail: { mode: state.mode } })); } catch {}
+  }
+  function notify(msg) { chatLog(msg, '#8b94ab'); }   // log into the chat panel
+
+  return {
+    start() {
+      const q = new URLSearchParams(location.search);
+      if (q.has('trailer') || q.has('solo')) return true;    // netcode off, but "ready"
+      const MG = window.MG;
+      if (!MG || !MG.scene || !MG.cam) return false;         // game not ready yet
+      scene = MG.scene; cam = MG.cam;
+      SITref = () => (MG.SIT || { on: false, slot: -1 });
+      NET._room = q.get('room') || 'lounge';                 // ?room=<id> → user-made lounges
+      buildUI();
+      // Default button wiring is netcode-only; the lounge-room module (p15) may
+      // re-wire it to teleport you into the physical lounge. It loads after this.
+      const b = document.getElementById('b-lounge');
+      if (b) b.onclick = () => setMode(state.mode === 'full' ? 'off' : 'full');
+      updateAll();
+      // Chat-only can auto-start here; entering the full lounge ROOM (teleport +
+      // presence) is owned by p15, which handles ?lounge / the lounge host.
+      if (q.has('chat')) setMode('chat');
+      return true;
+    },
+    toggle() { setMode(state.mode === 'full' ? 'off' : 'full'); },   // HUD button / key 6 = immersive
+    enter() { setMode('full'); },
+    chat() { setMode('chat'); },
+    leave() { setMode('off'); },
+    // furniture module (p14) API
+    sendObj(msg) { if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify(msg)); },
+    onObj(cb) { objCbs.push(cb); },
+    setSit(sit, seat) { sitOverride = sit ? { sit: true, seat: seat || null } : null; },
+    get scene() { return scene; },
+    get cam() { return cam; },
+    isFull() { return state.mode === 'full' && state.connected; },
+    _room: 'lounge',
+    debug() {
+      const peers = [...state.peers.entries()].map(([id, p]) => ({ id, name: p.name, tgt: p.tgt, sit: p.sit, mesh: !!p.group }));
+      return { id: state.id, connected: state.connected, mode: state.mode, room: NET._room, peers, sitOverride, voiceOn: voice.on };
+    },
+  };
+})();
+window.MGNET = NET;
+
+// Wire up once the game's module has published window.MG. Netcode stays OFF
+// (solo) until the player enters via the LOUNGE button, key 6, or the chat pill.
+(function waitForGame(tries = 0) {
+  if (NET.start() !== false) return;
+  if (tries > 200) return;                            // ~20s then give up quietly
+  setTimeout(() => waitForGame(tries + 1), 100);
+})();
+</script>
+<script type="module">
+/* ================= LOUNGE FURNITURE (drag + sit) =================
+   Spawns a shared table + stools when you enter the full lounge. Everyone can
+   DRAG a piece across the floor (server-authoritative resting spot, synced) and
+   SIT in a stool (a short click; drag = move, click = sit). Uses the p13 netcode
+   hooks: MGNET.onObj / sendObj / setSit / scene / cam. Reads controls from
+   window.MG. Its own THREE binding via the importmap. */
+import * as THREE from 'three';
+
+(() => {
+  const UPS = 2.25;
+  const N = () => window.MGNET;
+  const G = () => window.MG;
+
+  const SEND_MS = 50;
+  const items = new Map();          // oid -> { mesh, kind }
+  const heldRemote = new Set();     // oids currently dragged by someone else
+  let spawned = false;
+  let mySeat = null;                // oid of the stool I'm sitting in
+  let seatSave = null;              // cam/target to restore on stand
+  let drag = null;                  // { oid, lastSent }
+  let standBtn = null;
+
+  const ray = new THREE.Raycaster();
+  const FLOOR = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+  // ── furniture models (simple, low-poly) ─────────────────────────────────────
+  function mat(c, r = 0.7) { return new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: 0.1 }); }
+  function makeStool() {
+    const g = new THREE.Group();
+    const seat = new THREE.Mesh(new THREE.CylinderGeometry(UPS * 0.22, UPS * 0.22, UPS * 0.08, 16), mat(0x8a5a3c));
+    seat.position.y = UPS * 0.46;
+    const cush = new THREE.Mesh(new THREE.CylinderGeometry(UPS * 0.2, UPS * 0.2, UPS * 0.06, 16), mat(0x3d6ee0, 0.6));
+    cush.position.y = UPS * 0.52;
+    for (let i = 0; i < 3; i++) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(UPS * 0.02, UPS * 0.02, UPS * 0.46, 8), mat(0x2b2f3a));
+      const a = i / 3 * Math.PI * 2;
+      leg.position.set(Math.cos(a) * UPS * 0.16, UPS * 0.23, Math.sin(a) * UPS * 0.16);
+      g.add(leg);
+    }
+    g.add(seat, cush);
+    g.userData.seatY = UPS * 0.55;
+    return g;
+  }
+  function makeTable() {
+    const g = new THREE.Group();
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(UPS * 0.7, UPS * 0.7, UPS * 0.08, 24), mat(0x6a4a32));
+    top.position.y = UPS * 0.72;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(UPS * 0.08, UPS * 0.1, UPS * 0.72, 12), mat(0x2b2f3a));
+    post.position.y = UPS * 0.36;
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(UPS * 0.32, UPS * 0.32, UPS * 0.04, 20), mat(0x2b2f3a));
+    base.position.y = UPS * 0.02;
+    g.add(top, post, base);
+    return g;
+  }
+  function tint(mesh, on) {
+    mesh.traverse((o) => { if (o.isMesh) o.material.emissive && o.material.emissive.setHex(on ? 0x2a3550 : 0x000000); });
+  }
+
+  // ── spawn / despawn with lounge mode ────────────────────────────────────────
+  // Furniture lives in the LOUNGE ROOM (a separate region at z≈LZ, built by p15),
+  // not the mining room. LZ must match p15's lounge centre.
+  const LZ = -120;
+  const LAYOUT = (() => {
+    const arr = [{ oid: 'ltable', kind: 'table', x: 0, z: LZ, ry: 0 }];
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      arr.push({ oid: 'lstool' + i, kind: 'stool', x: Math.cos(a) * UPS * 1.5, z: LZ + Math.sin(a) * UPS * 1.5, ry: -a });
+    }
+    return arr;
+  })();
+
+  function spawn() {
+    if (spawned) return; const scene = N() && N().scene; if (!scene) return;
+    for (const d of LAYOUT) {
+      const mesh = d.kind === 'table' ? makeTable() : makeStool();
+      mesh.position.set(d.x, 0, d.z); mesh.rotation.y = d.ry;
+      mesh.userData.oid = d.oid; mesh.userData.kind = d.kind;
+      scene.add(mesh); items.set(d.oid, { mesh, kind: d.kind });
+    }
+    spawned = true;
+  }
+  function despawn() {
+    if (!spawned) return; const scene = N() && N().scene;
+    standUp();
+    for (const { mesh } of items.values()) { if (scene) scene.remove(mesh); mesh.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
+    items.clear(); heldRemote.clear(); spawned = false;
+  }
+
+  window.addEventListener('mg-lounge-mode', (e) => {
+    const m = e.detail && e.detail.mode;
+    if (m === 'full') spawn(); else despawn();
+  });
+
+  // ── incoming item events from the server ────────────────────────────────────
+  function applyState(oid, x, z, ry) {
+    const it = items.get(oid); if (!it) return;
+    it.mesh.position.x = x; it.mesh.position.z = z; if (typeof ry === 'number') it.mesh.rotation.y = ry;
+  }
+  function wireNet() {
+    const net = N(); if (!net || !net.onObj) return false;
+    net.onObj((m) => {
+      if (m.t === 'objects') { for (const o of m.objects) { applyState(o.oid, o.x, o.z, o.ry); if (o.heldBy) heldRemote.add(o.oid); } return; }
+      if (m.t === 'objstate') { applyState(m.oid, m.x, m.z, m.ry); return; }
+      if (m.t === 'grabbed') { heldRemote.add(m.oid); const it = items.get(m.oid); if (it) tint(it.mesh, true); return; }
+      if (m.t === 'dropped') { heldRemote.delete(m.oid); applyState(m.oid, m.x, m.z, m.ry); const it = items.get(m.oid); if (it) tint(it.mesh, false); return; }
+      if (m.t === 'grabdenied') { if (drag && drag.oid === m.oid) endDrag(false); return; }
+    });
+    return true;
+  }
+
+  // ── pointer: drag furniture / click-to-sit ──────────────────────────────────
+  function ndc(ev, canvas) {
+    const r = canvas.getBoundingClientRect();
+    return new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  }
+  function pickItem(ev, canvas) {
+    ray.setFromCamera(ndc(ev, canvas), N().cam);
+    const meshes = [...items.values()].map((i) => i.mesh);
+    const hit = ray.intersectObjects(meshes, true)[0];
+    if (!hit) return null;
+    let o = hit.object; while (o && !o.userData.oid) o = o.parent;
+    return o ? o.userData.oid : null;
+  }
+  function floorPoint(ev, canvas) {
+    ray.setFromCamera(ndc(ev, canvas), N().cam);
+    const p = new THREE.Vector3();
+    return ray.ray.intersectPlane(FLOOR, p) ? p : null;
+  }
+
+  let down = null;   // { oid, x, y, t, moved }
+  function onDown(ev) {
+    if (!N() || !N().isFull()) return;
+    const canvas = G().controls.domElement;
+    const oid = pickItem(ev, canvas);
+    if (!oid) return;                          // empty space → let OrbitControls orbit
+    ev.stopImmediatePropagation(); ev.preventDefault();
+    down = { oid, x: ev.clientX, y: ev.clientY, t: performance.now(), moved: false };
+  }
+  function onMove(ev) {
+    if (!down) return;
+    if (!down.moved && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) {
+      // became a drag — grab it (unless someone else holds it)
+      if (heldRemote.has(down.oid)) { down = null; return; }
+      down.moved = true; startDrag(down.oid);
+    }
+    if (drag) {
+      const p = floorPoint(ev, G().controls.domElement); if (!p) return;
+      const it = items.get(drag.oid); if (!it) return;
+      it.mesh.position.x = p.x; it.mesh.position.z = p.z;
+      const now = performance.now();
+      if (now - drag.lastSent > SEND_MS) {
+        drag.lastSent = now;
+        N().sendObj({ t: 'objmove', oid: drag.oid, x: +p.x.toFixed(3), z: +p.z.toFixed(3), ry: +it.mesh.rotation.y.toFixed(3) });
+      }
+    }
+  }
+  function onUp(ev) {
+    if (!down) return;
+    const wasClick = !down.moved && (performance.now() - down.t < 400);
+    const oid = down.oid;
+    if (drag) endDrag(true);
+    else if (wasClick) toggleSit(oid);
+    down = null;
+  }
+  function startDrag(oid) {
+    drag = { oid, lastSent: 0 };
+    G().controls.enabled = false;
+    N().sendObj({ t: 'grab', oid });
+  }
+  function endDrag(commit) {
+    const it = drag && items.get(drag.oid);
+    if (commit && it) N().sendObj({ t: 'drop', oid: drag.oid, x: +it.mesh.position.x.toFixed(3), z: +it.mesh.position.z.toFixed(3), ry: +it.mesh.rotation.y.toFixed(3) });
+    drag = null;
+    if (G().controls) G().controls.enabled = !(G().SIT && G().SIT.on) && !mySeat;
+  }
+
+  // ── sitting ──────────────────────────────────────────────────────────────────
+  function toggleSit(oid) {
+    const it = items.get(oid); if (!it || it.kind !== 'stool') return;
+    if (mySeat === oid) { standUp(); return; }
+    if (mySeat) standUp();
+    sitIn(oid);
+  }
+  function sitIn(oid) {
+    const it = items.get(oid); if (!it) return;
+    const cam = N().cam, controls = G().controls;
+    seatSave = { pos: cam.position.clone(), tgt: controls.target.clone() };
+    const s = it.mesh.position;
+    cam.position.set(s.x, it.mesh.userData.seatY + UPS * 1.05, s.z);   // eye height above the seat
+    controls.target.set(0, UPS * 0.7, LZ);                            // look toward the table
+    controls.enabled = false;
+    mySeat = oid;
+    N().setSit(true, oid);
+    if (standBtn) standBtn.style.display = 'block';
+  }
+  function standUp() {
+    if (!mySeat) return;
+    const cam = N() && N().cam, controls = G() && G().controls;
+    if (seatSave && cam && controls) { cam.position.copy(seatSave.pos); controls.target.copy(seatSave.tgt); }
+    if (controls) controls.enabled = true;
+    mySeat = null; seatSave = null;
+    if (N()) N().setSit(false);
+    if (standBtn) standBtn.style.display = 'none';
+  }
+
+  // stand button + Esc
+  function buildStand() {
+    standBtn = document.createElement('button');
+    standBtn.textContent = '🧍 STAND UP';
+    standBtn.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:80px;z-index:70;display:none;background:rgba(12,16,26,0.9);border:1px solid #232c44;border-radius:10px;color:#e8ecf6;padding:8px 16px;cursor:pointer;font:600 13px system-ui';
+    standBtn.onclick = () => standUp();
+    document.body.appendChild(standBtn);
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && mySeat) { e.stopPropagation(); standUp(); } }, true);
+  }
+
+  // ── boot: wait for netcode + canvas, attach capture-phase pointer handlers ───
+  (function boot(tries = 0) {
+    const net = N(), g = G();
+    if (net && net.onObj && g && g.controls && g.controls.domElement) {
+      buildStand();
+      wireNet();
+      const canvas = g.controls.domElement;
+      canvas.addEventListener('pointerdown', onDown, true);   // capture: beat OrbitControls
+      window.addEventListener('pointermove', onMove, true);
+      window.addEventListener('pointerup', onUp, true);
+      if (net.isFull()) spawn();
+      return;
+    }
+    if (tries > 200) return;
+    setTimeout(() => boot(tries + 1), 100);
+  })();
+})();
+</script>
+<script type="module">
+/* ================= LOUNGE ROOM (a real place, not the mining lab) =================
+   A game-lobby-styled lounge (neon floor, bar, big screen, doorways for future
+   rooms) built as its own region at z≈LZ, far from the mining room. A glowing
+   portal in the mining room takes you there (teleport + presence on); a return
+   portal brings you back. This module OWNS "entering the lounge": the LOUNGE
+   button, key 6, ?lounge, and the lounge host all route through here, and it
+   calls MGNET.enter()/leave() for the netcode. */
+import * as THREE from 'three';
+
+(() => {
+  const UPS = 2.25;
+  const MG = () => window.MG;
+  const NET = () => window.MGNET;
+
+  // Lounge region — matches p14's furniture LZ.
+  const LZ = -120, LX = 0;
+  const LW = 30, LD = 24, LH = 6;                 // lobby is roomier than the lab
+  const NEON = 0x35e0ff, NEON2 = 0xb14bff, GOLD = 0xffd23f;
+
+  let built = false, room = null, inLounge = false;
+  let save = null;                                // cam/target/walkbox to restore on exit
+  const portals = [];                             // {mesh, kind:'enter'|'exit'}
+
+  const mat = (c, r = 0.7, e = 0, ei = 0) => {
+    const m = new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: 0.15 });
+    if (e) { m.emissive = new THREE.Color(e); m.emissiveIntensity = ei || 1; }
+    return m;
+  };
+
+  // ── build the lounge environment ────────────────────────────────────────────
+  function build() {
+    if (built) return; const scene = MG().scene; if (!scene) return;
+    room = new THREE.Group(); room.position.set(LX, 0, LZ);
+
+    // floor: dark slab + neon grid
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(LW, 0.2, LD), mat(0x0c0f1a, 0.9));
+    floor.position.y = -0.1; room.add(floor);
+    const grid = new THREE.GridHelper(Math.max(LW, LD), 20, NEON, 0x1b2740);
+    grid.position.y = 0.02; grid.material.opacity = 0.35; grid.material.transparent = true; room.add(grid);
+
+    // walls (thin, dark) + neon top strip
+    const wallMat = mat(0x11131f, 0.85);
+    const mkWall = (w, h, x, z, ry) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.3), wallMat); m.position.set(x, h / 2, z); m.rotation.y = ry; room.add(m);
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, 0.34), mat(NEON, 0.4, NEON, 1.4)); strip.position.set(x, h - 0.4, z); strip.rotation.y = ry; room.add(strip); };
+    mkWall(LW, LH, 0, -LD / 2, 0);                 // back
+    mkWall(LD, LH, -LW / 2, 0, Math.PI / 2);        // left
+    mkWall(LD, LH, LW / 2, 0, Math.PI / 2);         // right
+    // front wall is open (that's where you arrive), just corner posts
+    [[-LW / 2, LD / 2], [LW / 2, LD / 2]].forEach(([x, z]) => { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, LH, 8), mat(0x11131f, 0.7, NEON2, 0.5)); p.position.set(x, LH / 2, z); room.add(p); });
+
+    // ceiling with a soft glow panel
+    const ceil = new THREE.Mesh(new THREE.BoxGeometry(LW, 0.2, LD), mat(0x0a0c15, 0.9)); ceil.position.y = LH; room.add(ceil);
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(LW * 0.5, LD * 0.5), mat(0x101828, 1, 0x223, 0.4)); glow.rotation.x = Math.PI / 2; glow.position.y = LH - 0.11; room.add(glow);
+    room.add(new THREE.PointLight(NEON, 0.6, 40).translateY(LH - 1));
+    room.add(new THREE.PointLight(NEON2, 0.4, 40));
+    room.add(new THREE.AmbientLight(0x404a66, 0.7));
+
+    // BIG SCREEN on the back wall
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(10, 5.4), mat(0x050810, 0.4, 0x0a1830, 1.2));
+    screen.position.set(0, 3.2, -LD / 2 + 0.2); room.add(screen);
+    const bezel = new THREE.Mesh(new THREE.BoxGeometry(10.6, 6, 0.2), mat(0x05070d, 0.5, NEON, 0.6)); bezel.position.set(0, 3.2, -LD / 2 + 0.1); room.add(bezel);
+    // marquee text via canvas
+    const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 512; const cx = cv.getContext('2d');
+    cx.fillStyle = '#050810'; cx.fillRect(0, 0, 1024, 512);
+    cx.fillStyle = '#35e0ff'; cx.font = 'bold 90px system-ui'; cx.textAlign = 'center'; cx.fillText('THE LOUNGE', 512, 210);
+    cx.fillStyle = '#ffd23f'; cx.font = 'bold 44px system-ui'; cx.fillText('WATTxchange', 512, 300);
+    cx.fillStyle = '#8b94ab'; cx.font = '34px system-ui'; cx.fillText('drag chairs · sit · talk · voice', 512, 380);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; screen.material.map = tex; screen.material.emissiveMap = tex; screen.material.needsUpdate = true;
+
+    // BAR counter along the left wall
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.2, 8), mat(0x1a1330, 0.6, NEON2, 0.5)); bar.position.set(-LW / 2 + 1.2, 0.6, -2); room.add(bar);
+    const barTop = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.12, 8.2), mat(0x2a2050, 0.4, GOLD, 0.5)); barTop.position.set(-LW / 2 + 1.2, 1.26, -2); room.add(barTop);
+
+    // DOORWAYS for future rooms (labeled placeholders) on the right wall
+    ['POKER', 'ARCADE', 'STAGE'].forEach((label, i) => {
+      const z = -6 + i * 6;
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.4, 2.4), mat(0x14182a, 0.6, GOLD, 0.35)); frame.position.set(LW / 2 - 0.2, 1.7, z); room.add(frame);
+      const dc = document.createElement('canvas'); dc.width = 256; dc.height = 64; const dx = dc.getContext('2d');
+      dx.fillStyle = 'rgba(6,8,14,0.9)'; dx.fillRect(0, 0, 256, 64); dx.fillStyle = '#ffd23f'; dx.font = 'bold 34px system-ui'; dx.textAlign = 'center'; dx.textBaseline = 'middle'; dx.fillText(label + ' · soon', 128, 34);
+      const dt = new THREE.CanvasTexture(dc); dt.colorSpace = THREE.SRGBColorSpace;
+      const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: dt, transparent: true })); sign.scale.set(2.4, 0.6, 1); sign.position.set(LW / 2 - 0.6, 3.3, z); room.add(sign);
+    });
+
+    // RETURN portal (near the open front edge)
+    const rp = makePortal('↩ MINING ROOM', 0xff7a3c);
+    rp.position.set(0, 0, LD / 2 - 1.5); room.add(rp);
+    portals.push({ mesh: rp, kind: 'exit' });
+
+    room.visible = false;
+    scene.add(room);
+    built = true;
+
+    // ENTER portal in the MINING room (world coords, added straight to scene)
+    const ep = makePortal('🛋 THE LOUNGE', NEON);
+    ep.position.set(0, 0, 11.4);                   // the open +z side of the mining room
+    scene.add(ep);
+    portals.push({ mesh: ep, kind: 'enter' });
+  }
+
+  function makePortal(label, color) {
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.14, 12, 32), mat(0x101828, 0.4, color, 1.6));
+    ring.position.y = 1.6; ring.rotation.x = 0; g.add(ring);
+    const veil = new THREE.Mesh(new THREE.CircleGeometry(1.3, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18, side: THREE.DoubleSide }));
+    veil.position.y = 1.6; g.add(veil);
+    g.add(new THREE.PointLight(color, 0.8, 10).translateY(1.6));
+    const cv = document.createElement('canvas'); cv.width = 512; cv.height = 96; const cx = cv.getContext('2d');
+    cx.fillStyle = 'rgba(6,8,14,0.85)'; cx.beginPath(); cx.roundRect(20, 18, 472, 60, 14); cx.fill();
+    cx.fillStyle = '#e8ecf6'; cx.font = 'bold 44px system-ui'; cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.fillText(label, 256, 50);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false })); sign.scale.set(3.2, 0.6, 1); sign.position.y = 3.3; sign.renderOrder = 998; g.add(sign);
+    g.userData.portal = true; g.userData.ring = ring;
+    return g;
+  }
+
+  // ── enter / exit ─────────────────────────────────────────────────────────────
+  function enterLounge() {
+    if (inLounge) return;
+    build(); if (!built) return;
+    const cam = MG().cam, controls = MG().controls;
+    save = { pos: cam.position.clone(), tgt: controls.target.clone(),
+      box: { x: MG().WALKBOX.x, zMin: MG().WALKBOX.zMin, zMax: MG().WALKBOX.zMax } };
+    room.visible = true;
+    // teleport into the lounge, facing the big screen
+    cam.position.set(LX, 4.4, LZ + LD / 2 - 3);
+    controls.target.set(LX, 1.6, LZ);
+    controls.enabled = true;
+    // re-bound the walk clamp to the lounge footprint
+    MG().WALKBOX.x = LW / 2 - 0.6; MG().WALKBOX.zMin = LZ - LD / 2 + 0.6; MG().WALKBOX.zMax = LZ + LD / 2 - 0.6;
+    inLounge = true;
+    NET() && NET().enter && NET().enter();         // presence + furniture + voice
+    updateButton();
+  }
+  function exitLounge() {
+    if (!inLounge) return;
+    NET() && NET().leave && NET().leave();
+    const cam = MG().cam, controls = MG().controls;
+    if (room) room.visible = false;
+    if (save) {
+      cam.position.copy(save.pos); controls.target.copy(save.tgt);
+      MG().WALKBOX.x = save.box.x; MG().WALKBOX.zMin = save.box.zMin; MG().WALKBOX.zMax = save.box.zMax;
+    }
+    controls.enabled = true;
+    inLounge = false;
+    updateButton();
+  }
+  function toggle() { inLounge ? exitLounge() : enterLounge(); }
+
+  function updateButton() {
+    const b = document.getElementById('b-lounge'); if (!b) return;
+    b.textContent = inLounge ? '🛋 LEAVE' : '🛋 LOUNGE';
+    b.classList.toggle('accent', inLounge);
+  }
+
+  // ── portal interaction: proximity prompt + click ────────────────────────────
+  const ray = new THREE.Raycaster();
+  function worldPos(mesh) { return mesh.getWorldPosition(new THREE.Vector3()); }
+  function onDown(ev) {
+    if (!built) return;
+    const canvas = MG().controls.domElement;
+    const r = canvas.getBoundingClientRect();
+    const nd = new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(nd, MG().cam);
+    for (const p of portals) {
+      if (p.kind === 'enter' && inLounge) continue;
+      if (p.kind === 'exit' && !inLounge) continue;
+      if (ray.intersectObject(p.mesh, true).length) {
+        ev.stopImmediatePropagation(); ev.preventDefault();
+        p.kind === 'enter' ? enterLounge() : exitLounge();
+        return;
+      }
+    }
+  }
+
+  // spin portal rings + proximity auto-prompt/enter
+  let prompt;
+  function tick() {
+    requestAnimationFrame(tick);
+    if (!built) return;
+    const cam = MG().cam; let near = null;
+    for (const p of portals) {
+      p.mesh.userData.ring.rotation.z += 0.02;
+      const active = (p.kind === 'enter') ? !inLounge : inLounge;
+      p.mesh.visible = active;
+      if (!active) continue;
+      const d = cam.position.distanceTo(worldPos(p.mesh));
+      if (d < 2.4) near = p;
+    }
+    if (prompt) prompt.style.display = near ? 'block' : 'none';
+    if (near) prompt.textContent = near.kind === 'enter' ? '🛋 click the portal to enter The Lounge' : '↩ click the portal to return to your mining room';
+  }
+
+  // ── boot ─────────────────────────────────────────────────────────────────────
+  (function boot(t = 0) {
+    if (MG() && MG().scene && MG().controls && NET()) {
+      build();
+      const canvas = MG().controls.domElement;
+      canvas.addEventListener('pointerdown', onDown, true);
+      // own the LOUNGE button + key 6
+      const b = document.getElementById('b-lounge'); if (b) b.onclick = () => toggle();
+      window.addEventListener('keydown', (e) => { if (e.key === '6') { e.stopPropagation(); toggle(); } }, true);
+      // floating prompt
+      prompt = document.createElement('div');
+      prompt.style.cssText = 'position:fixed;left:50%;top:64%;transform:translateX(-50%);z-index:55;display:none;background:rgba(12,16,26,0.9);border:1px solid #35e0ff55;border-radius:10px;color:#e8ecf6;padding:8px 16px;font:600 13px system-ui;pointer-events:none';
+      document.body.appendChild(prompt);
+      requestAnimationFrame(tick);
+      // auto-enter on the lounge host / ?lounge
+      const q = new URLSearchParams(location.search);
+      if (q.has('lounge') || (location.hostname === 'lounge.wattxchange.app' && !q.has('solo'))) {
+        // wait for the splash to be dismissed before teleporting
+        const w = setInterval(() => { const sp = document.getElementById('splash'); if (sp && getComputedStyle(sp).display === 'none') { clearInterval(w); enterLounge(); } }, 200);
+        setTimeout(() => clearInterval(w), 60000);
+      }
+      window.MGLOUNGE = { enter: enterLounge, exit: exitLounge, toggle };
+      return;
+    }
+    if (t > 250) return;
+    setTimeout(() => boot(t + 1), 100);
+  })();
+})();
+</script>

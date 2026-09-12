@@ -215,7 +215,7 @@ function walkClamp(cur,next,lo,hi){
   return Math.min(lo,Math.max(cur,next));               // outside low: only inward
 }
 function walkBlocked(){
-  return TRAILER || SIT.on || OS.open || benchOpen || !running ||
+  return TRAILER || SIT.on || OS.open || benchOpen || (typeof PL!=='undefined'&&PL.open) || !running ||
     ['m-shop','m-upg','m-stats','m-web3','m-pool'].some(id=>$(id)&&$(id).classList.contains('open'));
 }
 function walkKey(e,down){
@@ -325,6 +325,7 @@ document.addEventListener('mousemove',e=>{
 /* ---------- menu hotkeys (number row — the letters belong to movement now) ---------- */
 addEventListener('keydown',e=>{
   if(e.target.matches('input,textarea,select')) return;
+  if(typeof PL!=='undefined'&&PL.open) return;               // the POSE LAB owns the keyboard while it is up
   if(e.key==='Escape'){ if(OS.open){ closeOS(); return; } if(benchOpen){ closeBench(); return; } selRig=-1; renderRigPanel(); ['m-shop','m-upg','m-stats','m-web3','m-pool'].forEach(closeModal); walkStop(); }
   if(OS.open) return;
   if(e.key==='1'){ openModal('m-shop'); renderShop(); walkStop(); }
@@ -332,10 +333,12 @@ addEventListener('keydown',e=>{
   if(e.key==='3'){ openPoolHub(); walkStop(); }
   if(e.key==='4'){ openModal('m-stats'); renderStats(); walkStop(); }
   if(e.key==='5'){ openModal('m-web3'); renderWallet(); walkStop(); }
+  if(e.key==='6'){ if(window.MGNET) window.MGNET.toggle(); }
   if(e.key==='f'||e.key==='F') lookToggle();
   if(e.key==='n'||e.key==='N') switchNet();
   if(e.key==='o'||e.key==='O'){ if(S&&S.rigs.length) openOS(selRig>=0?selRig:0); }
   if(e.key==='b'||e.key==='B'){ if(benchOpen) closeBench(); else if(S&&S.rigs.length) openBench(selRig>=0?selRig:0); }
+  if(e.key==='p'||e.key==='P') openPoseLab();
 });
 /* ================= MAIN LOOP ================= */
 let last=0, acc=0, uiT=0, scrT=0, histT=0, running=false;
@@ -362,6 +365,9 @@ function frame(t){
     rv.led.material.color.setHex(ledc); rv.led.material.opacity=1;
     // RGB cooling fans: spin faster when the rig is powered on/mining, and
     // cycle hue along the row so the bank shimmers like real ARGB fans.
+    /* the cards' own fans: spinning means this rig is actually earning — off,
+       crashed, worn out or out of WATT and they stop dead */
+    spinFans(rv.modelFans, dt, !noWatt && rigHash(S.rigs[ri]||{gpus:[]})>0);
     if(rv.fans&&rv.fans.length){
       const on=S.rigs[ri]&&S.rigs[ri].on!==0 && !noWatt;
       const spin=(on?9:1.2)*dt;
@@ -373,6 +379,8 @@ function frame(t){
       });
     }
   });
+  if(typeof towerVis!=='undefined'&&towerVis&&towerVis.visible&&towerVis.userData.fans)
+    spinFans(towerVis.userData.fans, dt, !noWatt && towerHash()>0);
   // rings pulse
   const pt=t/1000;
   rings.forEach((rg,i)=>{ if(!rg||!rg.visible) return;
@@ -390,6 +398,7 @@ function frame(t){
     priceHist.alt.push(S.price.alt); if(priceHist.alt.length>50) priceHist.alt.shift();
     priceHist.wtx.push(S.price.wtx); if(priceHist.wtx.length>50) priceHist.wtx.shift();
   }}
+  if(typeof PL!=='undefined'&&PL.open){ poseLabLoop(dt); return; }
   if(benchOpen){ benchLoop(dt); return; }
   renderer.render(scene,cam);
 }
@@ -427,11 +436,12 @@ async function init(){
   if(TRAILER){ $('splash').style.display='none'; trailerSetup(); }
   window.MG={ get S(){return S;}, tick:s=>{for(let i=0;i<s*10;i++)simTick(SIMDT);renderHud();},
     give:w=>{S.watt+=w;renderHud();}, save, mintPC, buyItem, installPart, forceBlock, cam, controls, scene, THREE,
-    openOS, closeOS, setOC, setRigNet, rebootRig, openBench, closeBench, W3, WEB3CFG, w3Connect, w3Refresh,
+    openOS, closeOS, setOC, setRigNet, rebootRig, openBench, closeBench, openTowerBench, syncTowerBuild, spinFans, collectFans, W3, WEB3CFG, w3Connect, w3Refresh,
     joinPool, hostPool, closePool, buyValidator, exitValidators, repairRig, togglePower, openPoolHub, switchNet, POOLS,
     stakeShop, unstakeShop, buildFarm, sitDown, standUp, eligibleSlots, farmStatus,
     ocAskPayoutAddr, ocAddrLooksOk, ocEnsurePayoutAddr,   // payout-address popup (testable)
-    WALK, tickWalk, walkStop, walkBlocked,
+    WALK, tickWalk, walkStop, walkBlocked, WALKBOX,   // WALKBOX for the lounge-room bounds swap
+    get SIT(){return SIT;},                       // live seated state for the netcode
     state:()=>JSON.parse(JSON.stringify(S)) };
 }
 function forceBlock(lucky=false){

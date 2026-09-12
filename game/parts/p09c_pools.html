@@ -32,7 +32,7 @@ function curPool(){ const c=CFG.nets[S.net].coin; return poolFor(c,S.pool[c]); }
    reveals what each rig is pointed at. A LIVE rig carries an on-chain `algo`
    trait mapped to its coin; a demo rig mines whatever network is selected. */
 const RIG_ALGO_COIN={0:'wtx',1:'bitn',2:'wtx',3:'alt',5:'hth'};
-const COIN_CHAIN={pol:'Polygon',alt:'Altcoinchain',wtx:'WATTxchain',bitn:'Bitnet',hth:'HTH'};
+const COIN_CHAIN={pol:'Polygon',alt:'Altcoinchain',wtx:'WATTxchain',bitn:'Bitnet',hth:'HTH',tha:'THA'};
 function rigMineCoin(r){ return (r&&r.algo!=null&&RIG_ALGO_COIN[r.algo])||CFG.nets[S.net].coin; }
 function rigPoolLabel(i){
   const r=S&&S.rigs&&S.rigs[i]; if(!r) return null;
@@ -660,7 +660,7 @@ async function ocUnstake(fn){
   fillChainPools();
 }
 /* off-EVM payout addresses: target 3 = BSV (WATT on BSV), target 4 = HTH (masternode rewards),
-   target 5 = BITN (Bitnet PoS stake rewards) —
+   target 5 = BITN (Bitnet PoS stake rewards), target 6 = THA (staking rewards) —
    the hub keys the declaration to msg.sender; the operator daemon reads it when it settles */
 async function ocSaveAddr(tid,inputId,label){
   const a=($(inputId)?.value||'').trim();
@@ -670,7 +670,7 @@ async function ocSaveAddr(tid,inputId,label){
   }catch(e){ SFX.err(); toast((''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',8000); }
   fillChainPools();
 }
-const ocSaveBsv=()=>ocSaveAddr(3,'oc-bsv','BSV'), ocSaveHth=()=>ocSaveAddr(4,'oc-hth','HTH'), ocSaveBitn=()=>ocSaveAddr(5,'oc-bitn','BITN');
+const ocSaveBsv=()=>ocSaveAddr(3,'oc-bsv','BSV'), ocSaveHth=()=>ocSaveAddr(4,'oc-hth','HTH'), ocSaveBitn=()=>ocSaveAddr(5,'oc-bitn','BITN'), ocSaveTha=()=>ocSaveAddr(6,'oc-tha','THA');
 async function ocMintRig(){
   try{ const rig=await poolCtr('rig',true);
     const price=await rig.mintPrice();
@@ -711,7 +711,7 @@ function ocAddrLooksOk(sym,a){
   a=(a||'').trim(); if(!a) return false;
   if(sym==='ALT'||sym==='POL') return /^0x[0-9a-fA-F]{40}$/.test(a);
   if(sym==='WTX') return /^0x[0-9a-fA-F]{40}$/.test(a)||/^W[1-9A-HJ-NP-Za-km-z]{25,40}$/.test(a);
-  return /^[0-9a-zA-Z]{20,100}$/.test(a);   // base58-ish gate for HTH/BITN/BSV/future coins
+  return /^[0-9a-zA-Z]{20,100}$/.test(a);   // base58-ish gate for HTH/BITN/BSV/THA/future coins
 }
 function ocAskPayoutAddr(targetId,current){
   const t=WEB3CFG.targets[targetId]||{sym:'#'+targetId,name:''};
@@ -1011,6 +1011,7 @@ async function ocFillPayoutBalances(addrs){
     try{
       if(sym==='WTX'){ const j=await get('https://ord-api.wattxchange.app/address/'+addr+'/balance'); put(sym,fmt((j.confirmed||0)/1e8)); }
       else if(sym==='BITN'){ const j=await get('https://bitn-exp.wattxchange.app/api/address/'+addr); put(sym,fmt(j.balance||0)); }
+      else if(sym==='THA'){ const j=await get('https://tha-api.wattxchange.app/api/address/'+addr); put(sym,fmt(j.balance||0)); }
       else if(sym==='BSV'){ const j=await get('https://api.whatsonchain.com/v1/bsv/main/address/'+addr+'/balance'); put(sym,fmt(((j.confirmed||0)+(j.unconfirmed||0))/1e8)); }
       else put(sym,'—');
     }catch(e){ put(sym,'—'); }
@@ -1022,7 +1023,7 @@ async function fillChainPools(){
   ocRenderWallet(); // live balances strip, independent of the pools contracts
   const el=$('chainpools'); if(!el) return;
   if(!W3.addr){ el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS</b>
-    <small>Connect a wallet (🦊 WALLET) to host a real pool: <b>100,000 WATT v2</b> locked in the PoolRegistry host contract. ONE pool offers a MENU of coins (ALT / WTX / BSV / HTH / BITN …) — every miner picks which coin each rig mines.</small></div>`; return; }
+    <small>Connect a wallet (🦊 WALLET) to host a real pool: <b>100,000 WATT v2</b> locked in the PoolRegistry host contract. ONE pool offers a MENU of coins (ALT / WTX / BSV / HTH / BITN / THA …) — every miner picks which coin each rig mines.</small></div>`; return; }
   const c=poolCfg();
   if(!c){ el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS</b>
     <small>${W3.chain?W3.chain.name+' V3 pool contracts are pending deploy — switch the wallet to <b>Polygon</b> or <b>Altcoinchain</b> to host or mine now.':'Switch the wallet to Polygon or Altcoinchain.'}</small></div>`; return; }
@@ -1031,10 +1032,10 @@ async function fillChainPools(){
   try{
     const E=await poolEthers();
     const reg=await poolCtr('registry'), hub=await poolCtr('hub'), eng=await poolCtr('engine'), rig=await poolCtr('rig');
-    const [regd, actRes, engN, rigN, bsvAddr, hthAddr, bitnAddr]=await Promise.all([
+    const [regd, actRes, engN, rigN, bsvAddr, hthAddr, bitnAddr, thaAddr]=await Promise.all([
       reg.isRegistered(W3.addr), reg.getActivePools(), eng.poolCount(), rig.balanceOf(W3.addr),
       hub.payoutAddressFor(3,W3.addr), hub.payoutAddressFor(4,W3.addr).catch(()=>''),
-      hub.payoutAddressFor(5,W3.addr).catch(()=>''),
+      hub.payoutAddressFor(5,W3.addr).catch(()=>''), hub.payoutAddressFor(6,W3.addr).catch(()=>''),
     ]);
     const wtxAddr=await hub.payoutAddressFor(1,W3.addr).catch(()=>'');
     /* pending payouts across targets */
@@ -1128,8 +1129,10 @@ async function fillChainPools(){
     el.innerHTML=`<div class="valbox" style="border-color:#ffb14544"><b>⛓ REAL ON-CHAIN POOLS — ${c.name}</b>
       ${pendRows?`<small>unpaid rewards (operator daemon pays these out): ${pendRows}</small>`:''}
       ${hostRow}${enginePoolRows}${poolRows}
-      ${regd?'':`<div class="hostbox" style="margin-top:8px"><b>🏗 HOST A REAL POOL — lock 100,000 ⚡WATT on-chain</b>
-        <small>Stake sits in the PoolRegistry (30-day unstake hold). ONE pool can offer MANY coins — tick every coin your nodes earn; each miner picks which coin their rig mines. Your pool earns your fee % of every miner's rewards + 1% of the WATT they burn. You can add more pools or coins and change fees any time.</small>
+      <div class="hostbox" style="margin-top:8px"><b>${regd?'🏗 HOST ANOTHER POOL — no extra stake needed':'🏗 HOST A REAL POOL — lock 100,000 ⚡WATT on-chain'}</b>
+        <small>${regd
+          ?'Your 100,000 WATT host stake already backs this wallet — one registration covers any number of pools, so launching another is gas only, no new lock. Give it a name and tick the coin(s) it offers; each miner picks which coin their rig mines.'
+          :'Stake sits in the PoolRegistry (30-day unstake hold). ONE pool can offer MANY coins — tick every coin your nodes earn; each miner picks which coin their rig mines. Your pool earns your fee % of every miner\'s rewards + 1% of the WATT they burn. You can add more pools or coins and change fees any time.'}</small>
         <div class="rowbtns" style="margin-top:6px;flex-wrap:wrap">
           <input id="oc-name" class="hbtn" placeholder="pool name" style="flex:1;min-width:110px">
           ${tgtChecks}
@@ -1138,7 +1141,7 @@ async function fillChainPools(){
           <input id="oc-stratum" class="hbtn" placeholder="stratum (optional — NFT pools need none)" style="flex:1;min-width:150px">
           <input id="oc-rpc" class="hbtn" placeholder="node RPC (optional)" style="flex:1;min-width:120px">
           <input id="oc-p2p" class="hbtn" placeholder="node P2P (optional)" style="flex:1;min-width:120px">
-          <button class="hbtn gold" id="oc-host">🏊 LOCK 100k + LAUNCH</button></div></div>`}
+          <button class="hbtn gold" id="oc-host">${regd?'🏊 LAUNCH POOL':'🏊 LOCK 100k + LAUNCH'}</button></div></div>
       <div class="valbox" style="margin-top:8px;border-color:#3dff8a33"><b>💳 PAYOUT ADDRESSES — where real coin rewards get sent</b>
         <small>Generate or import a seed wallet in your rig's OS (👛 Wallet app) to get an address for every coin, then save each one here. The pool operator pays your credited rewards to these addresses. EVM rewards (POL · ALT · WATT) always pay your connected address.</small>
         <div class="rowbtns" style="margin-top:5px;flex-wrap:wrap;align-items:center">
@@ -1161,13 +1164,18 @@ async function fillChainPools(){
           <input id="oc-bitn" class="hbtn" placeholder="BITN payout address (Bitnet PoS-reward pools)" value="${bitnAddr||''}" style="flex:1;min-width:170px">
           <button class="hbtn" id="oc-savebitn">SAVE</button>
           <small style="min-width:90px;text-align:right;color:var(--dim)">bal <b id="oc-bal-bitn">…</b></small></div>
+        <div class="rowbtns" style="margin-top:5px;flex-wrap:wrap;align-items:center">
+          <b style="min-width:38px">THA</b>
+          <input id="oc-tha" class="hbtn" placeholder="THA payout address (staking-reward pools)" value="${thaAddr||''}" style="flex:1;min-width:170px">
+          <button class="hbtn" id="oc-savetha">SAVE</button>
+          <small style="min-width:90px;text-align:right;color:var(--dim)">bal <b id="oc-bal-tha">…</b></small></div>
       </div>
       <div class="rowbtns" style="margin-top:8px;flex-wrap:wrap;align-items:center">
         <b>⛏ MY RIGS</b>
         <button class="hbtn accent" id="oc-mintrig" title="Mint a brand-new on-chain mining rig NFT (random traits)">⛏ MINT ON-CHAIN RIG</button>
         ${c.pools.migrator?'<button class="hbtn gold" id="oc-claimrig" title="Turn the classic Mining Game NFTs you already own into a mineable on-chain rig (your NFTs are escrowed, reclaim anytime)">🎫 CLAIM RIG FROM MY NFTs</button>':''}</div>
       ${rigRows}${stakedRows}${sesRows}</div>`;
-    ocFillPayoutBalances({WTX:wtxAddr,BSV:bsvAddr,HTH:hthAddr,BITN:bitnAddr});
+    ocFillPayoutBalances({WTX:wtxAddr,BSV:bsvAddr,HTH:hthAddr,BITN:bitnAddr,THA:thaAddr});
     /* wire */
     $('oc-host')?.addEventListener('click',ocHostPool);
     $('oc-mintrig')?.addEventListener('click',ocMintRig);
@@ -1176,6 +1184,7 @@ async function fillChainPools(){
     $('oc-savebsv')?.addEventListener('click',ocSaveBsv);
     $('oc-savehth')?.addEventListener('click',ocSaveHth);
     $('oc-savebitn')?.addEventListener('click',ocSaveBitn);
+    $('oc-savetha')?.addEventListener('click',ocSaveTha);
     $('oc-unstake')?.addEventListener('click',()=>ocUnstake('requestUnstake'));
     $('oc-cancelun')?.addEventListener('click',()=>ocUnstake('cancelUnstake'));
     $('oc-doneun')?.addEventListener('click',()=>ocUnstake('completeUnstake'));

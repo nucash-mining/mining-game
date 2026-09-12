@@ -268,6 +268,192 @@ function loadTex(f){
   })(0);
   return tex;
 }
+/* ---------- spinnable fans ----------
+   The gen2 models arrive as ONE merged mesh with one atlas material, so there
+   is no fan node to grab and no material name to match on. The blades are still
+   separate GEOMETRY though: this finds a model's connected components, keeps
+   the ones shaped like a fan, lifts each into its own mesh pivoted on its hub
+   (rotating the merged mesh would swing the fans around the card instead of
+   spinning them), and tags it with the axis it turns about. Runs once per model
+   at load; instOf() clones inherit the result.
+
+   Thresholds are tuned against the real assets: a GP720's blades come out as
+   four 0.79-wide discs 0.15 thick, its backplate as a 112-triangle sheet and
+   its I/O bracket as a long thin strip; an XXL270's blades are one 1.21 disc
+   0.06 thick sitting inside a 0.20-thick shroud ring of the same width and
+   centre — which is why concentric candidates keep only the densest one, or the
+   shroud would spin along with the blades. Only hardware models are scanned:
+   a case's flat square side panel would otherwise read as a very large fan. */
+/* flat: a blower's squirrel cage is chunkier than an axial fan's blades, so
+   this is looser than a disc would need. minRel is small because the ASIC is a
+   big brick with little fans on it. */
+const FAN={ flat:0.45, round:0.75, minTris:250, minRel:0.05, maxRel:0.90, spin:9 };
+/* connected components of one geometry, as triangle lists + bounds */
+function meshComponents(geo){
+  const pos=geo.attributes.position, idx=geo.index?geo.index.array:null;
+  const n=pos.count, par=new Int32Array(n);
+  for(let i=0;i<n;i++) par[i]=i;
+  const find=i=>{ while(par[i]!==i){ par[i]=par[par[i]]; i=par[i]; } return i; };
+  const uni=(a,b)=>{ a=find(a); b=find(b); if(a!==b) par[b]=a; };
+  // weld first: exporters split a vertex per corner, which would leave every
+  // triangle its own component
+  const seen=new Map();
+  for(let i=0;i<n;i++){
+    const k=Math.round(pos.getX(i)*1e4)+','+Math.round(pos.getY(i)*1e4)+','+Math.round(pos.getZ(i)*1e4);
+    if(seen.has(k)) uni(seen.get(k),i); else seen.set(k,i);
+  }
+  const tris=idx?idx.length/3:n/3;
+  for(let t=0;t<tris;t++){
+    const a=idx?idx[t*3]:t*3, b=idx?idx[t*3+1]:t*3+1, c=idx?idx[t*3+2]:t*3+2;
+    uni(a,b); uni(b,c);
+  }
+  const out=new Map();
+  for(let t=0;t<tris;t++){
+    const r=find(idx?idx[t*3]:t*3);
+    let e=out.get(r);
+    if(!e){ e={tris:[], min:[1e9,1e9,1e9], max:[-1e9,-1e9,-1e9]}; out.set(r,e); }
+    e.tris.push(t);
+    for(let k=0;k<3;k++){
+      const i=idx?idx[t*3+k]:t*3+k, v=[pos.getX(i),pos.getY(i),pos.getZ(i)];
+      for(let c=0;c<3;c++){ if(v[c]<e.min[c]) e.min[c]=v[c]; if(v[c]>e.max[c]) e.max[c]=v[c]; }
+    }
+  }
+  return [...out.values()];
+}
+/* does this lump of geometry look like a fan? */
+function fanTest(c, gmax){
+  const s=[c.max[0]-c.min[0], c.max[1]-c.min[1], c.max[2]-c.min[2]];
+  const ord=[0,1,2].sort((a,b)=>s[a]-s[b]);
+  const mn=s[ord[0]], md=s[ord[1]], mx=s[ord[2]];
+  if(mx<FAN.minRel*gmax || mx>FAN.maxRel*gmax) return null;  // not a screw, not the whole part
+  if(mn>FAN.flat*mx) return null;                            // a fan is flat
+  if(md<FAN.round*mx) return null;                           // and round: a disc's box is square
+  if(c.tris.length<FAN.minTris) return null;                 // blades are dense; a backplate is not
+  return {c, axis:ord[0], mx};
+}
+/* Some cards model every blade as its own piece — a TX190's blower is seven
+   separate 44-triangle blades, so its fan is not one component but a ring of
+   identical small ones. Group components by triangle count, cluster each group
+   by position, and hand back the rings. A heatsink's fins are also identical
+   and repeated, but they sit in a LINE, so the roundness test in fanTest drops
+   them while a blade ring passes. */
+function bladeRings(comps){
+  const ctr=c=>[0,1,2].map(i=>(c.min[i]+c.max[i])/2);
+  const span=c=>Math.max(c.max[0]-c.min[0], c.max[1]-c.min[1], c.max[2]-c.min[2]);
+  const buckets=new Map();
+  for(const c of comps){
+    const k=Math.round(Math.log(Math.max(1,c.tris.length))/Math.log(1.15));
+    let a=buckets.get(k); if(!a){ a=[]; buckets.set(k,a); } a.push(c);
+  }
+  const out=[];
+  for(const group of buckets.values()){
+    if(group.length<5) continue;
+    const reach=Math.max(...group.map(span))*2.2;
+    const used=new Array(group.length).fill(false);
+    for(let i=0;i<group.length;i++){
+      if(used[i]) continue;
+      used[i]=true; const stack=[i], cl=[];
+      while(stack.length){
+        const j=stack.pop(); cl.push(group[j]);
+        const cj=ctr(group[j]);
+        for(let k=0;k<group.length;k++){
+          if(used[k]) continue;
+          const ck=ctr(group[k]);
+          if(Math.hypot(cj[0]-ck[0], cj[1]-ck[1], cj[2]-ck[2])<=reach){ used[k]=true; stack.push(k); }
+        }
+      }
+      if(cl.length<5) continue;
+      out.push({ tris:[].concat(...cl.map(m=>m.tris)),
+        min:[0,1,2].map(i=>Math.min(...cl.map(m=>m.min[i]))),
+        max:[0,1,2].map(i=>Math.max(...cl.map(m=>m.max[i]))) });
+    }
+  }
+  return out;
+}
+function splitMeshFans(mesh, gmax){
+  const geo=mesh.geometry;
+  if(!geo||!geo.attributes.position) return;
+  geo.computeBoundingBox();
+  const comps=meshComponents(geo);
+  const cand=[];
+  for(const c of comps){ const f=fanTest(c,gmax); if(f) cand.push(f); }
+  for(const r of bladeRings(comps)){ const f=fanTest(r,gmax); if(f) cand.push(f); }
+  if(!cand.length) return;
+  /* Every fan on one part turns about the same axis — a card's fans all face
+     the same way. So when candidates disagree, the minority is not a fan
+     (GPX880 offered a stray one on x beside its four real ones), and a part
+     that spins something which is not a fan reads worse than one that spins
+     nothing. */
+  const votes={};
+  for(const f of cand) votes[f.axis]=(votes[f.axis]||0)+1;
+  const axis=+Object.keys(votes).reduce((a,b)=>votes[a]>=votes[b]?a:b);
+  const kept=cand.filter(f=>f.axis===axis);
+  /* a blade set inside its own shroud ring: same axis, same centre — keep the
+     densest. The centre bucket has to be one fixed size for every candidate,
+     or a shroud lands in a different bucket than the blades it surrounds. */
+  const keep=new Map(), bucket=gmax*0.12;
+  for(const f of kept){
+    const ctr=[0,1,2].map(i=>(f.c.min[i]+f.c.max[i])/2);
+    const k=f.axis+':'+[0,1,2].filter(i=>i!==f.axis).map(i=>Math.round(ctr[i]/bucket)).join(',');
+    const prev=keep.get(k);
+    if(!prev||prev.c.tris.length<f.c.tris.length) keep.set(k,f);
+  }
+  const idx=geo.index?geo.index.array:null;
+  const names=Object.keys(geo.attributes);
+  const get=(src,i,c)=>c===0?src.getX(i):c===1?src.getY(i):c===2?src.getZ(i):src.getW(i);
+  const dropped=new Set();
+  for(const f of keep.values()){
+    const tris=f.c.tris, ng=new THREE.BufferGeometry();
+    for(const name of names){
+      const src=geo.attributes[name], it=src.itemSize;
+      const arr=new Float32Array(tris.length*3*it); let o=0;
+      for(const t of tris) for(let k=0;k<3;k++){
+        const i=idx?idx[t*3+k]:t*3+k;
+        for(let c=0;c<it;c++) arr[o++]=get(src,i,c);
+      }
+      ng.setAttribute(name, new THREE.BufferAttribute(arr,it));
+    }
+    const ctr=new THREE.Vector3(...[0,1,2].map(i=>(f.c.min[i]+f.c.max[i])/2));
+    ng.translate(-ctr.x,-ctr.y,-ctr.z);      // pivot on the hub, so it spins in place
+    const fm=new THREE.Mesh(ng, mesh.material);
+    fm.position.copy(ctr);
+    fm.userData.fanAxis='xyz'[f.axis];
+    mesh.add(fm);
+    for(const t of tris) dropped.add(t);
+  }
+  // the host mesh must stop drawing the triangles the fans took with them
+  const total=idx?idx.length/3:geo.attributes.position.count/3, keptIdx=[];
+  for(let t=0;t<total;t++){
+    if(dropped.has(t)) continue;
+    for(let k=0;k<3;k++) keptIdx.push(idx?idx[t*3+k]:t*3+k);
+  }
+  geo.setIndex(keptIdx);
+}
+/* only hardware: a chassis panel is also flat and square, and must not spin.
+   Sizes are judged against the whole MODEL, not the mesh a component lives in —
+   the gen1 assets keep each fan as its own mesh, which would otherwise fill its
+   mesh completely and be rejected as "the whole part". */
+function splitFans(root){
+  root.updateMatrixWorld(true);
+  const bb=new THREE.Box3().setFromObject(root), bs=new THREE.Vector3(); bb.getSize(bs);
+  const modelMax=Math.max(bs.x,bs.y,bs.z)||1;
+  const meshes=[]; root.traverse(n=>{ if(n.isMesh) meshes.push(n); });
+  const sc=new THREE.Vector3(), p=new THREE.Vector3(), q=new THREE.Quaternion();
+  for(const m of meshes){
+    m.matrixWorld.decompose(p,q,sc);
+    const k=Math.max(Math.abs(sc.x),Math.abs(sc.y),Math.abs(sc.z))||1;
+    splitMeshFans(m, modelMax/k);          // the model's size in this mesh's own units
+  }
+}
+function collectFans(o){ const out=[]; o.traverse(n=>{ if(n.userData&&n.userData.fanAxis) out.push(n); }); return out; }
+/* Spin them clockwise (seen from the fan's own face) while the rig is mining,
+   and stop them dead when it is not — an idle rig should read as idle. */
+function spinFans(fans, dt, mining){
+  if(!fans||!fans.length) return;
+  const step=mining?FAN.spin*dt:0;
+  if(!step) return;
+  for(const f of fans) f.rotation[f.userData.fanAxis]-=step;   // negative = clockwise from the face
+}
 async function loadModels(progress){
   const defs=[['pc','pc.glb'],['cpu','cpu.glb'],['tx120','gpu_tx120.glb'],['gp50','gpu_gp50.glb'],['board','pcboard.glb'],
     /* furniture & farm structures (procedural fallback if the host doesn't serve them) */
@@ -288,6 +474,10 @@ async function loadModels(progress){
   for(const id in ITEMS){ const it=ITEMS[id]; if(!it.scene) continue;
     const sc=g2.scenes.find(s=>s.name===it.scene);
     if(sc) PROTO[it.key]=sc;
+  }
+  /* lift the fan blades out of every hardware model so they can spin */
+  for(const id in ITEMS){ const it=ITEMS[id];
+    if(PROTO[it.key] && ['GPU','Processor','ASIC'].includes(it.comp)) splitFans(PROTO[it.key]);
   }
   progress&&progress(1);
 }
@@ -349,7 +539,9 @@ function makeProcTower(){
   return g;
 }
 function setTowerOwned(own){
-  if(towerVis){ towerVis.visible=own; return; }
+  /* re-shown after a world switch or a reset: the tower is the same object but
+     its build belongs to the new save, so resync what is inside it */
+  if(towerVis){ towerVis.visible=own; syncTowerBuild(); return; }
   if(!own) return;
   towerVis=new THREE.Group();
   if(PROTO.tower){
@@ -362,6 +554,7 @@ function setTowerOwned(own){
   } else {
     towerVis.add(makeProcTower());   // fallback: tower always renders + stays clickable
   }
+  towerMeasure();
   // generous invisible click/grab hitbox — the tower mesh is thin/irregular, so
   // raycasting it directly missed most clicks. Rigs use boxes for this reason too.
   const thit=new THREE.Mesh(new THREE.BoxGeometry(2.8,3.2,2.8), new THREE.MeshBasicMaterial({visible:false,depthWrite:false}));
@@ -381,6 +574,173 @@ function syncTowerGlow(){
   if(typeof towerVis==='undefined'||!towerVis||!towerVis.userData.glow) return;
   const load=(typeof towerHash==='function')?towerHash():0;
   towerVis.userData.glow.intensity=26+Math.min(50,load*0.15);
+  syncTowerBuild();
+}
+/* ---------- the Server Tower's build, shown inside the case ----------
+   The tower is a real rig — up to 2 CPUs and 6 GPUs on its dual-CPU board —
+   but the case only ever glowed, so nothing you bolted in was visible. The
+   gen2 bundle merges the whole chassis into ONE mesh, so there is no side
+   panel to take off: a tower with hardware in it switches its shell to smoked
+   glass and lights the interior instead, which is how you would see a build
+   through a tempered-glass panel anyway.
+
+   Every measurement below comes from the case's OWN bounds, so a re-exported
+   or replaced tower model still lays out correctly. */
+/* PCIe pitch is the card's own THICKNESS, not its height: a dual-slot card is
+   ~40mm thick and 120mm tall, which is why six of them stack inside a case at
+   all. slotGap is that pitch as a multiple of the card's thickness. */
+const TOWER_BAY={ wall:0.10, glass:0.30, boardFill:0.84, cardOfBoard:0.92, slotGap:1.30 };
+/* the case's local bounds + its shell materials, taken once at build time
+   (towerVis is still untransformed here, so the box is tower-local) */
+function towerMeasure(){
+  const mdl=towerVis.children[0]; if(!mdl) return;
+  const bb=new THREE.Box3().setFromObject(mdl), bs=new THREE.Vector3(); bb.getSize(bs);
+  towerVis.userData.box={min:bb.min.clone(), size:bs};
+  const shell=[];
+  mdl.traverse(n=>{ if(n.isMesh&&n.material){
+    n.material=n.material.clone();   // never fade the shared PROTO material (thumbnails use it)
+    shell.push({mesh:n, mat:n.material, o:n.material.opacity, t:n.material.transparent, w:n.material.depthWrite});
+  }});
+  towerVis.userData.shell=shell;
+}
+/* The interior, as a real case is laid out: the motherboard tray is the far
+   inner wall, so the board stands with its plane parallel to the glass, its
+   PCIe slots running along the case (x) and stacking up it (y). Measured from
+   the case's own bounds — this case is 2.2 x 1.8 x 0.83, i.e. the big face the
+   player looks at IS the side panel, exactly like a tower. */
+function towerBayOf(box){
+  const w=TOWER_BAY.wall;
+  const iw=box.size.x-w*2, ih=box.size.y-w*2, id=box.size.z-w*2;
+  const boardW=Math.min(iw*TOWER_BAY.boardFill, ih*1.25);
+  return {
+    x    : box.min.x+box.size.x/2,        // along the slots
+    tray : box.min.z+w,                   // the board's back face: the far inner wall
+    yBot : box.min.y+w+ih*0.16,           // the board stands off the floor — PSU space under it
+    yTop : box.min.y+box.size.y-w*1.4,
+    iw, ih, id, boardW,                   // towerFitOf sizes the cards; it owns `len`
+  };
+}
+/* Size the build from the case AND the cards it holds. The binding constraint
+   is almost always the case DEPTH: a card standing in a slot has to fit between
+   the motherboard tray and the glass, and how far it stands off is its own
+   height, which differs per model. Measuring a probe card at unit length gives
+   the ratios, so nothing here is a guessed number. */
+function towerFitOf(bay, ids){
+  const key=ids&&ids.length?ITEMS[ids[0]].key:null;
+  if(!key||!PROTO[key]) return {len:bay.iw*0.55, pitch:bay.iw*0.06, boardW:bay.iw*0.6, board:0};
+  const r=poseSize(poseMesh('towerbay', key, 1));   // x = length, y = standoff, z = thickness
+  /* the board eats depth first — its heatsinks and slots stand off the tray
+     before a card even starts — so budget the two together, per unit of card
+     length, and solve for the length that fits between tray and glass */
+  const bt=PROTO.board ? poseSize(normalizeFit(instOf('board'),1)).y : 0.06;
+  const perLen=Math.max(0.01, r.y + bt/TOWER_BAY.cardOfBoard);
+  const len=Math.min(bay.iw*0.86, bay.id*0.95/perLen);
+  return { len, pitch:len*r.z*TOWER_BAY.slotGap, ratio:r, board:bt,
+           boardW:Math.min(len/TOWER_BAY.cardOfBoard, bay.iw*0.86) };
+}
+/* The motherboard, standing on the tray with its components facing the glass. */
+function placeTowerBoard(parent, bay, fit){
+  const g=new THREE.Group();
+  const boardW=(fit&&fit.boardW)||bay.boardW;
+  if(PROTO.board){
+    const m=normalizeFit(instOf('board'), boardW);
+    m.rotation.x=Math.PI/2;               // lay it up against the tray, component side out
+    g.add(m);
+  } else {
+    const m=new THREE.Mesh(new THREE.BoxGeometry(boardW, boardW*0.8, 0.02),
+      new THREE.MeshStandardMaterial({color:0x0b3d1e, roughness:.8, metalness:.1}));
+    m.position.y=boardW*0.4; g.add(m);
+  }
+  parent.add(g);
+  // seat it: back face on the tray, bottom on the bay floor, centred across the case
+  const b=new THREE.Box3().setFromObject(g);
+  g.position.x+=bay.x-(b.min.x+b.max.x)/2;
+  g.position.y+=bay.yBot-b.min.y;
+  g.position.z+=bay.tray-b.min.z;
+  const b2=new THREE.Box3().setFromObject(g);
+  return {group:g, bottom:b2.min.y, top:b2.max.y, face:b2.max.z, h:b2.max.y-b2.min.y};
+}
+/* Plug the installed cards into the board's PCIe slots.
+
+   A card in a slot: its LENGTH runs along the slot (x), its THICKNESS is the
+   stacking axis (y) — that is the PCIe pitch — and its body stands off the
+   board toward the glass (z), which puts the fans face down. The POSE table
+   hands every card over standing on its connector edge (long x, tall y, thin
+   z), so one +90 deg roll about x is the whole mount, and the group origin IS
+   the connector edge: park it on the board face and the card is seated.
+
+   Cards shrink together only if the board is too short for the stack. Shared
+   with the POSE LAB, which previews this exact bay. */
+function placeTowerBayGpus(parent, ids, bay, board, fit){
+  const out=[]; if(!ids.length) return out;
+  fit=fit||towerFitOf(bay, ids);
+  const face=board?board.face:bay.tray, bot=board?board.bottom:bay.yBot,
+        room=(board?board.h:bay.yTop-bay.yBot)*0.92;
+  const build=len=>ids.map(id=>poseMesh('towerbay', ITEMS[id].key, len));
+  let len=fit.len, cards=build(len);
+  const pitchOf=cs=>Math.max(...cs.map(c=>poseSize(c).z))*TOWER_BAY.slotGap;
+  const need=pitchOf(cards)*ids.length;
+  if(need>room){ len*=room/need; cards=build(len); }   // more cards than the board is tall
+  const pitch=pitchOf(cards);
+  const slotMat=new THREE.MeshStandardMaterial({color:0x14151f, roughness:.6, metalness:.4});
+  cards.forEach((c,k)=>{
+    const y=bot+pitch*(k+0.6);
+    /* the slot itself: an x16 connector on the board face, set toward the rear
+       of the card — this case's intake fan is on its -x face, so +x is the rear
+       where a card's I/O bracket and its slot belong */
+    const slot=new THREE.Mesh(new THREE.BoxGeometry(len*0.30, pitch*0.34, 0.022), slotMat);
+    slot.position.set(bay.x+len*0.18, y, face+0.011); parent.add(slot);
+    c.rotation.x=Math.PI/2;               // seat it in the slot, standing off the board
+    c.position.set(bay.x, y, face);
+    parent.add(c); out.push(c);
+  });
+  return out;
+}
+/* Seat the CPU coolers on the board, above the PCIe stack.
+
+   Unlike the cards these get NO roll: the CPU models are authored fan-up (which
+   is why the workbench, whose board lies flat, has always shown them right), so
+   identity is already the pose that points the fan at the ceiling. They stand
+   clear of the board face rather than straddling it. */
+function placeTowerCpus(parent, ids, bay, board, size){
+  const out=[]; if(!ids.length) return out;
+  ids.forEach((cid,k)=>{
+    const m=poseMesh('socket', ITEMS[cid].key, size);
+    const s=poseSize(m);
+    m.position.set(bay.x + (ids.length>1?(k?1:-1)*size*0.7:0),
+                   board.top-s.y-board.h*0.04,      // just under the top edge of the board
+                   board.face+s.z/2);               // fully proud of the board, not sunk into it
+    parent.add(m); out.push(m);
+  });
+  return out;
+}
+function syncTowerBuild(){
+  if(typeof towerVis==='undefined'||!towerVis) return;
+  const t=(typeof S!=='undefined'&&S)?S.towerRig:null;
+  const gpus=(t&&t.gpus)||[], cpus=(t&&t.cpus)||[];
+  const filled=gpus.length+cpus.length;
+  if(towerVis.userData.build){ towerVis.remove(towerVis.userData.build); towerVis.userData.build=null; }
+  towerVis.userData.fans=null;
+  /* glass only once there is something to look at — an empty tower stays a
+     closed case. renderOrder keeps the shell drawing after its own contents. */
+  for(const s of (towerVis.userData.shell||[])){
+    s.mat.transparent = filled?true:s.t;
+    s.mat.opacity     = filled?TOWER_BAY.glass:s.o;
+    s.mat.depthWrite  = filled?false:s.w;
+    s.mesh.renderOrder= filled?1:0;
+  }
+  const box=towerVis.userData.box;
+  if(!filled||!box) return;
+  const g=new THREE.Group(); towerVis.userData.build=g; towerVis.add(g);
+  const bay=towerBayOf(box), fit=towerFitOf(bay, gpus);
+  const board=placeTowerBoard(g, bay, fit);
+  placeTowerBayGpus(g, gpus, bay, board, fit);
+  placeTowerCpus(g, cpus, bay, board, Math.min(fit.boardW*0.22, board.h*0.3));
+  // interior light, so the hardware reads through the smoked pane
+  const lit=new THREE.PointLight(0x9fd8ff, 7, box.size.x*1.8);
+  lit.position.set(bay.x, (board.bottom+board.top)/2, board.face+box.size.z*0.3);
+  g.add(lit);
+  towerVis.userData.fans=collectFans(g);   // spun by the main loop while the tower mines
 }
 /* offscreen thumbnails of each model */
 function makeThumbs(){
@@ -405,9 +765,9 @@ function makeThumbs(){
   for(const k in views){
     if(!PROTO[k]) continue;
     const [h,cp,ct]=views[k];
-    const raw=instOf(k);
-    if(g2keys[k]&&ITEMS[ids[k]].flip) raw.rotation.x=Math.PI;
-    const inst=g2keys[k]?normalizeFit(raw,1.05):normalize(raw,h); tScene.add(inst);
+    /* gen2 scenes carry their own authored orientation — the POSE table's
+       '*:key' entry is the one fix, so the thumbnail matches the mounted part */
+    const inst=g2keys[k]?poseMesh('thumb',k,1.05):normalize(instOf(k),h); tScene.add(inst);
     if(g2keys[k]) inst.rotation.y=-0.55;
     tc.position.set(...cp); tc.lookAt(...ct);
     r2.toneMappingExposure=g2keys[k]?0.85:1.5;
