@@ -288,22 +288,26 @@ coinstakes on the node's SEND wallet, RPC `127.0.0.1:7221`).
 - Client-side: `WEB3CFG.targets` (p09b_web3), the 💳 PAYOUT ADDRESSES row + `ocSaveTha`
   (p09c_pools), and the THA branch of `ocFillPayoutBalances` (reads
   `tha-api.wattxchange.app/api/address/<addr>`, same shape as the BITN explorer).
-- **The off-chain operator feeder is wired but held at `enabled:false`** in
-  `mining-game-pool-operator/config.json` (`stakers.tha`, mirroring
-  `stakers.bitn`'s `listsinceblock`/category=`generate` shape) and
-  `payers.THA` at `dryRun:true`. What's missing is a **pool that offers THA** —
-  `addPoolTarget`/`createPool` on the engine are gated to the POOL OWNER's own
-  wallet (`0x8324FA247756a9D2Be9D16884f620e65a142E514`, the wallet that already
-  hosts Genesis Pool WTX/ALT/HTH/BITN), not the deployer/hub-owner key this
-  session used for target registration — hosting a pool is a browser-wallet
-  action by design, so there is no server-side key for it and none was sought.
-  **To finish activating THA mining:** open 🏊 POOL HUB in-game connected as
-  that wallet — the create-pool form now stays visible even when already
-  registered (`ocHostPool`'s registration check already skipped the 100k
-  re-lock for a registered host; the UI just used to hide the form). Tick THA,
-  submit — no new WATT lock, gas only. Then set `stakers.tha.poolId` to the new
-  pool's id (pattern: `bitn`→1, `hth`→3) and flip `enabled:true`; watch a cycle
-  before flipping `payers.THA.dryRun` to `false`.
+- **The off-chain operator feeder is wired and self-arming.** What's missing
+  is a **pool that offers THA** — `addPoolTarget`/`createPool` on the engine
+  are gated to the POOL OWNER's own wallet
+  (`0x8324FA247756a9D2Be9D16884f620e65a142E514`, the wallet that already hosts
+  Genesis Pool WTX/ALT/HTH/BITN — confirmed a plain EOA, not a Safe), not the
+  deployer/hub-owner key this session used for target registration — hosting a
+  pool is a browser-wallet action by design, so there is no server-side key
+  for it and none was sought.
+  **The one remaining step is a single click:** open 🏊 POOL HUB in-game
+  connected as that wallet — the create-pool form now stays visible even when
+  already registered (`ocHostPool`'s registration check already skipped the
+  100k re-lock for a registered host; the UI just used to hide the form). Tick
+  THA, submit — no new WATT lock, gas only (`poolCount()` was 4 at last check,
+  so the new pool lands as id 4).
+  Everything after that is automatic: `mining-game-pool-operator/scripts/watch-tha-pool.mjs`
+  runs under pm2 (`mg-tha-pool-watch`) polling both chains every 60s for a pool
+  whose `poolTargets()` includes THA; the moment it sees one it sets
+  `stakers.tha.reportTo`/`poolId`/`enabled:true`, arms `payers.THA.dryRun:false`,
+  restarts `mg-pool-operator`, and exits. Check `pm2 logs mg-tha-pool-watch` to
+  see whether it has already fired.
 - Gas note: the Polygon pool-operator wallet (`0xd7eC194F…`) was critically low
   (0.0039 POL) and its self-healing `mg-gas-keeper` was stuck because its own
   DVN bootstrap source was also below its 0.3 POL threshold — a pre-existing,
@@ -311,6 +315,12 @@ coinstakes on the node's SEND wallet, RPC `127.0.0.1:7221`).
   Topped up 0.16 POL total from the DVN key to get the registration through;
   DVN is now itself thin (~0.19 POL). Recommend a real top-up of both wallets
   when convenient.
+- Note there's an older, unrelated watcher (`scripts/pool0-watch.sh`,
+  pm2 `mg-pool0-watch`) built for the FIRST pool ever appearing (routes
+  HTH/BITN/WTX feeders at pool #0) — it's been silently looping on "none"
+  since 2026-08-26 because its hardcoded `polygon.drpc.org` RPC stopped
+  resolving, even though pools have existed for a while. Not touched this
+  session (out of scope), but worth fixing or retiring — it's dead weight.
 
 ## Publishing
 
