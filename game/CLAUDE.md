@@ -271,6 +271,92 @@ Debug: `MG.spinFans(fans, dt, mining)`, `MG.collectFans(obj)`. Note that a
 BACKGROUNDED tab runs no `requestAnimationFrame`, so nothing animates and
 screenshots look frozen — drive `MG.spinFans` by hand when testing that way.
 
+## Bench CPU coolers were leaning with the GPUs (fixed 2026-09-12)
+
+The bench's board (`bBoardG`) is tilted toward the camera for the 3/4 view
+(`BOARD_TILT`, ~56°), and everything mounted on it is a CHILD of that tilted
+group. GPUs get their own `seatCard` rotation (stand the card up in its slot)
+which is independent of the tilt — fine either way. CPU coolers got NO
+rotation at all, on the assumption identity is already fan-up (true — it's
+how the tower's in-world build mounts them, with no tilted parent). On the
+bench, "no rotation" meant the cooler's local up tilted right along with the
+board, so it ended up leaning the same way as the GPUs instead of pointing at
+the ceiling.
+
+Fix: `seatCpu` (p08b_bench, next to `seatCard`) applies `rotation.x=-BOARD_TILT`
+to cancel the parent's tilt for that one child — same trick as `seatCard`,
+just countering instead of adding. Used by both CPU mount sites (the tower's
+dual-socket board and a Gaming PC's single socket — same bug, same fix, one
+function). GPU orientation was untouched by design (was already correct).
+
+Regression: posetest.mjs mounts a synthetic cooler under a mock tilted board
+group and asserts its WORLD "up" vector still points to world-up regardless
+of the parent's tilt — that's the actual bug, not just "rotation.x equals
+some number."
+
+## Server Tower reached full mining parity with a Gaming PC (added 2026-09-12)
+
+The tower had real hardware, real hashrate on the HUD, and a build you could
+see through the glass — but no way to actually control it. Clicking it went
+straight to the workbench, skipping the step a Gaming PC gets first (see its
+stats, power it down, pick a network, log into an OS); worse, **its hash never
+actually entered the DEMO mining loop**, so it drew power and displayed a
+hashrate without ever finding a block. Fixed end to end:
+
+- **`freshTowerRig()`** (p04_data) is now the one place `S.towerRig` gets
+  created (was inlined in 4 places) — `{cpus,gpus,on,net,oc,crashT,wear}`,
+  the same mining-control fields a desk rig carries (`net`/`oc`/`crashT`/`wear`
+  are new). Old saves migrate in `load()`.
+- **`towerHash`/`towerWatt`** now apply the same overclock multiplier and
+  wear/crash derate as `rigHash`/`rigWatt` (`ocHashMult`/`ocWattMult`/
+  `ocRiskPerMin` were already generic — they read `.oc` off whatever's passed
+  in, so this was just wiring, no new formulas). New `towerValue()` for
+  `repairCost`.
+- **The DEMO mining loop (`simTick`) now actually includes the tower.** It was
+  gated on `S.rigs.length` — a tower-only player mined nothing at all — and
+  even with a Gaming PC present the tower's hash was never added to `byNet`.
+  Fixed on both counts; the tower joins under the sentinel `'tower'` (not a
+  `S.rigs` index) in `byNet[nk].rigs`, and the block-found particle burst
+  resolves position from `towerVis.position` when it wins instead of
+  `SLOTS[r.slot]`.
+- **`towerSimStep(dt)`** (p09_sim) is the tower's own crash/wear tick, same
+  rules as a desk rig's, addressed differently (no `SLOTS[r.slot]`/`rigVis[ri]`
+  — burst position comes from `towerVis`, and the "which OS is open" check is
+  `OS.tower` instead of `OS.rig===ri`).
+- **`togglePower`/`repairRig`/`setOC`/`setRigNet`/`rebootRig`** all take the
+  sentinel `'tower'` alongside a `S.rigs` index now — one code path, not a
+  forked one. `totSWStake()` derates the tower's stake weight while powered on
+  exactly like a rig (25%), which only matters now that toggling it is real.
+- **A real tower panel** (`renderTowerPanel`, p10_ui) — same shell as
+  `renderRigPanel` (stats, wear bar + repair, power toggle, MOVE, SHOP, CLOSE)
+  minus the slot rows, which the workbench already owns and isn't worth
+  duplicating. `selTower` (alongside `selRig`) gates it; `renderRigPanel()`
+  checks it first and delegates. Clicking the tower now opens THIS, matching a
+  Gaming PC's first stop — `OPEN CASE — INSTALL PARTS` is one button away, not
+  automatic. Every place that used to reset `selRig=-1` (Escape, move-start,
+  mode switch, the OS's own hide-the-panel-behind-it step, …) now clears
+  `selTower` too, or the tower panel would keep reappearing underneath.
+- **The OS itself is shared, not duplicated.** `OS.tower` (alongside `OS.rig`)
+  plus two helpers — `osTarget()` (`OS.tower?S.towerRig:S.rigs[OS.rig]`) and
+  `osLabel()` (`'Server Tower'` or `'Rig N'`) — are the only new primitives;
+  every app (`osBoot`, `osLogin`, `osDesktop`, `osAppMiner`, `osAppTunex`)
+  reads through them instead of indexing `S.rigs[OS.rig]` directly. SwapinDEX/
+  Wallet/Browser needed no changes — they were already rig-agnostic. The boot
+  sequence lists each installed CPU individually for the tower (`cpus` is an
+  array) vs. the rig's single `CPU : name` line. `openOS('tower')` is a no-op
+  if the player doesn't own a tower (mirrors the panel button only existing
+  when they do).
+- The `O` hotkey opens the tower's OS when the tower panel is the one open
+  (`selTower`), same as it opens a rig's when a rig is selected.
+
+Verified live (Chrome): tower panel opens with real stats, POWER OFF drops the
+glow to baseline and stops the block-found loop, POWER ON resumes it, TuneX
+applies +15%/+21% hash/watt at +3 core clock and shows real crash-risk %,
+network switch persists to `S.towerRig.net`, the OS boot sequence lists both
+installed CPUs by name, and a tower-only save (`S.rigs=[]`) mines without
+error. No regression on a normal rig's panel/OS (spot-checked after every
+shared-function change).
+
 ## THA payout target (added 2026-09-12)
 
 THA joins ALT/WTX/POL/BSV/HTH/BITN as PayoutHub target **id 6** — a pure-PoS

@@ -51,12 +51,14 @@ canvas.addEventListener('pointerup',e=>{
   if(TRAILER||!pdown) return;
   const dx=e.clientX-pdown[0], dy=e.clientY-pdown[1]; pdown=null;
   if(dx*dx+dy*dy>36) return;
-  if(towerHitAt(e)){ SFX.click(); openTowerBench(); return; }   // click the Server Tower → build it
+  /* click the Server Tower → its panel (stats/power/OS/move/shop), same first
+     stop a Gaming PC gets — INSTALL PARTS is one button away, not automatic */
+  if(towerHitAt(e)){ selRig=-1; selTower=true; SFX.click(); renderRigPanel(); return; }
   const h=pick(e);
   if(h&&h.chair!==undefined){ sitDown(h.chair); return; }
   if(SIT.on){ standUp(); return; }
-  if(h>=0){ selRig=h; SFX.click(); renderRigPanel(); if(S.tut===1){S.tut=2;save();showTut();} }
-  else { selRig=-1; renderRigPanel(); }
+  if(h>=0){ selTower=false; selRig=h; SFX.click(); renderRigPanel(); if(S.tut===1){S.tut=2;save();showTut();} }
+  else { selTower=false; selRig=-1; renderRigPanel(); }
 });
 /* ================= FREE-MOVE / PLACE editor =================
    Pick up a PC case (a rig) or the Server Tower and place it anywhere. Right-
@@ -94,7 +96,7 @@ function beginMove(sel){
   if(!o) return;
   moveSel={kind:sel.kind,i:sel.i,x:o.position.x,y:o.position.y,z:o.position.z,rot:o.rotation.y,
            orig:{x:o.position.x,y:o.position.y,z:o.position.z,rot:o.rotation.y}};
-  controls.enabled=false; selRig=-1; renderRigPanel&&renderRigPanel();
+  controls.enabled=false; selRig=-1; selTower=false; renderRigPanel&&renderRigPanel();
   const bar=document.getElementById('movebar'); if(bar) bar.style.display='flex';
   const nm=document.getElementById('move-name'); if(nm) nm.textContent=sel.kind==='tower'?'Server Tower':('Rig '+((sel.i|0)+1));
   SFX&&SFX.click&&SFX.click();
@@ -326,7 +328,7 @@ document.addEventListener('mousemove',e=>{
 addEventListener('keydown',e=>{
   if(e.target.matches('input,textarea,select')) return;
   if(typeof PL!=='undefined'&&PL.open) return;               // the POSE LAB owns the keyboard while it is up
-  if(e.key==='Escape'){ if(OS.open){ closeOS(); return; } if(benchOpen){ closeBench(); return; } selRig=-1; renderRigPanel(); ['m-shop','m-upg','m-stats','m-web3','m-pool'].forEach(closeModal); walkStop(); }
+  if(e.key==='Escape'){ if(OS.open){ closeOS(); return; } if(benchOpen){ closeBench(); return; } selRig=-1; selTower=false; renderRigPanel(); ['m-shop','m-upg','m-stats','m-web3','m-pool'].forEach(closeModal); walkStop(); }
   if(OS.open) return;
   if(e.key==='1'){ openModal('m-shop'); renderShop(); walkStop(); }
   if(e.key==='2'){ openModal('m-upg'); renderUpg(); walkStop(); }
@@ -336,7 +338,7 @@ addEventListener('keydown',e=>{
   if(e.key==='6'){ if(window.MGNET) window.MGNET.toggle(); }
   if(e.key==='f'||e.key==='F') lookToggle();
   if(e.key==='n'||e.key==='N') switchNet();
-  if(e.key==='o'||e.key==='O'){ if(S&&S.rigs.length) openOS(selRig>=0?selRig:0); }
+  if(e.key==='o'||e.key==='O'){ if(selTower&&S.tower) openOS('tower'); else if(S&&S.rigs.length) openOS(selRig>=0?selRig:0); }
   if(e.key==='b'||e.key==='B'){ if(benchOpen) closeBench(); else if(S&&S.rigs.length) openBench(selRig>=0?selRig:0); }
   if(e.key==='p'||e.key==='P') openPoseLab();
 });

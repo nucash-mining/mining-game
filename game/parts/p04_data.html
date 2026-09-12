@@ -200,10 +200,16 @@ const LIVEKEY='tmg3d_live_v1';     // LIVE world save — a separate world holdi
 const MODEKEY='tmg3d_mode';        // which world to boot into next visit
 const keyForMode=m=>m==='live'?LIVEKEY:SAVEKEY;
 const now=()=>Date.now();
+/* The Server Tower is a built rig too (2 CPUs + 6 GPUs on its own board), and
+   carries the same mining-control fields a desk rig does — oc/crashT/wear so
+   TuneX and crashes work on it, net so it can pick its own chain independent
+   of the HUD selector — so its OS/mining panel can be the same code path as
+   a Gaming PC's, not a separate cut-down one. */
+function freshTowerRig(){ return {cpus:[],gpus:[],on:1,net:null,oc:{c:0,m:0},crashT:0,wear:0}; }
 let S=null;
 function freshState(){ const inv={},bought={2:0,17:0,18:0,19:0,23:0}; INV_IDS.forEach(i=>{inv[i]=0;bought[i]=0;}); return {
   watt:CFG.startWatt, lifeWatt:0, pol:0, alt:0, wtx:0, price:{pol:CFG.nets.polygon.p0, alt:CFG.nets.alt.p0, wtx:CFG.nets.wattx.p0},
-  net:'polygon', rigs:[], inv, badge:0, bought, pcCount:0, periph:{17:0,18:0,23:0}, tower:0, towerRig:{cpus:[],gpus:[],on:1}, payoutAddr:null,
+  net:'polygon', rigs:[], inv, badge:0, bought, pcCount:0, periph:{17:0,18:0,23:0}, tower:0, towerRig:freshTowerRig(), payoutAddr:null,
   upg:{power:0,cooling:0,rack:0,rackgpu:0}, gen:1, blocks:0, blocksNet:{pol:0,alt:0,wtx:0}, lucky:0,
   temp:24, muted:false, tut:0, created:now(), lastSeen:now(), sold:{pol:0,alt:0,wtx:0}, netSwitchT:0,
   payCur:'watt', w3claim:{}, ocRigs:[], mode:'demo', monSize:27, chair:0,
@@ -226,8 +232,10 @@ function load(mode){ mode=mode==='live'?'live':'demo';
   const st=Object.assign(f,o);
   st.inv=inv; st.bought=bought;
   st.periph=Object.assign({17:0,18:0,23:0},o.periph||{}); st.tower=o.tower||0;
-  st.towerRig=(o.towerRig&&Array.isArray(o.towerRig.cpus))?o.towerRig:{cpus:[],gpus:[],on:1};
+  st.towerRig=(o.towerRig&&Array.isArray(o.towerRig.cpus))?o.towerRig:freshTowerRig();
   st.towerRig.cpus=st.towerRig.cpus||[]; st.towerRig.gpus=st.towerRig.gpus||[]; if(st.towerRig.on===undefined) st.towerRig.on=1;
+  st.towerRig.oc=st.towerRig.oc||{c:0,m:0}; st.towerRig.crashT=st.towerRig.crashT||0; st.towerRig.wear=st.towerRig.wear||0;
+  if(st.towerRig.net===undefined) st.towerRig.net=null;
   st.rigs.forEach(r=>{ if(r.cpu===1||r.cpu===true) r.cpu=3; r.cpu=r.cpu||0; r.asic=r.asic||0; r.frame=r.frame||0;
     r.oc=r.oc||{c:0,m:0}; r.crashT=r.crashT||0; r.on=r.on===undefined?1:r.on; r.wear=r.wear||0; });
   st.monSize=MONSIZES[st.monSize]?st.monSize:27; st.price.wtx=st.price.wtx||CFG.nets.wattx.p0; st.wtx=st.wtx||0;
@@ -285,15 +293,24 @@ function coolCoeffAt(lv){ const a=CFG.coolCoeff; return lv<a.length?a[lv]:a[a.le
 /* Server Tower is a built rig too: its dual-CPU board (up to 2 CPUs + 6 GPUs)
    contributes hash/watt/stake just like a Gaming PC. Guard on ownership. */
 function towerRigOn(){ const t=S.tower&&S.towerRig; return !!(t&&t.on!==0); }
-function towerHash(){ const t=towerRigOn()&&S.towerRig; if(!t) return 0; let h=0; for(const c of t.cpus) h+=ITEMS[c].hash; for(const g of t.gpus) h+=ITEMS[g].hash; return h; }
-function towerWatt(){ const t=towerRigOn()&&S.towerRig; if(!t) return 0; let w=0; for(const c of t.cpus) w+=ITEMS[c].watt; for(const g of t.gpus) w+=ITEMS[g].watt; return w; }
+/* same overclock + wear/crash formula as rigHash/rigWatt — the tower has its
+   own TuneX and can crash/wear down exactly like a desk rig, just with no
+   ITEMS[1] baseline (there's no "Gaming PC" chassis to it). */
+function towerHash(){ const t=towerRigOn()&&S.towerRig; if(!t||t.crashT>0||t.wear>=100) return 0;
+  let h=0; for(const c of t.cpus) h+=ITEMS[c].hash; for(const g of t.gpus) h+=ITEMS[g].hash;
+  return h*ocHashMult(t)*(1-0.5*(t.wear||0)/100); }
+function towerWatt(){ const t=towerRigOn()&&S.towerRig; if(!t) return 0;
+  let w=0; for(const c of t.cpus) w+=ITEMS[c].watt; for(const g of t.gpus) w+=ITEMS[g].watt;
+  return (t.crashT>0||t.wear>=100) ? w*0.25 : w*ocWattMult(t); }
+function towerValue(){ const t=S.towerRig; if(!t) return 0;
+  let v=0; for(const c of t.cpus) v+=ITEMS[c].price; for(const g of t.gpus) v+=ITEMS[g].price; return v; }
 function towerCompSW(){ const t=S.tower&&S.towerRig; if(!t) return 0; let s=0; for(const c of t.cpus) s+=ITEMS[c].sw; for(const g of t.gpus) s+=ITEMS[g].sw; return s; }
 function totHash(){ return (S.rigs.reduce((a,r)=>a+rigHash(r),0)+towerHash()) * Math.pow(CFG.gen2Mult,S.gen-1); }
 function totWatt(){ return S.rigs.reduce((a,r)=>a+rigWatt(r),0)+towerWatt(); }
 function totSW(){ return S.rigs.reduce((a,r)=>a+rigSW(r),0) + towerCompSW() + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
-function totSWStake(){ return S.rigs.reduce((a,r)=>a+rigSW(r)*(r.on?0.25:1),0) + towerCompSW() + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
+function totSWStake(){ return S.rigs.reduce((a,r)=>a+rigSW(r)*(r.on?0.25:1),0) + towerCompSW()*(S.towerRig&&S.towerRig.on?0.25:1) + (S.badge?ITEMS[2].sw:0) + (S.tower?ITEMS[19].sw:0); }
 function rigValue(r){ let v=ITEMS[1].price; if(r.cpu) v+=ITEMS[r.cpu].price; if(r.asic) v+=ITEMS[r.asic].price; if(r.frame) v+=ITEMS[14].price; for(const g of r.gpus) v+=ITEMS[g].price; return v; }
-function repairCost(r){ return Math.ceil(rigValue(r)*0.18*(r.wear||0)/100); }
+function repairCost(r){ const v=Array.isArray(r.cpus)?towerValue():rigValue(r); return Math.ceil(v*0.18*(r.wear||0)/100); }
 function stakeMult(){ return S.tower?CFG.towerStakeMult:1; }
 function powerCap(){ let c=CFG.powerBase; for(let i=0;i<(S.upg.power||0);i++) c+=powerCapAddAt(i); return c; }
 function eligibleSlots(){ const out=[];

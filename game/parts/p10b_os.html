@@ -2,7 +2,15 @@
 /* ================= MINING GAME OS (in-rig operating system) =================
    Inspired by the real MiningGameOS front-end:
    https://nucash-mining.github.io/MiningGameOS/  */
-const OS = { open:false, rig:0, stage:'off', wins:{}, z:10, iv:null, addr:null };
+const OS = { open:false, rig:0, tower:false, stage:'off', wins:{}, z:10, iv:null, addr:null };
+/* Every app below used to reach straight into S.rigs[OS.rig]; the Server
+   Tower is a built rig too (see freshTowerRig) but lives outside that array,
+   so it needs its own OS entry point rather than a numeric index. osTarget()
+   is the one place that decision is made — every app reads through it (or
+   rigHash/rigWatt vs towerHash/towerWatt, which don't share a signature) so
+   the tower gets the exact same OS a Gaming PC does. */
+function osTarget(){ return OS.tower ? S.towerRig : S.rigs[OS.rig]; }
+function osLabel(){ return OS.tower ? 'Server Tower' : 'Rig '+(OS.rig+1); }
 const OS_CHAINS = {
   wattx:  {name:'WATTxchain',  id:2337, net:'wattx'},
   polygon:{name:'Polygon',     id:137,  net:'polygon'},
@@ -13,9 +21,11 @@ const osPlug=s=>OS_PLUG.replaceAll('__S__',s);
 function osEl(html){ const d=document.createElement('div'); d.innerHTML=html; return d.firstElementChild; }
 
 function openOS(ri){
-  OS.open=true; OS.rig=clamp(ri||0,0,Math.max(0,S.rigs.length-1)); OS.stage='boot'; OS.wins={};
+  OS.tower=(ri==='tower');
+  if(OS.tower&&!(S.tower&&S.towerRig)) return;   // nothing to log into
+  OS.open=true; OS.rig=OS.tower?-1:clamp(ri||0,0,Math.max(0,S.rigs.length-1)); OS.stage='boot'; OS.wins={};
   const os=$('os'); os.classList.add('open'); os.innerHTML='<div class="os-crt"></div><div id="os-boot"></div>';
-  selRig=-1; renderRigPanel();
+  selRig=-1; selTower=false; renderRigPanel();
   SFX.swap();
   osBoot();
 }
@@ -27,15 +37,18 @@ function closeOS(){
 }
 /* ---------- boot sequence ---------- */
 function osBoot(){
-  const b=$('os-boot'); const r=S.rigs[OS.rig];
+  const b=$('os-boot'); const r=osTarget();
+  const cpuLines = OS.tower
+    ? (r?r.cpus.map((c,i)=>[`CPU${i} : ${ITEMS[c].name}  ..  <span class="dim">OK</span>`,130]):[])
+    : [['CPU : '+(r&&r.cpu?ITEMS[r.cpu].name:'Minga stock')+'  ..  <span class="dim">OK</span>',140]];
   const lines=[
     ['WATTxOS BIOS v2.3.7 — Minga Microsystems',0],
-    ['CPU : '+(r&&r.cpu?ITEMS[r.cpu].name:'Minga stock')+'  ..  <span class="dim">OK</span>',140],
+    ...cpuLines,
     ['MEM : 16384MB DDR5  ..  <span class="dim">OK</span>',120],
     ...(r?r.gpus.map((g,i)=>[`GPU${i} : ${ITEMS[g].name}  ..  <span class="dim">OK</span>`,110]):[]),
     ...(r&&r.asic?[['ASIC : Bit Hammer  ..  <span class="dim">OK</span>',110]]:[]),
     ['NET : syncing WATTxchain  block #'+fmtInt(S.blocks+184000)+'  ..  <span class="dim">OK</span>',260],
-    ['MOUNT /dev/rig'+(OS.rig+1)+'  ..  <span class="dim">OK</span>',160],
+    ['MOUNT /dev/'+(OS.tower?'tower':'rig'+(OS.rig+1))+'  ..  <span class="dim">OK</span>',160],
     ['starting miner daemon  ..  <span class="dim">OK</span>',200],
     ['',80],
     ['Mining Game OS — decentralized rig login',120],
@@ -58,7 +71,7 @@ function osLogin(){
   os.insertAdjacentHTML('beforeend',`
   <div id="os-login">
     <div class="os-lbox">
-      <div class="os-lhead">${osPlug(16)}&nbsp;<b>Mining Game OS</b><span style="color:#666">· Login — Rig ${OS.rig+1}</span></div>
+      <div class="os-lhead">${osPlug(16)}&nbsp;<b>Mining Game OS</b><span style="color:#666">· Login — ${osLabel()}</span></div>
       <div class="os-lbody">
         <label>SELECT A CHAIN TO CONTINUE</label>
         <select class="os-sel" id="os-chain">
@@ -98,9 +111,9 @@ function osDesktop(){
   <div id="os-desk">
     <div class="os-pat"></div>
     <div id="os-wall">
-      <img src="${THUMB[1]||''}" alt="">
+      <img src="${THUMB[OS.tower?19:1]||''}" alt="">
       <div class="mg1"><img src="mg-logo.png" alt="Mining Game" style="height:.9em;width:auto;vertical-align:middle;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5))"></div>
-      <div class="mg2">RIG ${OS.rig+1} · ${OS.addr?OS.addr:'GUEST SESSION'}</div>
+      <div class="mg2">${osLabel().toUpperCase()} · ${OS.addr?OS.addr:'GUEST SESSION'}</div>
     </div>
     <div id="os-icons"></div>
   </div>
@@ -182,7 +195,8 @@ function osRefresh(){
 }
 /* ---------- app: Miner terminal ---------- */
 function osAppMiner(body){
-  const r=()=>S.rigs[OS.rig];
+  const r=osTarget;
+  const hashOf=rg=>OS.tower?towerHash():rigHash(rg), wattOf=rg=>OS.tower?towerWatt():rigWatt(rg);
   body.innerHTML=`<div class="os-term" id="osm-log"></div>
     <div class="os-kv">
       <div><small>HASHRATE</small><b id="osm-hash">0</b></div>
@@ -196,9 +210,9 @@ function osAppMiner(body){
       <button class="os-task" data-net="alt">🟠 ALT</button>
       <button class="os-task" data-net="wattx">🟡 WTX</button>
     </div>
-    <button class="os-abtn" id="osm-boot" style="margin-top:8px">⟳ REBOOT RIG</button>`;
+    <button class="os-abtn" id="osm-boot" style="margin-top:8px">⟳ ${OS.tower?'REBOOT TOWER':'REBOOT RIG'}</button>`;
   body.querySelectorAll('#osm-nets .os-task').forEach(b=>{
-    b.onclick=()=>{ setRigNet(OS.rig, b.dataset.net||null); osRefresh(); };
+    b.onclick=()=>{ setRigNet(OS.tower?'tower':OS.rig, b.dataset.net||null); osRefresh(); };
   });
   const log=body.querySelector('#osm-log');
   let ln=0;
@@ -208,8 +222,8 @@ function osAppMiner(body){
     body.querySelectorAll('#osm-nets .os-task').forEach(b=>{
       b.classList.toggle('on', (rg.net||'')===b.dataset.net);
     });
-    body.querySelector('#osm-hash').textContent=fmt(rigHash(rg)*Math.pow(CFG.gen2Mult,S.gen-1))+' H';
-    body.querySelector('#osm-watt').textContent=fmt(rigWatt(rg))+' W';
+    body.querySelector('#osm-hash').textContent=fmt(hashOf(rg)*Math.pow(CFG.gen2Mult,S.gen-1))+' H';
+    body.querySelector('#osm-watt').textContent=fmt(wattOf(rg))+' W';
     body.querySelector('#osm-temp').textContent=Math.round(S.temp)+'°C';
     const st=body.querySelector('#osm-st');
     const crashed=rg.crashT>0;
@@ -226,14 +240,14 @@ function osAppMiner(body){
       log.scrollTop=log.scrollHeight;
     }
   };
-  body.querySelector('#osm-boot').onclick=()=>{ rebootRig(OS.rig); osRefresh(); };
+  body.querySelector('#osm-boot').onclick=()=>{ rebootRig(OS.tower?'tower':OS.rig); osRefresh(); };
   W.refresh();
 }
 /* ---------- app: TuneX overclock ---------- */
 function osAppTunex(body){
-  const rg=S.rigs[OS.rig]; if(!rg){ body.textContent='no rig'; return; }
+  const rg=osTarget(); if(!rg){ body.textContent='no rig'; return; }
   body.innerHTML=`
-    <div style="font-size:11px;color:#8a8a90;margin-bottom:4px">TuneX™ performance tuning — Rig ${OS.rig+1}</div>
+    <div style="font-size:11px;color:#8a8a90;margin-bottom:4px">TuneX™ performance tuning — ${osLabel()}</div>
     <div class="os-row"><label>CORE CLOCK</label><input type="range" min="0" max="5" step="1" id="oc-c" value="${rg.oc.c}"><span class="val" id="oc-cv">+${rg.oc.c}</span></div>
     <div class="os-row"><label>MEM CLOCK</label><input type="range" min="0" max="5" step="1" id="oc-m" value="${rg.oc.m}"><span class="val" id="oc-mv">+${rg.oc.m}</span></div>
     <div class="os-kv">
@@ -260,8 +274,8 @@ function osAppTunex(body){
   const W=OS.wins.tunex;
   W.refresh=()=>{ const t=body.querySelector('#oc-t'); if(t){ t.textContent=Math.round(S.temp)+'°C'; t.style.color=S.temp>=100?'#ff6b74':S.temp>=85?'#ffae42':'#3dff8a'; } prev(); };
   body.querySelector('#oc-apply').onclick=()=>{
-    setOC(OS.rig,+cs.value,+ms.value);
-    toast(`🎛 Rig ${OS.rig+1} tuned: +${Math.round(+cs.value*5+ +ms.value*2)}% hash, +${Math.round(+cs.value*7+ +ms.value*3)}% draw`,'cyan');
+    setOC(OS.tower?'tower':OS.rig,+cs.value,+ms.value);
+    toast(`🎛 ${osLabel()} tuned: +${Math.round(+cs.value*5+ +ms.value*2)}% hash, +${Math.round(+cs.value*7+ +ms.value*3)}% draw`,'cyan');
     osRefresh();
   };
   prev();

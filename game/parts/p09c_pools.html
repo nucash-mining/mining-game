@@ -201,20 +201,25 @@ async function ocClaimWatt(){
   }catch(e){ SFX.err(); toast('claim failed: '+(''+(e&&(e.reason||e.message)||e)).slice(0,90),'red',9000); }
   renderPoolHub&&renderPoolHub();
 }
+/* ri is a S.rigs index, or the sentinel 'tower' for the Server Tower — same
+   sentinel used in simTick's byNet.rigs and OS.rig, so one code path serves
+   a desk rig and the tower alike. */
 function repairRig(ri){
-  const r=S.rigs[ri]; if(!r||r.wear<1){ SFX.err(); return; }
+  const r=ri==='tower'?S.towerRig:S.rigs[ri]; if(!r||r.wear<1){ SFX.err(); return; }
   const c=repairCost(r);
   if(S.watt<c){ SFX.err(); toast('Repair costs '+fmt(c)+' ⚡WATT','red'); return; }
   S.watt-=c; r.wear=0; r.crashT=0;
-  SFX.install(); toast(`🔧 Rig ${ri+1} repaired for ${fmt(c)} ⚡ — thermal paste, new fans, dust-free`,'grn');
+  const label=ri==='tower'?'Server Tower':'Rig '+(ri+1);
+  SFX.install(); toast(`🔧 ${label} repaired for ${fmt(c)} ⚡ — thermal paste, new fans, dust-free`,'grn');
   renderHud(); renderRigPanel(); save();
 }
 function togglePower(ri){
-  const r=S.rigs[ri]; if(!r) return;
+  const r=ri==='tower'?S.towerRig:S.rigs[ri]; if(!r) return;
   r.on=r.on?0:1; SFX.swap();
-  toast(r.on?`🔌 Rig ${ri+1} ON — hashing (stake weight drops to 25%)`
-            :`🔋 Rig ${ri+1} OFF — zero power draw, FULL stake weight earns ⚡`, r.on?'cyan':'gold');
-  renderHud(); renderRigPanel(); save();
+  const label=ri==='tower'?'Server Tower':'Rig '+(ri+1);
+  toast(r.on?`🔌 ${label} ON — hashing (stake weight drops to 25%)`
+            :`🔋 ${label} OFF — zero power draw, FULL stake weight earns ⚡`, r.on?'cyan':'gold');
+  renderHud(); renderRigPanel(); if(ri==='tower'&&typeof syncTowerGlow==='function') syncTowerGlow(); save();
 }
 /* ================= ON-CHAIN POOLS — 100k WATT host stake ================= */
 /* Real contracts (PoolRegistry + PayoutHub + NodeMiningEngine + rig NFT), live
@@ -346,7 +351,7 @@ function setMode(m){
   if(typeof closeBench==='function'&&benchOpen) closeBench();
   setBadgeOwned(!!S.badge); setTowerOwned(!!S.tower);
   rebuildAllRigs(); buildFarm(); refreshRings();
-  selRig=-1; renderRigPanel&&renderRigPanel();
+  selRig=-1; selTower=false; renderRigPanel&&renderRigPanel();
   if(m==='live'&&!W3.addr){ toast('🔗 LIVE MODE — connect a wallet (🦊): your NFTs become your rigs, balances and pools are real','gold',9000); }
   else toast(m==='live'?'🔗 LIVE MODE — your wallet IS the game: real NFTs, real balances, real on-chain pools':'🎮 DEMO MODE — simulated economy, nothing on-chain','cyan',7000);
   if(m==='live'&&W3.addr) w3Refresh().catch(()=>{});    // mirror wallet NFTs -> rigs + inventory

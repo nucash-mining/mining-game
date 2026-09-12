@@ -80,6 +80,20 @@ function seatCard(m, x, z){
   m.position.set(x, SLOT_Y-0.03, z);              // edge connector IN the slot, no float gap
   return m;
 }
+/* Seat a CPU cooler on the socket, fan pointing at the ceiling. The cooler's
+   canonical pose is already fan-up with NO rotation — that's how the tower's
+   in-world build mounts it and it reads correctly there. On the bench the
+   board itself is tilted toward the camera (BOARD_TILT) for the 3/4 view, and
+   the cooler is a CHILD of that tilted board group, so its own "up" tilts
+   right along with it — the exact bug this fixes: the fan was leaning the
+   same way as the GPUs beside it instead of pointing straight up. Counter-
+   rotating by -BOARD_TILT cancels the parent's tilt for this one child, same
+   idea as GPUs getting their OWN seatCard rotation independent of the tilt. */
+function seatCpu(m, x, z){
+  m.rotation.x=-BOARD_TILT;
+  m.position.set(x, CPU_Y, z);
+  return m;
+}
 function benchSlotDefs(r){
   const defs=[];
   if(benchIsTower){
@@ -155,12 +169,13 @@ function benchSync(){
   // mounted components
   const r2=benchTarget();
   if(benchIsTower){
-    r2.cpus.forEach((cid,k)=>{ const m=benchCompMesh('cpu',cid); const x=k===0?-0.42:0.42; m.position.set(x,CPU_Y,-0.55); bMountG.add(m); addMountHit(x,CPU_Y+0.2,-0.55,'cpu',k); });
+    r2.cpus.forEach((cid,k)=>{ const x=k===0?-0.42:0.42; const m=seatCpu(benchCompMesh('cpu',cid), x, -0.55);
+      bMountG.add(m); addMountHit(x,CPU_Y+0.2,-0.55,'cpu',k); });
     r2.gpus.forEach((gid,k)=>{ const m=seatCard(benchCompMesh('gpu',gid), 0, -0.24+k*0.18);
       bMountG.add(m); addMountHit(0,SLOT_Y+0.22,-0.24+k*0.18,'gpu',k); });
     benchTray(); return;
   }
-  if(r2.cpu){ const m=benchCompMesh('cpu',r2.cpu); m.position.set(-0.28,CPU_Y,-0.52); bMountG.add(m); }
+  if(r2.cpu){ bMountG.add(seatCpu(benchCompMesh('cpu',r2.cpu), -0.28, -0.52)); }
   r2.gpus.forEach((gid,k)=>{
     if(k<4){
       /* FASTENED into the PCIe slot: card stands perpendicular to the board,
@@ -314,7 +329,7 @@ function openBench(ri){
 /* Open the Server Tower's dual-CPU board — a buildable rig (up to 2 CPUs + 6 GPUs). */
 function openTowerBench(){
   if(!S.tower){ SFX.err(); toast('Buy the Server Tower in the shop first','red'); return; }
-  if(!S.towerRig) S.towerRig={cpus:[],gpus:[],on:1};
+  if(!S.towerRig) S.towerRig=freshTowerRig();
   benchIsTower=true; benchRi=-1; benchSetup();
   $('bench-rig').textContent='SERVER TOWER';
   $('bench').classList.add('open');

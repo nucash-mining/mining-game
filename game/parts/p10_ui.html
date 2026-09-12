@@ -135,8 +135,9 @@ function renderShop(){
   });
 }
 /* rig panel */
-let selRig=-1;
+let selRig=-1, selTower=false;
 function renderRigPanel(){
+  if(selTower) return renderTowerPanel();
   const p=$('rigp');
   if(selRig<0||!S.rigs[selRig]){ p.classList.remove('open'); return; }
   const r=S.rigs[selRig];
@@ -194,6 +195,42 @@ function renderRigPanel(){
   $('rp-close').onclick=()=>{ selRig=-1; renderRigPanel(); };
   if(!S.osHint){ S.osHint=1; save();
     setTimeout(()=>toast('💻 NEW: hit <b>LOG IN — RIG OS</b> to boot your rig\'s Mining Game OS — overclock it in TuneX, swap coins on SwapinDEX','cyan',9000),400); }
+}
+/* Server Tower panel — same shell as the rig panel (stats/power/OS/move/shop),
+   minus the slot rows: the tower's install UI IS the workbench (drag-drop 2
+   CPUs + 6 GPUs onto a real board), already solid, not worth duplicating here.
+   This used to be the whole story for clicking the tower — it jumped straight
+   to the bench with no way to see stats, power it down, pick a network, or
+   log into its OS, unlike every Gaming PC rig. */
+function renderTowerPanel(){
+  const p=$('rigp');
+  if(!selTower||!S.tower||!S.towerRig){ p.classList.remove('open'); return; }
+  const t=S.towerRig;
+  p.classList.add('open');
+  const hf=heatFactor(), pf=powerFactor();
+  const eff=Math.round(hf*pf*100);
+  const ocOn=t.oc&&(t.oc.c+t.oc.m)>0, crashed=t.crashT>0, broken=t.wear>=100;
+  const wearCol=t.wear>=100?'var(--red)':t.wear>=60?'#ffae42':t.wear>=30?'var(--gold)':'var(--grn)';
+  p.innerHTML=`<h2>🗄 Server Tower ${broken?'<span style="color:var(--red);font-size:12px">🔥 BROKEN</span>':crashed?'<span style="color:var(--red);font-size:12px">💥 CRASHED</span>':!t.on?'<span style="color:var(--gold);font-size:12px">🔋 STAKING</span>':ocOn?'<span style="color:var(--cyan);font-size:12px">🎛 OC +'+Math.round((ocHashMult(t)-1)*100)+'%</span>':''}</h2>
+    <div class="sub">Dual-CPU server board · ${t.cpus.length}/2 CPUs · ${t.gpus.length}/6 GPUs</div>
+    <div class="stats2">
+      <div class="st2"><small>HASHPOWER</small><b style="color:var(--cyan)">${Math.round(towerHash())}</b></div>
+      <div class="st2"><small>WATT DRAW</small><b style="color:var(--gold)">${Math.round(towerWatt())}</b></div>
+      <div class="st2"><small>STAKE WEIGHT</small><b>${towerCompSW()}${t.on?' <small style="color:var(--dim)">(25% while on)</small>':''}</b></div>
+      <div class="st2"><small>EFFICIENCY</small><b style="color:${eff>=100?'var(--grn)':eff>=60?'#ffae42':'var(--red)'}">${eff}%</b></div>
+    </div>
+    <div class="wearrow"><small>WEAR</small><div class="wearbar"><i style="width:${t.wear.toFixed(1)}%;background:${wearCol}"></i></div><b style="color:${wearCol}">${t.wear.toFixed(0)}%</b>
+      ${t.wear>=1?`<button class="hbtn" id="tp-fix">🔧 REPAIR ${fmt(repairCost(t))} ⚡</button>`:''}</div>
+    <div class="rowbtns"><button class="hbtn ${t.on?'':'gold'}" id="tp-pwr">${t.on?'🔋 POWER OFF — stake mode':'🔌 POWER ON — mine'}</button><button class="hbtn gold" id="tp-bench">🔧 OPEN CASE — INSTALL PARTS</button></div>
+    <div class="rowbtns"><button class="hbtn" id="tp-move">✋ MOVE / PLACE THIS TOWER</button></div>
+    <div class="rowbtns"><button class="hbtn accent" id="tp-os">💻 LOG IN — TOWER OS</button><button class="hbtn gold" id="tp-shop">🛒 SHOP</button><button class="hbtn" id="tp-close">CLOSE</button></div>`;
+  $('tp-shop').onclick=()=>{ openModal('m-shop'); renderShop(); };
+  $('tp-pwr').onclick=()=>togglePower('tower');
+  const fx=$('tp-fix'); if(fx) fx.onclick=()=>repairRig('tower');
+  $('tp-bench').onclick=()=>openTowerBench();
+  $('tp-move').onclick=()=>{ if(typeof beginMoveTower==='function') beginMoveTower(); };
+  $('tp-os').onclick=()=>openOS('tower');
+  $('tp-close').onclick=()=>{ selTower=false; renderRigPanel(); };
 }
 function slotRow(id,sub,attr,btn){
   const it=ITEMS[id];

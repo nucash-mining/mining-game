@@ -67,9 +67,11 @@ const SRC = [
   'function seatCard(', 'function placeRackGpus(',
   'const TOWER_BAY=', 'function towerBayOf(', 'function towerFitOf(',
   'function placeTowerBoard(', 'function placeTowerBayGpus(', 'function placeTowerCpus(',
+  'const BOARD_TILT=', 'function seatCpu(',
   'const FAN=', 'function spinFans(',
 ].map(grab).join('\n');
 const SLOT_Y = +/const SLOT_Y=([\d.]+)/.exec(html)[1];
+const CPU_Y = SLOT_Y - 0.03;   // matches the source's own `CPU_Y=SLOT_Y-0.03`
 
 /* ---- stub the pieces the extracted code reaches for ---- */
 const PROTO = {}, ITEMS = {}, S = {pose:{}};
@@ -90,9 +92,9 @@ ITEMS[3] = {id:3, key:'endcard',  comp:'GPU'};
 ITEMS[9] = {id:9, key:'cooler',   comp:'Processor'};
 const makeRGBFan = () => new THREE.Group();
 
-const ctxObj = {THREE, PROTO, ITEMS, S, DEG, save, makeRGBFan, SLOT_Y, Math, Object, console, JSON};
-const body = SRC + '\nreturn {poseFor,poseMesh,poseSize,poseSet,poseOverride,seatCard,placeRackGpus,'
-  + 'towerBayOf,towerFitOf,placeTowerBoard,placeTowerBayGpus,placeTowerCpus,spinFans,FAN,TOWER_BAY,PART_POSE,POSE_DEF,POSE_CTX,normalizeFit,instOf};';
+const ctxObj = {THREE, PROTO, ITEMS, S, DEG, save, makeRGBFan, SLOT_Y, CPU_Y, Math, Object, console, JSON};
+const body = SRC + '\nreturn {poseFor,poseMesh,poseSize,poseSet,poseOverride,seatCard,seatCpu,placeRackGpus,'
+  + 'towerBayOf,towerFitOf,placeTowerBoard,placeTowerBayGpus,placeTowerCpus,spinFans,FAN,TOWER_BAY,PART_POSE,POSE_DEF,POSE_CTX,normalizeFit,instOf,BOARD_TILT};';
 const G = new Function(...Object.keys(ctxObj), body)(...Object.values(ctxObj));
 
 /* ---- assertions ---- */
@@ -170,6 +172,26 @@ const bbox = o => new THREE.Box3().setFromObject(o);
   ok('card straddles the slot centre line',
      near((b.min.x + b.max.x)/2, 0) && near((b.min.z + b.max.z)/2, 0.12),
      'z centre=' + ((b.min.z + b.max.z)/2).toFixed(4));
+}
+// 6b. seatCpu keeps the fan pointing at the ceiling despite the bench board's
+// own tilt (the actual bug: CPU coolers used to inherit BOARD_TILT with no
+// compensation and ended up leaning the same way as the GPUs beside them).
+{
+  const m = G.seatCpu(G.poseMesh('socket','standcard',0.62), -0.28, -0.52);
+  ok("seatCpu counter-tilts by -BOARD_TILT so a fan-up cooler stays fan-up",
+     near(m.rotation.x, -G.BOARD_TILT), 'rotation.x=' + m.rotation.x);
+  ok('seatCpu positions the cooler at CPU_Y on the given x/z',
+     near(m.position.x, -0.28) && near(m.position.y, CPU_Y) && near(m.position.z, -0.52));
+  // simulate the bench's own tilted board parent and confirm the NET world
+  // rotation cancels out to identity — a fan authored pointing +Y (up) must
+  // still point up in world space once mounted, tilted board or not.
+  const board = new THREE.Group(); board.rotation.x = G.BOARD_TILT;
+  board.add(m); board.updateMatrixWorld(true);
+  const upLocal = new THREE.Vector3(0,1,0);
+  const upWorld = upLocal.clone().applyQuaternion(m.getWorldQuaternion(new THREE.Quaternion()));
+  ok('the cooler\'s local "up" (fan direction) still points world-up once mounted on the tilted board',
+     near(upWorld.x,0) && near(upWorld.y,1) && near(upWorld.z,0),
+     'world up=' + upWorld.toArray().map(v=>v.toFixed(3)).join(','));
 }
 // 7. the open-air rack: rails, spacing, and risers that actually touch the card
 {

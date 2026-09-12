@@ -45,6 +45,12 @@ Fans spin, too: the hardware models' own blades are lifted out of the mesh at
 load and turn clockwise whenever a rig is actually mining, stopping dead when it
 is off, crashed, worn out or out of WATT.
 
+The Server Tower is a full rig now, not just a display case: click it for its
+own panel — stats, power toggle, wear/repair, move — and **LOG IN — TOWER OS**
+for the same Mining Game OS a Gaming PC gets (Miner terminal with per-tower
+network selection, TuneX overclocking, SwapinDEX, wallet). Its hash actually
+mines in DEMO mode now, including tower-only saves with no Gaming PC at all.
+
 Run `node tools/posetest.mjs` after touching the table or any mount code.
 
 ## Controls

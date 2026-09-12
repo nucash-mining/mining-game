@@ -65,7 +65,7 @@ function startTrailerScript(){
   // fragment light loop = much faster software rasterization
   const drop=[]; scene.traverse(o=>{ if(o.isPointLight&&o.intensity<30) drop.push(o); });
   drop.forEach(l=>l.parent.remove(l));
-  selRig=-1; renderRigPanel(); $('tut').style.display='none';
+  selRig=-1; selTower=false; renderRigPanel(); $('tut').style.display='none';
   running=true;
   trailT0=performance.now();
   trailEvents=[
