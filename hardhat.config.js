@@ -56,6 +56,12 @@ export default {
       chainId: 2330,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
+    // WATTxchain MAINNET (chainId 22356) — the live game economy lives here too.
+    wattxchain: {
+      url: process.env.WATTX_RPC || "https://rpc-wtx.wattxchange.app",
+      chainId: 22356,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+    },
   },
   etherscan: {
     apiKey: {

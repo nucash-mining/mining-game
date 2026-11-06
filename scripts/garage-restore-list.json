@@ -1,0 +1,12 @@
+{
+  "_comment": "Players who paid for garage add-ons BEFORE GarageUpgrades existed (levels were lost from localStorage). restore-garage-upgrades.js grants these levels on-chain WITHOUT charging WATT again. Levels are a FLOOR: a restore never lowers a level a wallet already holds on-chain, so it is safe to re-run. power/cooling have no max; rack max 2; rackgpu max 5. Keys are hardhat network names. Edit per network as reports come in. (BSV is not EVM — GarageUpgrades cannot deploy there, so there is no BSV entry.)",
+  "polygon": [
+    { "wallet": "0x8324FA247756a9D2Be9D16884f620e65a142E514", "power": 16, "cooling": 16, "rack": 0, "rackgpu": 0, "note": "owner: full 16/16 power + cooling" }
+  ],
+  "altcoinchain": [
+    { "wallet": "0x8324FA247756a9D2Be9D16884f620e65a142E514", "power": 16, "cooling": 16, "rack": 0, "rackgpu": 0, "note": "owner: full 16/16 power + cooling" }
+  ],
+  "wattxchain": [
+    { "wallet": "0x8324FA247756a9D2Be9D16884f620e65a142E514", "power": 16, "cooling": 16, "rack": 0, "rackgpu": 0, "note": "owner: full 16/16 power + cooling" }
+  ]
+}

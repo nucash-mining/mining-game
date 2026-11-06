@@ -101,7 +101,9 @@ function simTick(dt){ // dt seconds (fixed 0.1)
   }
   poolTick(dt);
   // hum follows draw
-  if(AU.humG) AU.humG.gain.value=(S.muted?0:Math.min(0.5,0.05+draw*0.004))*(noWatt?0.3:1);
+  // lab hum: grows gently with power draw (log scale) and stays under the music. The old
+  // linear curve hit full volume at ~110W, so LIVE farms were drowned in static.
+  if(AU.humG) AU.humG.gain.value=(S.muted?0:0)*(noWatt?0.3:1);
 }
 /* Tower's own crash/wear tick — same rules as a desk rig (see the S.rigs.forEach
    above), just addressed differently: no SLOTS[r.slot]/rigVis[ri] (the tower
@@ -323,6 +325,14 @@ function buyUpgrade(k){
      — direct: no/low credit -> a wallet-signed transfer per upgrade. */
   if(typeof isLive==='function' && isLive()){
     const p=upgPrice(k,lv);
+    /* When GarageUpgrades is deployed, EVERY live buy goes through the contract
+       (it spends on-chain credit or asks for a signed transfer) so the level is
+       recorded on-chain and never lost. Only when the contract is absent do we
+       fall back to the old local-credit shortcut. */
+    if(typeof garageAddr==='function' && garageAddr()){
+      if(typeof ocBuyUpgrade==='function') ocBuyUpgrade(k);
+      return;
+    }
     if(S.watt>=p){ S.watt-=p; applyUpgrade(k); toast(`Paid from game credit — ${fmt(S.watt)} ⚡ credit left`,'cyan',6000); return; }
     if(typeof ocBuyUpgrade==='function' && ecoCfg && ecoCfg()) ocBuyUpgrade(k);
     else { SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain to buy upgrades with your real WATT','red',8000); }

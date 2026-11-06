@@ -16,7 +16,11 @@ const WEB3CFG={
          + migrator carry over from the v1 set (same NFT, re-authorized). */
       pools:{ registry:'0xC65E46645EF9d7Bf1F7D526c9Fb4F4B54704d1DE', hub:'0x8eC1Fa15A1DFB038396176a122ED2D385Ee04339',
               engine:'0x8d372e3e1fbB82e707D09f782a1e3959DC447354', rigNft:'0xf9F94e9fa744DE1209EF28321604a0Aa3B21a884', stakingPool:'0x07ef3eCDB4e4fd9D914787031b6cB746340bF661', migrator:'0xf2DbF910aD1cA08c3879C72AE6277fA903E058c4' },
-      economy:{ items:'0x0CDbf4926a8EdFFaa803B96f8fa90B065DE19Eb2', shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', stakingPool:'0x7E8FC9d7D7588F410E1399aC690F901268B08a8d', wattV2:'0x387693eCEC037C61943404F03c097d2ADA15ae3f' },
+      economy:{ items:'0x0CDbf4926a8EdFFaa803B96f8fa90B065DE19Eb2', shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', stakingPool:'0x7E8FC9d7D7588F410E1399aC690F901268B08a8d', wattV2:'0x387693eCEC037C61943404F03c097d2ADA15ae3f',
+        /* GarageUpgrades — on-chain power/cooling/rack levels + prepaid credit.
+           null until deployed (scripts/deploy-garage-upgrades.js); while null,
+           live upgrades fall back to the old pay-to-stakers flow (local-only). */
+        garageUpgrades:null },
       /* QuickSwap V2 — WATTv2/WPOL pool 0x823a6484… (v2 has its own pool now).
          Sell POL→WATT v2 native-in via the same router. */
       dex:{ kind:'univ2', router:'0xa5E0829CaCED8fFDD4De3c43696c57F7D7A678ff', weth:'0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',
@@ -35,7 +39,8 @@ const WEB3CFG={
          their 100k on ALT or Polygon; rigNft/staking/migrator carry over. */
       pools:{ registry:'0x88beBed99cb45D81F5DEd708682C55a2b26a221C', hub:'0x7Cee30E196Cb298e4634D7192C527dA37f2C7d57',
               engine:'0x755dCf18b521BC7e42f88fdfEBa2C910809AF09F', rigNft:'0x131A875e1bfEB2B3735E5d9Ad5e8871fF6CE9381', stakingPool:'0x62fC935400104371777aD36B78CF73f2c48dcD24', migrator:'0xdB13ecc87960632b8aAe93640F246CdAE1675B78' },
-      economy:{ items:'0x851fd0205348783444Fc9EDe99Ca2321681EC99b', shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', stakingPool:'0xa3f8B04310380cD13Ec85B11420d1fc848af36C4', wattV2:'0xB7635E386283CAE6FB1A710f19CaA8220beF630D' },
+      economy:{ items:'0x851fd0205348783444Fc9EDe99Ca2321681EC99b', shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', stakingPool:'0xa3f8B04310380cD13Ec85B11420d1fc848af36C4', wattV2:'0xB7635E386283CAE6FB1A710f19CaA8220beF630D',
+        garageUpgrades:null },
       /* SwapinDEX (original live venue) — WATT/wALT pool 0xb2F8e147…. Sell ALT→WATT native-in. */
       dex:{ kind:'univ2', router:'0xae168Ce47cebca9abbC5107a58df0532f1afa4d6', weth:'0x48721ADeFE5b97101722c0866c2AffCE797C32b6',
             wattOut:'0x6645143e49B3a15d8F205658903a55E520444698' } },
@@ -53,7 +58,8 @@ const WEB3CFG={
       /* pools: RETIRED v1-stake set (ABI mismatch with the V3 client) — the V3
          multi-coin deploy fills this slot when it lands on WATTx. */
       pools:null,
-      economy:{ items:'0x9baaFDE958d0dE13043CBb4292e467EB00ED06B4', shop:'0x0239f289Cca84E7Bb899Fe065ba452293D501355', stakingPool:'0xe9000a1ba29c3e87B4F964E9514eA4e8fd5d5749', wattV2:'0xc4603E2582aE320857379819123dFbFd3093dcfa' } },
+      economy:{ items:'0x9baaFDE958d0dE13043CBb4292e467EB00ED06B4', shop:'0x0239f289Cca84E7Bb899Fe065ba452293D501355', stakingPool:'0xe9000a1ba29c3e87B4F964E9514eA4e8fd5d5749', wattV2:'0xc4603E2582aE320857379819123dFbFd3093dcfa',
+        garageUpgrades:null } },
   },
   /* PayoutHub target ids, in deploy-script registration order (identical on
      every chain because the same script registers the same list). */
@@ -72,8 +78,62 @@ const WEB3CFG={
   ids:[1,2,3,4,5,8,9,10,11,12,13,14,17,18,19,23], // V3 collection component ids
 };
 const W3={ addr:null, chainId:null, chain:null, native:null, watt:null, rewards:null, nfts:{}, rates:{}, staked:[], busy:false, err:null };
-const w3Eth=()=>window.ethereum;
-const w3Has=()=>!!window.ethereum;
+/* Wallet choice (Rabby / MetaMask / Phantom / any EIP-6963 wallet). Wallets announce
+   themselves via EIP-6963, so several installed wallets don't fight over
+   window.ethereum. The chosen one is remembered per device. */
+const WPICK = { list:{}, rdns:(()=>{ try{ return localStorage.getItem('mgWalletRdns')||''; }catch(e){ return ''; } })(), prov:null };
+window.addEventListener('eip6963:announceProvider', e=>{ const d=e.detail; if(d&&d.info&&d.provider) WPICK.list[d.info.rdns]=d; });
+window.dispatchEvent(new Event('eip6963:requestProvider'));
+function wpickLegacy(id){            // wallets that only inject window.ethereum / window.phantom
+  const eth=window.ethereum, all=(eth&&eth.providers)||(eth?[eth]:[]);
+  if(id==='app.phantom') return (window.phantom&&window.phantom.ethereum)||all.find(p=>p.isPhantom)||null;
+  if(id==='io.rabby') return all.find(p=>p.isRabby)||null;
+  if(id==='io.metamask') return all.find(p=>p.isMetaMask&&!p.isRabby&&!p.isPhantom&&!p.isBraveWallet)||null;
+  return null;
+}
+function wpickProvider(id){ return (WPICK.list[id]&&WPICK.list[id].provider)||wpickLegacy(id); }
+const w3Eth=()=>WPICK.prov||(WPICK.rdns&&wpickProvider(WPICK.rdns))||window.ethereum;
+const w3Has=()=>!!w3Eth();
+const WPICK_WALLETS=[
+  { id:'io.rabby',    name:'Rabby',    icon:'🐰', site:'https://rabby.io/' },
+  { id:'io.metamask', name:'MetaMask', icon:'🦊', site:'https://metamask.io/download/',
+    mobile:u=>'https://metamask.app.link/dapp/'+u.replace(/^https?:\/\//,'') },
+  { id:'app.phantom', name:'Phantom',  icon:'👻', site:'https://phantom.com/download', note:'Polygon only — Phantom can’t add Altcoinchain',
+    mobile:u=>'https://phantom.app/ul/browse/'+encodeURIComponent(u)+'?ref='+encodeURIComponent(location.origin) },
+];
+function openWalletPicker(goLive){
+  WPICK.goLive=goLive!==false;
+  window.dispatchEvent(new Event('eip6963:requestProvider'));
+  const mobile=/Android|iPhone|iPad/i.test(navigator.userAgent);
+  const gameUrl=(()=>{ try{ return (window.top===window?location.href:document.referrer)||location.href; }catch(e){ return location.href; } })().split('#')[0];
+  const row=(icon,name,sub,attrs)=>`<button class="hbtn" ${attrs} style="display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;margin:6px 0;text-align:left">`+
+    `<span style="font-size:22px;width:28px;text-align:center">${icon}</span><span style="flex:1"><b style="font-size:14px">${name}</b><br><small style="color:var(--dim);font-weight:400">${sub}</small></span></button>`;
+  let h='';
+  for(const w of WPICK_WALLETS){
+    const found=!!wpickProvider(w.id), d=WPICK.list[w.id];
+    const icon=d&&d.info.icon?`<img src="${d.info.icon}" alt="" style="width:26px;height:26px;border-radius:6px">`:w.icon;
+    if(found) h+=row(icon,w.name,(w.note?w.note+' · ':'')+'detected — tap to sign in',`data-wpick="${w.id}"`);
+    else if(mobile&&w.mobile) h+=row(icon,w.name,'open the game in the '+w.name+' app',`data-wlink="${w.mobile(gameUrl)}"`);
+    else h+=row(icon,w.name,'not installed — get '+w.name,`data-wlink="${w.site}"`);
+  }
+  const others=Object.values(WPICK.list).filter(d=>!WPICK_WALLETS.some(w=>w.id===d.info.rdns));
+  if(others.length){ h+='<div style="color:var(--dim);font-size:11px;margin:10px 0 2px">Other wallets in this browser</div>';
+    for(const d of others) h+=row(`<img src="${d.info.icon}" alt="" style="width:26px;height:26px;border-radius:6px">`,d.info.name,'detected — tap to sign in',`data-wpick="${d.info.rdns}"`); }
+  h+='<div style="color:var(--dim);font-size:11px;margin-top:8px;line-height:1.5">Signing in only shares your address. Your NFTs become your rigs and balances and pools are real. Nothing is sent without you approving it in the wallet.</div>';
+  $('wpick-body').innerHTML=h;
+  $('wpick-body').querySelectorAll('[data-wpick]').forEach(b=>b.onclick=()=>wpickChoose(b.dataset.wpick));
+  $('wpick-body').querySelectorAll('[data-wlink]').forEach(b=>b.onclick=()=>{ const u=b.dataset.wlink; try{ (window.top||window).location.href=u; }catch(e){ window.open(u,'_blank'); } });
+  openModal('m-wpick');
+}
+async function wpickChoose(id){
+  const p=wpickProvider(id); if(!p) return;
+  if(WPICK.prov!==p){ WPICK.prov=p; w3Connect._wired=0; W3.addr=null; }
+  WPICK.rdns=id; try{ localStorage.setItem('mgWalletRdns',id); }catch(e){}
+  closeModal('m-wpick');
+  await w3Connect();
+  if(W3.addr&&WPICK.goLive&&!(typeof isLive==='function'&&isLive())) setMode('live');
+}
+window.openWalletPicker=openWalletPicker;
 const w3Short=a=>a?a.slice(0,6)+'…'+a.slice(-4):'';
 const encU=n=>BigInt(n).toString(16).padStart(64,'0');
 const encA=a=>a.replace(/^0x/,'').toLowerCase().padStart(64,'0');
@@ -205,6 +265,7 @@ async function w3Refresh(force){
     await Promise.allSettled(jobs);
     await w3Positions();               // staked components (escrowed, not in the wallet)
     w3GrantOwned(force);
+    if(typeof ocSyncGarage==='function') await ocSyncGarage();  // mirror on-chain garage add-on levels + credit into S.upg / S.watt
     /* the classic trap: EVERYTHING is staked -> wallet reads empty -> empty
        garage with nothing to click. Say so instead of showing a bare room. */
     if(typeof isLive==='function'&&isLive()&&S&&S.rigs.length===0
