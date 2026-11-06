@@ -1,0 +1,9 @@
+{
+  "network": "altcoinchain",
+  "chainId": 2330,
+  "deployer": "0xB8199F9c38fF3dA42026Cc67fC98e6B4464601B8",
+  "garageUpgrades": "0x2314fb7BA3D580cc040629028D041241d25B6fd2",
+  "wattV2": "0xB7635E386283CAE6FB1A710f19CaA8220beF630D",
+  "stakingPool": "0xa3f8B04310380cD13Ec85B11420d1fc848af36C4",
+  "timestamp": "2026-11-06T06:20:24.601Z"
+}

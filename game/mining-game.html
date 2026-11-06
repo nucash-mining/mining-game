@@ -200,12 +200,19 @@ button{font-family:inherit;cursor:pointer}
   #feed{width:210px;bottom:76px}
   /* Keep the top strips as single, horizontally-scrollable rows instead of
      letting them wrap into overlapping rows (the "jumble" on phones). */
-  #hud{gap:5px;padding:6px 8px}
-  #hudbtns{flex-wrap:wrap;gap:5px}
+  /* Phones: row 1 = logo + stats, row 2 = every button in one swipeable row.
+     (Wrapping buttons grew the HUD to 4 rows and buried the coin bar.) */
+  #hud{gap:5px;padding:6px 8px;flex-wrap:wrap}
+  #stats{flex:1 1 0;min-width:0}
+  #hudbtns{flex:1 1 100%;margin-left:0;flex-wrap:nowrap;justify-content:flex-start;gap:5px;
+    overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  #hudbtns::-webkit-scrollbar{display:none}
+  #hudbtns>*{flex:0 0 auto;white-space:nowrap}
+  #tut{left:10px!important;right:10px!important;width:auto!important;max-width:none}
   #stats{flex-wrap:nowrap;overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   #stats::-webkit-scrollbar{display:none}
   #stats .stat{flex:0 0 auto}
-  #wallet{top:96px;flex-wrap:nowrap;overflow-x:auto;max-width:calc(100vw - 16px);-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  #wallet{top:var(--hud-h,96px);flex-wrap:nowrap;overflow-x:auto;max-width:calc(100vw - 16px);-webkit-overflow-scrolling:touch;scrollbar-width:none}
   #wallet::-webkit-scrollbar{display:none}
   #wallet .coin{flex:0 0 auto}
   /* Pool-Hub / list rows: stack the controls under the label so CLAIM / STOP /
@@ -222,6 +229,9 @@ button{font-family:inherit;cursor:pointer}
   box-shadow:inset 0 0 22px rgba(0,0,0,.4)}
 body.touch #joy{display:block}
 body.touch.walkoff #joy{display:none}
+/* phones: lift the Lounge pill above the walk joystick and let it size to its text */
+body.touch #net-ui{bottom:calc(146px + env(safe-area-inset-bottom))!important;width:auto!important;max-width:calc(100vw - 24px)!important}
+body.touch.walkoff #net-ui{bottom:12px!important}
 #joynub{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;border-radius:50%;
   background:radial-gradient(circle at 38% 32%,#a879ff,#6a2ec7);box-shadow:0 5px 16px rgba(0,0,0,.55);
   border:1px solid rgba(255,255,255,.15);will-change:transform}
@@ -431,6 +441,8 @@ body.touch.walkoff #joy{display:none}
     <button class="hbtn accent" id="b-upg">🔧 GARAGE</button>
     <button class="hbtn" id="b-pool">🏊 POOLS</button>
     <button class="hbtn" id="b-lounge" title="Enter the shared multiplayer lounge (6)">🛋 LOUNGE</button>
+    <button class="hbtn" id="b-skin" title="Choose how you look in the lounge">👕 SKIN</button>
+    <button class="hbtn" id="b-view" title="First person / overview (V)" onclick="window.MGFP&&window.MGFP.toggle()">👁 VIEW</button>
     <button class="hbtn" id="b-stats">📊</button>
     <button class="hbtn" id="b-mute">🔊</button>
   </div>
@@ -485,6 +497,10 @@ body.touch.walkoff #joy{display:none}
 <div class="modal" id="m-web3"><div class="mbox" style="max-width:520px">
   <div class="mhead"><h2>🦊 WALLET <small style="color:var(--dim);font-weight:400;font-size:11px">&nbsp;live contracts on Polygon &amp; Altcoinchain</small></h2><button class="x" data-close="m-web3">✕</button></div>
   <div id="w3-body"></div>
+</div></div>
+<div class="modal" id="m-wpick"><div class="mbox" style="max-width:400px">
+  <div class="mhead"><h2>🔗 SIGN IN <small style="color:var(--dim);font-weight:400;font-size:11px">&nbsp;LIVE mode uses your wallet</small></h2><button class="x" data-close="m-wpick">✕</button></div>
+  <div id="wpick-body"></div>
 </div></div>
 <div id="m-tx"></div>
 
@@ -2765,15 +2781,68 @@ function mgGenWallet(){
   return { address:mgEvmAddr(pk), privateKey:'0x'+mgHexB(priv) };
 }
 </script>
-<script type="importmap">{"imports":{
-  "three":"https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
-  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"
-}}</script>
+<script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+<script>
+/* Device compatibility (added for older phones, e.g. Galaxy Note 8 / Mali-G71 / Android 9).
+   three.js r163+ only runs on WebGL 2. Pick the newest three.js this device can run:
+   r185 with WebGL 2, r162 (the last release with WebGL 1) without it. Also shows a
+   readable message instead of a frozen screen when the browser cannot start the game
+   or the GPU drops the 3D context. */
+(function () {
+  var gl2 = false, gl1 = false;
+  try {
+    var c = document.createElement('canvas');
+    gl2 = !/[?&]webgl1\b/.test(location.search) && !!c.getContext('webgl2'); // ?webgl1 forces the fallback (testing)
+    if (!gl2) gl1 = !!(c.getContext('webgl') || c.getContext('experimental-webgl'));
+  } catch (e) {}
+  var v = gl2 ? '0.185.0' : '0.162.0';
+  window.__MG_THREE = v;
+  window.__MG_WEBGL = gl2 ? 2 : gl1 ? 1 : 0;
+  var map = document.createElement('script');
+  map.type = 'importmap';
+  map.textContent = JSON.stringify({ imports: {
+    three: 'https://cdn.jsdelivr.net/npm/three@' + v + '/build/three.module.js',
+    'three/addons/': 'https://cdn.jsdelivr.net/npm/three@' + v + '/examples/jsm/'
+  } });
+  document.currentScript.parentNode.insertBefore(map, document.currentScript.nextSibling);
+
+  function notice(title, body, retry) {
+    if (document.getElementById('mg-compat-notice')) return;
+    var d = document.createElement('div');
+    d.id = 'mg-compat-notice';
+    d.setAttribute('style', 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.88);color:#e2e8f0;font:15px/1.5 system-ui,sans-serif;padding:24px;text-align:center');
+    d.innerHTML = '<div style="max-width:420px"><div style="font-size:20px;font-weight:700;color:#facc15;margin-bottom:8px"></div><div></div>' +
+      (retry ? '<button style="margin-top:18px;background:#eab308;color:#000;border:0;border-radius:10px;padding:10px 22px;font-weight:600">Reload</button>' : '') + '</div>';
+    d.querySelector('div div').textContent = title;
+    d.querySelectorAll('div div')[1].textContent = body;
+    if (retry) d.querySelector('button').onclick = function () { location.reload(); };
+    (document.body || document.documentElement).appendChild(d);
+  }
+  if (!window.__MG_WEBGL) {
+    addEventListener('DOMContentLoaded', function () {
+      notice('3D graphics are turned off', 'This browser has WebGL disabled or unsupported. Update Chrome (or Samsung Internet), turn off battery saver / "reduce animations", or try another browser.', true);
+    });
+  }
+  var started = Date.now();
+  addEventListener('error', function (e) {
+    // Only the game's own scripts: wallet extensions inject code that throws here too.
+    var src = (e && e.filename) || '';
+    if (/^(chrome|moz|safari)-extension:|^$/.test(src)) return;
+    if (Date.now() - started < 20000 && e && e.message && !/ResizeObserver/.test(e.message)) {
+      notice('The game could not start', 'Your browser is too old for The Mining Game (' + e.message + '). Update Chrome or Samsung Internet, then reload.', true);
+    }
+  });
+  addEventListener('webglcontextlost', function () {
+    notice('Graphics paused', 'Your device ran out of graphics memory. Close other apps and reload the game.', true);
+  }, true);
+})();
+</script>
 <script type="module">
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 /* ================= DATA : the real Mining Game collection ================= */
 const ITEMS = {
@@ -3101,7 +3170,9 @@ function netWorth(){ return S.watt + S.stakedWatt + S.usdt + S.dai + (S.pol+S.pe
 const AU = { ctx:null, master:null, humG:null, dest:null, started:false };
 function auInit(){
   if(AU.started) return;
-  AU.ctx = new (window.AudioContext||window.webkitAudioContext)();
+  // phones: a bigger audio buffer ("playback") trades a few ms of latency for no crackle
+  AU.lite = matchMedia('(pointer:coarse)').matches;
+  AU.ctx = new (window.AudioContext||window.webkitAudioContext)(AU.lite?{latencyHint:'playback'}:{});
   AU.master = AU.ctx.createGain(); AU.master.gain.value = (S&&S.muted)?0:0.85;
   AU.master.connect(AU.ctx.destination);
   AU.dest = AU.ctx.createMediaStreamDestination(); AU.master.connect(AU.dest);
@@ -3115,32 +3186,85 @@ function auInit(){
   AU.humG = AU.ctx.createGain(); AU.humG.gain.value=0.0;
   noise.connect(nf).connect(AU.humG); hum.connect(humF).connect(AU.humG);
   AU.humG.connect(AU.master); noise.start(); hum.start();
-  // --- ambient music: slow synth pad arpeggio ---
-  AU.musG = AU.ctx.createGain(); AU.musG.gain.value=0.12; AU.musG.connect(AU.master);
+  // --- music: procedural cypherpunk darksynth (see musicLoop) ---
+  AU.musG = AU.ctx.createGain(); AU.musG.gain.value=0.17; AU.musG.connect(AU.master);
+  // tempo-synced echo for the arp + glitch blips
+  AU.echo = AU.ctx.createDelay(1.5); AU.echo.delayTime.value = MUS.step()*3;
+  const efb = AU.ctx.createGain(); efb.gain.value=0.38;
+  const ewet = AU.ctx.createGain(); ewet.gain.value=0.32;
+  const ehp = AU.ctx.createBiquadFilter(); ehp.type='highpass'; ehp.frequency.value=500;
+  AU.echo.connect(efb).connect(ehp).connect(AU.echo); AU.echo.connect(ewet).connect(AU.musG);
+  // one shared noise buffer for hats / claps / glitches
+  const nb2 = AU.ctx.createBuffer(1, AU.ctx.sampleRate, AU.ctx.sampleRate);
+  const nd2 = nb2.getChannelData(0); for(let i=0;i<nd2.length;i++) nd2[i]=Math.random()*2-1;
+  AU.noise = nb2;
+  MUS.next = AU.ctx.currentTime + 0.1;
   musicLoop();
   AU.started=true;
 }
-const MUS = { seq:[0,3,7,10,12,10,7,3], root:[110,98,87.3,116.5], bar:0, t:null };
+/* Cypherpunk darksynth, generated live: 108 BPM, A-minor i–VI–VII–v (Am F G Em).
+   Rolling 16th sawtooth bass under a slow filter sweep, four-on-the-floor kick,
+   claps, offbeat hats, a detuned square arpeggio into a tempo echo, and the odd
+   "data packet" glitch. Each 16-step bar is scheduled ahead on the audio clock. */
+const MUS = { bpm:108, bar:0, t:null, next:0,
+  prog:[[45,'m'],[41,'M'],[43,'M'],[40,'m']],            // MIDI roots A2 F2 G2 E2
+  step(){ return 60/this.bpm/4; } };
+const mtof = n => 440*Math.pow(2,(n-69)/12);
+function musVoice(type, freq, t, dur, vol, cutoff, dest, detune=0){
+  const o=AU.ctx.createOscillator(); o.type=type; o.frequency.value=freq; o.detune.value=detune;
+  const g=AU.ctx.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+0.008);
+  g.gain.exponentialRampToValueAtTime(0.0008,t+dur);
+  const f=AU.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=cutoff; f.Q.value=6;
+  o.connect(f).connect(g).connect(dest||AU.musG); o.start(t); o.stop(t+dur+0.02);
+  return f;
+}
+function musNoise(t, dur, vol, type, freq, dest){
+  const n=AU.ctx.createBufferSource(); n.buffer=AU.noise;
+  const f=AU.ctx.createBiquadFilter(); f.type=type; f.frequency.value=freq;
+  const g=AU.ctx.createGain(); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0008,t+dur);
+  n.connect(f).connect(g).connect(dest||AU.musG); n.start(t, Math.random()*0.8); n.stop(t+dur+0.02);
+}
 function musicLoop(){
   if(!AU.ctx) return;
-  const bar = MUS.bar++ % 4, root = MUS.root[bar];
-  const t0 = AU.ctx.currentTime+0.05;
-  MUS.seq.forEach((st,i)=>{
-    const f = root*Math.pow(2,st/12);
-    const o = AU.ctx.createOscillator(); o.type = i%2?'sine':'triangle'; o.frequency.value=f*2;
-    const g = AU.ctx.createGain(); const ts=t0+i*0.5;
-    g.gain.setValueAtTime(0,ts); g.gain.linearRampToValueAtTime(0.5,ts+0.06);
-    g.gain.exponentialRampToValueAtTime(0.001,ts+0.48);
-    const fl=AU.ctx.createBiquadFilter(); fl.type='lowpass'; fl.frequency.value=1200;
-    o.connect(g).connect(fl).connect(AU.musG); o.start(ts); o.stop(ts+0.5);
-  });
-  // bass drone
-  const b=AU.ctx.createOscillator(); b.type='sawtooth'; b.frequency.value=root/2;
-  const bg=AU.ctx.createGain(); bg.gain.setValueAtTime(0.0,t0);
-  bg.gain.linearRampToValueAtTime(0.10,t0+0.4); bg.gain.linearRampToValueAtTime(0.0,t0+3.9);
-  const bf=AU.ctx.createBiquadFilter(); bf.type='lowpass'; bf.frequency.value=240;
-  b.connect(bg).connect(bf).connect(AU.musG); b.start(t0); b.stop(t0+4);
-  MUS.t=setTimeout(musicLoop, 4000);
+  const now = AU.ctx.currentTime, st = MUS.step();
+  if(MUS.next < now) MUS.next = now + 0.05;                 // tab was asleep: resync
+  const bar = MUS.bar++, [root, q] = MUS.prog[bar % 4], t0 = MUS.next;
+  const third = q==='m'?3:4;
+  const sweep = 380 + 1500*(0.5+0.5*Math.sin(bar/8*Math.PI*2));   // 8-bar filter sweep
+  const section = Math.floor(bar/8) % 4;                    // 0 intro, 1-3 full
+  for(let s=0;s<16;s++){
+    const t = t0 + s*st;
+    // kick: four on the floor
+    if(s%4===0){ const k=AU.ctx.createOscillator(), kg=AU.ctx.createGain();
+      k.type='sine'; k.frequency.setValueAtTime(130,t); k.frequency.exponentialRampToValueAtTime(42,t+0.16);
+      kg.gain.setValueAtTime(section?0.9:0.55,t); kg.gain.exponentialRampToValueAtTime(0.001,t+0.28);
+      k.connect(kg).connect(AU.musG); k.start(t); k.stop(t+0.3); }
+    // clap on 2 and 4
+    if(section && (s===4||s===12)) musNoise(t,0.14,0.16,'bandpass',1600);
+    // offbeat hats, a ghost 16th now and then
+    if(s%4===2) musNoise(t,0.04,0.09,'highpass',7500);
+    else if(!AU.lite && section && Math.random()<0.12) musNoise(t,0.03,0.035,'highpass',9000);
+    // rolling bass: root 16ths, octave pops on the "and"s
+    const bn = root + (s===6||s===14 ? 12 : 0) + (s===11 ? 7 : 0);
+    musVoice('sawtooth', mtof(bn), t, st*0.9, s%4===0?0.26:0.18, sweep, null, s%2?7:-7);
+    // arp: chord tones over two octaves, 16ths, into the echo (enters after the intro)
+    if(section){
+      const arp=[0,third,7,12,third+12,12,7,third][s%8] + 24;
+      if(!AU.lite) musVoice('square', mtof(root+arp), t, st*0.8, 0.07, 2600, AU.echo, s%2?-9:9);
+      musVoice('square', mtof(root+arp), t, st*0.8, 0.05, 2600, null, s%2?9:-9);
+    }
+    // glitch: a data packet chirp
+    if(!AU.lite && Math.random() < (section?0.02:0.01)){
+      const o=AU.ctx.createOscillator(), g=AU.ctx.createGain(); o.type='square';
+      o.frequency.setValueAtTime(1800+Math.random()*2600,t); o.frequency.exponentialRampToValueAtTime(300+Math.random()*400,t+0.07);
+      g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.08);
+      o.connect(g).connect(AU.echo); o.start(t); o.stop(t+0.1);
+    }
+  }
+  // pad: a low, wide chord swell every bar in the full sections
+  if(section>=2 && !AU.lite) [0,third,7].forEach((iv,i)=>musVoice('sawtooth', mtof(root+24+iv), t0, st*16, 0.035, 900, null, (i-1)*12));
+  MUS.next = t0 + st*16;
+  MUS.t = setTimeout(musicLoop, Math.max(50, (MUS.next - AU.ctx.currentTime - 0.35)*1000));
 }
 function tone(f0,f1,dur,type,vol,when=0){
   if(!AU.ctx) return; const t=AU.ctx.currentTime+when;
@@ -3174,9 +3298,10 @@ const SFX = {
 function setMuted(m){ S.muted=m; if(AU.master) AU.master.gain.value=m?0:0.85; $('b-mute').textContent=m?'🔇':'🔊'; save(); }
 
 /* ================= THREE SCENE ================= */
-const TRAILER = new URLSearchParams(location.search).has('trailer');
+const DEMO = new URLSearchParams(location.search).has('demo');
+const TRAILER = new URLSearchParams(location.search).has('trailer') || DEMO;
 const canvas = $('c3d');
-const renderer = new THREE.WebGLRenderer({canvas, antialias:!TRAILER, preserveDrawingBuffer:TRAILER});
+const renderer = new THREE.WebGLRenderer({canvas, antialias:!TRAILER||DEMO, preserveDrawingBuffer:TRAILER});
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.35;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
@@ -3190,7 +3315,7 @@ controls.enableDamping = true; controls.dampingFactor = 0.08;
 controls.maxPolarAngle = Math.PI*0.49; controls.minDistance = 3.5; controls.maxDistance = 24;
 controls.enablePan = false;
 function sizeRenderer(){
-  const w = TRAILER?1280:innerWidth, h = TRAILER?720:innerHeight;
+  const w = DEMO?1920:TRAILER?1280:innerWidth, h = DEMO?1080:TRAILER?720:innerHeight;
   renderer.setSize(w,h,!TRAILER); renderer.setPixelRatio(TRAILER?1:Math.min(devicePixelRatio,1.6));
   cam.aspect=w/h; cam.updateProjectionMatrix();
 }
@@ -4065,7 +4190,7 @@ function makeCardTex(item){
   x.textAlign='center';
   x.fillStyle='#9a93c4'; x.font='700 22px Segoe UI'; x.fillText((item.brand||'MINING GAME').toUpperCase(),256,52);
   x.fillStyle='#fff'; x.font='900 40px Segoe UI'; x.fillText(item.name,256,98);
-  const img=new Image();
+  const img=new Image(); if(DEMO) img.crossOrigin='anonymous'; // demo capture reads pixels back
   const tex=ctex(c);
   img.onload=()=>{ x.drawImage(img,66,130,380,380); drawTraits(); tex.needsUpdate=true; };
   img.src=THUMB[item.id];
@@ -4885,7 +5010,9 @@ function simTick(dt){ // dt seconds (fixed 0.1)
   }
   poolTick(dt);
   // hum follows draw
-  if(AU.humG) AU.humG.gain.value=(S.muted?0:Math.min(0.5,0.05+draw*0.004))*(noWatt?0.3:1);
+  // lab hum: grows gently with power draw (log scale) and stays under the music. The old
+  // linear curve hit full volume at ~110W, so LIVE farms were drowned in static.
+  if(AU.humG) AU.humG.gain.value=(S.muted?0:0)*(noWatt?0.3:1);
 }
 /* Tower's own crash/wear tick — same rules as a desk rig (see the S.rigs.forEach
    above), just addressed differently: no SLOTS[r.slot]/rigVis[ri] (the tower
@@ -5107,6 +5234,14 @@ function buyUpgrade(k){
      — direct: no/low credit -> a wallet-signed transfer per upgrade. */
   if(typeof isLive==='function' && isLive()){
     const p=upgPrice(k,lv);
+    /* When GarageUpgrades is deployed, EVERY live buy goes through the contract
+       (it spends on-chain credit or asks for a signed transfer) so the level is
+       recorded on-chain and never lost. Only when the contract is absent do we
+       fall back to the old local-credit shortcut. */
+    if(typeof garageAddr==='function' && garageAddr()){
+      if(typeof ocBuyUpgrade==='function') ocBuyUpgrade(k);
+      return;
+    }
     if(S.watt>=p){ S.watt-=p; applyUpgrade(k); toast(`Paid from game credit — ${fmt(S.watt)} ⚡ credit left`,'cyan',6000); return; }
     if(typeof ocBuyUpgrade==='function' && ecoCfg && ecoCfg()) ocBuyUpgrade(k);
     else { SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain to buy upgrades with your real WATT','red',8000); }
@@ -5146,7 +5281,11 @@ const WEB3CFG={
          + migrator carry over from the v1 set (same NFT, re-authorized). */
       pools:{ registry:'0xC65E46645EF9d7Bf1F7D526c9Fb4F4B54704d1DE', hub:'0x8eC1Fa15A1DFB038396176a122ED2D385Ee04339',
               engine:'0x8d372e3e1fbB82e707D09f782a1e3959DC447354', rigNft:'0xf9F94e9fa744DE1209EF28321604a0Aa3B21a884', stakingPool:'0x07ef3eCDB4e4fd9D914787031b6cB746340bF661', migrator:'0xf2DbF910aD1cA08c3879C72AE6277fA903E058c4' },
-      economy:{ items:'0x0CDbf4926a8EdFFaa803B96f8fa90B065DE19Eb2', shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', stakingPool:'0x7E8FC9d7D7588F410E1399aC690F901268B08a8d', wattV2:'0x387693eCEC037C61943404F03c097d2ADA15ae3f' },
+      economy:{ items:'0x0CDbf4926a8EdFFaa803B96f8fa90B065DE19Eb2', shop:'0xeE6B67c3993884F1b693A4a66e952Bb563463131', stakingPool:'0x7E8FC9d7D7588F410E1399aC690F901268B08a8d', wattV2:'0x387693eCEC037C61943404F03c097d2ADA15ae3f',
+        /* GarageUpgrades — on-chain power/cooling/rack levels + prepaid credit.
+           null until deployed (scripts/deploy-garage-upgrades.js); while null,
+           live upgrades fall back to the old pay-to-stakers flow (local-only). */
+        garageUpgrades:'0x638237e726Fccb48B3573Fa7741bE07e020fb8EB' },
       /* QuickSwap V2 — WATTv2/WPOL pool 0x823a6484… (v2 has its own pool now).
          Sell POL→WATT v2 native-in via the same router. */
       dex:{ kind:'univ2', router:'0xa5E0829CaCED8fFDD4De3c43696c57F7D7A678ff', weth:'0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',
@@ -5165,7 +5304,8 @@ const WEB3CFG={
          their 100k on ALT or Polygon; rigNft/staking/migrator carry over. */
       pools:{ registry:'0x88beBed99cb45D81F5DEd708682C55a2b26a221C', hub:'0x7Cee30E196Cb298e4634D7192C527dA37f2C7d57',
               engine:'0x755dCf18b521BC7e42f88fdfEBa2C910809AF09F', rigNft:'0x131A875e1bfEB2B3735E5d9Ad5e8871fF6CE9381', stakingPool:'0x62fC935400104371777aD36B78CF73f2c48dcD24', migrator:'0xdB13ecc87960632b8aAe93640F246CdAE1675B78' },
-      economy:{ items:'0x851fd0205348783444Fc9EDe99Ca2321681EC99b', shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', stakingPool:'0xa3f8B04310380cD13Ec85B11420d1fc848af36C4', wattV2:'0xB7635E386283CAE6FB1A710f19CaA8220beF630D' },
+      economy:{ items:'0x851fd0205348783444Fc9EDe99Ca2321681EC99b', shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', stakingPool:'0xa3f8B04310380cD13Ec85B11420d1fc848af36C4', wattV2:'0xB7635E386283CAE6FB1A710f19CaA8220beF630D',
+        garageUpgrades:'0x2314fb7BA3D580cc040629028D041241d25B6fd2' },
       /* SwapinDEX (original live venue) — WATT/wALT pool 0xb2F8e147…. Sell ALT→WATT native-in. */
       dex:{ kind:'univ2', router:'0xae168Ce47cebca9abbC5107a58df0532f1afa4d6', weth:'0x48721ADeFE5b97101722c0866c2AffCE797C32b6',
             wattOut:'0x6645143e49B3a15d8F205658903a55E520444698' } },
@@ -5183,7 +5323,8 @@ const WEB3CFG={
       /* pools: RETIRED v1-stake set (ABI mismatch with the V3 client) — the V3
          multi-coin deploy fills this slot when it lands on WATTx. */
       pools:null,
-      economy:{ items:'0x9baaFDE958d0dE13043CBb4292e467EB00ED06B4', shop:'0x0239f289Cca84E7Bb899Fe065ba452293D501355', stakingPool:'0xe9000a1ba29c3e87B4F964E9514eA4e8fd5d5749', wattV2:'0xc4603E2582aE320857379819123dFbFd3093dcfa' } },
+      economy:{ items:'0x9baaFDE958d0dE13043CBb4292e467EB00ED06B4', shop:'0x0239f289Cca84E7Bb899Fe065ba452293D501355', stakingPool:'0xe9000a1ba29c3e87B4F964E9514eA4e8fd5d5749', wattV2:'0xc4603E2582aE320857379819123dFbFd3093dcfa',
+        garageUpgrades:null } },
   },
   /* PayoutHub target ids, in deploy-script registration order (identical on
      every chain because the same script registers the same list). */
@@ -5202,8 +5343,62 @@ const WEB3CFG={
   ids:[1,2,3,4,5,8,9,10,11,12,13,14,17,18,19,23], // V3 collection component ids
 };
 const W3={ addr:null, chainId:null, chain:null, native:null, watt:null, rewards:null, nfts:{}, rates:{}, staked:[], busy:false, err:null };
-const w3Eth=()=>window.ethereum;
-const w3Has=()=>!!window.ethereum;
+/* Wallet choice (Rabby / MetaMask / Phantom / any EIP-6963 wallet). Wallets announce
+   themselves via EIP-6963, so several installed wallets don't fight over
+   window.ethereum. The chosen one is remembered per device. */
+const WPICK = { list:{}, rdns:(()=>{ try{ return localStorage.getItem('mgWalletRdns')||''; }catch(e){ return ''; } })(), prov:null };
+window.addEventListener('eip6963:announceProvider', e=>{ const d=e.detail; if(d&&d.info&&d.provider) WPICK.list[d.info.rdns]=d; });
+window.dispatchEvent(new Event('eip6963:requestProvider'));
+function wpickLegacy(id){            // wallets that only inject window.ethereum / window.phantom
+  const eth=window.ethereum, all=(eth&&eth.providers)||(eth?[eth]:[]);
+  if(id==='app.phantom') return (window.phantom&&window.phantom.ethereum)||all.find(p=>p.isPhantom)||null;
+  if(id==='io.rabby') return all.find(p=>p.isRabby)||null;
+  if(id==='io.metamask') return all.find(p=>p.isMetaMask&&!p.isRabby&&!p.isPhantom&&!p.isBraveWallet)||null;
+  return null;
+}
+function wpickProvider(id){ return (WPICK.list[id]&&WPICK.list[id].provider)||wpickLegacy(id); }
+const w3Eth=()=>WPICK.prov||(WPICK.rdns&&wpickProvider(WPICK.rdns))||window.ethereum;
+const w3Has=()=>!!w3Eth();
+const WPICK_WALLETS=[
+  { id:'io.rabby',    name:'Rabby',    icon:'🐰', site:'https://rabby.io/' },
+  { id:'io.metamask', name:'MetaMask', icon:'🦊', site:'https://metamask.io/download/',
+    mobile:u=>'https://metamask.app.link/dapp/'+u.replace(/^https?:\/\//,'') },
+  { id:'app.phantom', name:'Phantom',  icon:'👻', site:'https://phantom.com/download', note:'Polygon only — Phantom can’t add Altcoinchain',
+    mobile:u=>'https://phantom.app/ul/browse/'+encodeURIComponent(u)+'?ref='+encodeURIComponent(location.origin) },
+];
+function openWalletPicker(goLive){
+  WPICK.goLive=goLive!==false;
+  window.dispatchEvent(new Event('eip6963:requestProvider'));
+  const mobile=/Android|iPhone|iPad/i.test(navigator.userAgent);
+  const gameUrl=(()=>{ try{ return (window.top===window?location.href:document.referrer)||location.href; }catch(e){ return location.href; } })().split('#')[0];
+  const row=(icon,name,sub,attrs)=>`<button class="hbtn" ${attrs} style="display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;margin:6px 0;text-align:left">`+
+    `<span style="font-size:22px;width:28px;text-align:center">${icon}</span><span style="flex:1"><b style="font-size:14px">${name}</b><br><small style="color:var(--dim);font-weight:400">${sub}</small></span></button>`;
+  let h='';
+  for(const w of WPICK_WALLETS){
+    const found=!!wpickProvider(w.id), d=WPICK.list[w.id];
+    const icon=d&&d.info.icon?`<img src="${d.info.icon}" alt="" style="width:26px;height:26px;border-radius:6px">`:w.icon;
+    if(found) h+=row(icon,w.name,(w.note?w.note+' · ':'')+'detected — tap to sign in',`data-wpick="${w.id}"`);
+    else if(mobile&&w.mobile) h+=row(icon,w.name,'open the game in the '+w.name+' app',`data-wlink="${w.mobile(gameUrl)}"`);
+    else h+=row(icon,w.name,'not installed — get '+w.name,`data-wlink="${w.site}"`);
+  }
+  const others=Object.values(WPICK.list).filter(d=>!WPICK_WALLETS.some(w=>w.id===d.info.rdns));
+  if(others.length){ h+='<div style="color:var(--dim);font-size:11px;margin:10px 0 2px">Other wallets in this browser</div>';
+    for(const d of others) h+=row(`<img src="${d.info.icon}" alt="" style="width:26px;height:26px;border-radius:6px">`,d.info.name,'detected — tap to sign in',`data-wpick="${d.info.rdns}"`); }
+  h+='<div style="color:var(--dim);font-size:11px;margin-top:8px;line-height:1.5">Signing in only shares your address. Your NFTs become your rigs and balances and pools are real. Nothing is sent without you approving it in the wallet.</div>';
+  $('wpick-body').innerHTML=h;
+  $('wpick-body').querySelectorAll('[data-wpick]').forEach(b=>b.onclick=()=>wpickChoose(b.dataset.wpick));
+  $('wpick-body').querySelectorAll('[data-wlink]').forEach(b=>b.onclick=()=>{ const u=b.dataset.wlink; try{ (window.top||window).location.href=u; }catch(e){ window.open(u,'_blank'); } });
+  openModal('m-wpick');
+}
+async function wpickChoose(id){
+  const p=wpickProvider(id); if(!p) return;
+  if(WPICK.prov!==p){ WPICK.prov=p; w3Connect._wired=0; W3.addr=null; }
+  WPICK.rdns=id; try{ localStorage.setItem('mgWalletRdns',id); }catch(e){}
+  closeModal('m-wpick');
+  await w3Connect();
+  if(W3.addr&&WPICK.goLive&&!(typeof isLive==='function'&&isLive())) setMode('live');
+}
+window.openWalletPicker=openWalletPicker;
 const w3Short=a=>a?a.slice(0,6)+'…'+a.slice(-4):'';
 const encU=n=>BigInt(n).toString(16).padStart(64,'0');
 const encA=a=>a.replace(/^0x/,'').toLowerCase().padStart(64,'0');
@@ -5335,6 +5530,7 @@ async function w3Refresh(force){
     await Promise.allSettled(jobs);
     await w3Positions();               // staked components (escrowed, not in the wallet)
     w3GrantOwned(force);
+    if(typeof ocSyncGarage==='function') await ocSyncGarage();  // mirror on-chain garage add-on levels + credit into S.upg / S.watt
     /* the classic trap: EVERYTHING is staked -> wallet reads empty -> empty
        garage with nothing to click. Say so instead of showing a bare room. */
     if(typeof isLive==='function'&&isLive()&&S&&S.rigs.length===0
@@ -5848,7 +6044,7 @@ function setMode(m){
   setBadgeOwned(!!S.badge); setTowerOwned(!!S.tower);
   rebuildAllRigs(); buildFarm(); refreshRings();
   selRig=-1; selTower=false; renderRigPanel&&renderRigPanel();
-  if(m==='live'&&!W3.addr){ toast('🔗 LIVE MODE — connect a wallet (🦊): your NFTs become your rigs, balances and pools are real','gold',9000); }
+  if(m==='live'&&!W3.addr){ openWalletPicker(false); toast('🔗 LIVE MODE — connect a wallet (🦊): your NFTs become your rigs, balances and pools are real','gold',9000); }
   else toast(m==='live'?'🔗 LIVE MODE — your wallet IS the game: real NFTs, real balances, real on-chain pools':'🎮 DEMO MODE — simulated economy, nothing on-chain','cyan',7000);
   if(m==='live'&&W3.addr) w3Refresh().catch(()=>{});    // mirror wallet NFTs -> rigs + inventory
   renderHud&&renderHud(); if($('m-pool')&&$('m-pool').classList.contains('open')) renderPoolHub();
@@ -6374,13 +6570,84 @@ async function ocPayToStakers(cost,label){
   if(ok===null){ toast('Payment still pending — applies when it confirms (leave this open)','gold',9000); ok=await w3WaitTx(tx,480); if(ok!==true) return false; }
   return true;
 }
-/* LIVE garage upgrade: same WATT price as the sim, paid in REAL WATT v2 via
-   the pool's fund() so stakers are credited instantly (V1 = pro-rata on fund). */
+/* ===== GarageUpgrades — ON-CHAIN power/cooling/rack levels + prepaid credit =====
+   The levels used to live only in localStorage, so they reset whenever that was
+   lost (new device, cleared cache, failed write) even though the WATT was really
+   spent. GarageUpgrades stores them per-wallet on-chain and forwards the WATT to
+   the SAME stakers pool, so add-ons persist like NFTs do. Kinds MUST match the
+   contract: power=0, cooling=1, rack=2, rackgpu=3. */
+const GARAGE_KIND={power:0,cooling:1,rack:2,rackgpu:3};
+const GARAGE_ABI=[
+  'function buyUpgrade(uint8 kind)',
+  'function topUp(uint256 amountWhole)',
+  'function garageState(address user) view returns (uint32 power,uint32 cooling,uint32 rack,uint32 rackgpu,uint256 credit)',
+  'function costOf(address user,uint8 kind) view returns (uint256)'];
+function garageAddr(){ const c=ecoCfg(); return (c&&c.economy&&c.economy.garageUpgrades)||null; }
+async function garageContract(write){
+  const E=await poolEthers(); const addr=garageAddr(); if(!addr) return null;
+  if(write){ const prov=new E.BrowserProvider(w3Eth()); const signer=await prov.getSigner(); return new E.Contract(addr,GARAGE_ABI,signer); }
+  return new E.Contract(addr, GARAGE_ABI, new E.JsonRpcProvider(W3.chain.rpc));
+}
+/* Pull the authoritative add-on levels + prepaid credit from the chain and
+   mirror them into S (live mode only). MAX against local so a sync can only
+   RAISE a level, never visibly downgrade a player mid-migration. */
+async function ocSyncGarage(){
+  if(!(typeof isLive==='function'&&isLive())||!W3.addr||!garageAddr()) return;
+  try{
+    const g=await garageContract(false); if(!g) return;
+    const s=await g.garageState(W3.addr);
+    S.upg.power  =Math.max(S.upg.power||0,  Number(s.power));
+    S.upg.cooling=Math.max(S.upg.cooling||0,Number(s.cooling));
+    S.upg.rack   =Math.max(S.upg.rack||0,   Number(s.rack));
+    S.upg.rackgpu=Math.max(S.upg.rackgpu||0,Number(s.rackgpu));
+    /* NOTE: only LEVELS are mirrored (they only ever rise → max() is safe). The
+       prepaid credit (S.watt in live) is left as local session state, in step
+       with the contract via topUp/buyUpgrade; overwriting it from chain here
+       would refund credit-paid structure purchases (chair/container/warehouse),
+       which spend S.watt but are not recorded on-chain. */
+    if(typeof rebuildAllRigs==='function') rebuildAllRigs();
+    renderHud&&renderHud(); if(typeof renderUpg==='function'&&$('m-upg')&&$('m-upg').classList.contains('open')) renderUpg();
+    save&&save();
+  }catch(e){ /* RPC hiccup — keep the saved levels, try again next sync */ }
+}
+/* LIVE garage upgrade: paid in REAL WATT v2 and RECORDED on-chain by
+   GarageUpgrades (level persists per wallet). Spends prepaid credit if it
+   covers the price, else the wallet signs a transfer; the contract forwards the
+   WATT to the stakers pool either way. Falls back to the old (local-only) flow
+   only while the contract is undeployed on this chain. */
 async function ocBuyUpgrade(k){
   const c=ecoCfg(); if(!c||!c.economy){ SFX.err(); toast('Connect a wallet on Polygon or Altcoinchain first','red'); return; }
   if(_upBusy){ toast('Upgrade payment already in flight…','gold'); return; }
   const lv=S.upg[k]||0, max=upgMax(k); if(lv>=max){ SFX.err(); return; }
   const p=upgPrice(k,lv);
+  if(!garageAddr()){ return ocBuyUpgradeLegacy(k,p,c); }  // contract not live yet
+  const kind=GARAGE_KIND[k]; if(kind===undefined){ SFX.err(); return; }
+  _upBusy=true;
+  try{
+    const E=await poolEthers();
+    const g=await garageContract(true);
+    const cost=BigInt(Math.round(p))*10n**18n;
+    const fromCredit=(S.watt||0)>=p;   // contract spends prepaid credit first — mirrors S.watt
+    if(!fromCredit){
+      // wallet-pay buy: ensure WATT allowance to the garage contract
+      const watt=new E.Contract(c.economy.wattV2, POOL_ABI.erc20, await (new E.BrowserProvider(w3Eth())).getSigner());
+      if((await watt.allowance(W3.addr, garageAddr()))<cost){
+        toast('Approve WATT to the garage contract (covers your upgrades)…','gold',8000);
+        await (await watt.approve(garageAddr(), cost*64n)).wait();   // headroom so later buys need no re-approve
+      }
+    }
+    toast(`⛓ Buying — ${fmt(p)} ⚡WATT on ${c.name}${fromCredit?' (from credit)':''}…`,'gold',9000);
+    await (await g.buyUpgrade(kind)).wait();
+    if(fromCredit) S.watt=Math.max(0,(S.watt||0)-p);  // reflect credit spend until the sync corrects it exactly
+    applyUpgrade(k);  // bump local level + save() so the UI reflects it immediately
+    toast(`⛓ ${names_up(k)} saved on-chain (Lv ${S.upg[k]}) — persists across devices now`,'grn',9000);
+    w3Refresh&&w3Refresh();
+  }catch(e){ SFX.err(); toast('upgrade cancelled: '+(''+(e&&(e.reason||e.message)||e)).slice(0,80),'red',8000); }
+  finally{ _upBusy=false; }
+}
+function names_up(k){ return ({power:'⚡ Power grid',cooling:'❄ Cooling',rack:'🏠 Garage expansion',rackgpu:'🗄 Rack expansion'})[k]||'Upgrade'; }
+/* legacy fallback: pay stakers directly, apply level locally (pre-contract). */
+async function ocBuyUpgradeLegacy(k,p,c){
   _upBusy=true;
   try{
     if(await ocPayToStakers(BigInt(Math.round(p))*10n**18n, fmt(p)+' ⚡WATT')){
@@ -6414,9 +6681,26 @@ async function ocTopUp(amt){
   if(_upBusy){ toast('A payment is already in flight…','gold'); return; }
   _upBusy=true;
   try{
-    if(!(await ocPayToStakers(BigInt(amt)*10n**18n, fmt(amt)+' ⚡WATT'))) return;
-    S.watt+=amt; save(); SFX.buy();
-    toast(`⛓ ${fmt(amt)} ⚡ GAME CREDIT loaded — upgrades now buy without more signatures`,'gold',10000);
+    if(garageAddr()){
+      /* record credit ON-CHAIN via GarageUpgrades.topUp (it funds the stakers
+         pool itself) so the credit survives a device/cache change too. */
+      const E=await poolEthers();
+      const g=await garageContract(true);
+      const wei=BigInt(amt)*10n**18n;
+      const watt=new E.Contract(c.economy.wattV2, POOL_ABI.erc20, await (new E.BrowserProvider(w3Eth())).getSigner());
+      if((await watt.allowance(W3.addr, garageAddr()))<wei){
+        toast('Approve WATT to the garage contract…','gold',8000);
+        await (await watt.approve(garageAddr(), wei)).wait();
+      }
+      toast(`⛓ Loading ${fmt(amt)} ⚡ credit on-chain…`,'gold',9000);
+      await (await g.topUp(BigInt(amt))).wait();
+      S.watt+=amt; save(); SFX.buy();
+      toast(`⛓ ${fmt(amt)} ⚡ GAME CREDIT loaded on-chain — persists across devices, buys need no more signatures`,'gold',11000);
+    } else {
+      if(!(await ocPayToStakers(BigInt(amt)*10n**18n, fmt(amt)+' ⚡WATT'))) return;
+      S.watt+=amt; save(); SFX.buy();
+      toast(`⛓ ${fmt(amt)} ⚡ GAME CREDIT loaded — upgrades now buy without more signatures`,'gold',10000);
+    }
     renderHud&&renderHud(); if(typeof renderUpg==='function'&&$('m-upg')&&$('m-upg').classList.contains('open')) renderUpg();
     w3Refresh&&w3Refresh();
   }catch(e){ SFX.err(); toast('top-up cancelled: '+(''+(e&&(e.reason||e.message)||e)).slice(0,80),'red',8000); }
@@ -7897,7 +8181,7 @@ $('sell-pol').onclick=()=>sellCoin('pol');
 $('sell-alt').onclick=()=>sellCoin('alt');
 $('b-share').onclick=shareX;
 $('b-reset').onclick=()=>{ if(confirm('Wipe your entire garage and start over? (only the '+(S&&S.mode==='live'?'LIVE':'DEMO')+' world is wiped)')){ localStorage.removeItem(keyForMode(S?S.mode:'demo')); location.reload(); } };
-$('b-wallet').onclick=()=>{ openModal('m-web3'); renderWallet(); if(w3Has()&&!W3.addr) w3Connect(); };
+$('b-wallet').onclick=()=>{ if(!W3.addr) return openWalletPicker(false); openModal('m-web3'); renderWallet(); };
 $('bench-close').onclick=()=>closeBench();
 $('bench-shop').onclick=()=>{ openModal('m-shop'); renderShop(); };
 /* ================= WALK CONTROLLER =================
@@ -7921,6 +8205,28 @@ function walkClamp(cur,next,lo,hi){
   if(next>hi) return Math.max(hi,Math.min(cur,next));   // outside high: only inward
   return Math.min(lo,Math.max(cur,next));               // outside low: only inward
 }
+/* ---------- solid-object collision ----------
+   The player (and their 3rd-person avatar) must not pass through furniture.
+   Colliders are axis-aligned XZ footprints built live from the real placed
+   objects, so they always match the current farm. Everything is referenced
+   through `typeof` guards so a stand-alone test harness (no scene) still runs. */
+const WALK_R=0.5;                               // body radius padding
+function walkColliders(){
+  const C=[];
+  if(typeof deskAt!=='undefined' && typeof SLOTS!=='undefined' && typeof DESK!=='undefined'){
+    for(const k in deskAt){ const s=+k; const sl=SLOTS[s]; if(!sl) continue;
+      // desk body + a little depth for the chair tucked on the +z side
+      C.push({x0:sl[0]-DESK.W/2, z0:sl[1]-DESK.D/2, x1:sl[0]+DESK.W/2, z1:sl[1]+DESK.D/2+0.6}); }
+  }
+  if(typeof towerVis!=='undefined' && towerVis && towerVis.visible){ const p=towerVis.position;
+    C.push({x0:p.x-1.3, z0:p.z-1.1, x1:p.x+1.3, z1:p.z+1.1}); }
+  if(typeof badgeMesh!=='undefined' && badgeMesh && badgeMesh.visible){ const bz=(typeof ROOM!=='undefined'?-ROOM.D/2+1.4:-6.6);
+    C.push({x0:-0.9, z0:bz-0.9, x1:0.9, z1:bz+0.9}); }                        // genesis badge pedestal
+  if(typeof farmG!=='undefined' && farmG && farmG.containers){ farmG.containers.forEach(c=>{ if(!c||!c.visible) return;
+    C.push({x0:c.position.x-2.6, z0:9.0, x1:c.position.x+2.6, z1:20.9}); }); } // shipping containers
+  return C;
+}
+function walkSolid(x,z,C){ for(const b of C){ if(x>b.x0-WALK_R && x<b.x1+WALK_R && z>b.z0-WALK_R && z<b.z1+WALK_R) return true; } return false; }
 function walkBlocked(){
   return TRAILER || SIT.on || OS.open || benchOpen || (typeof PL!=='undefined'&&PL.open) || !running ||
     ['m-shop','m-upg','m-stats','m-web3','m-pool'].some(id=>$(id)&&$(id).classList.contains('open'));
@@ -7978,6 +8284,7 @@ if(matchMedia('(pointer:coarse)').matches || ('ontouchstart' in window)){
   }
 }
 function tickWalk(dt){
+  fpTick(dt,!!(WALK.f||WALK.b||WALK.l||WALK.r));
   const blocked=walkBlocked();
   if(blocked){ if(WALK.f||WALK.b||WALK.l||WALK.r) walkStop(); walkVel.multiplyScalar(0);
     if(LOOK.on&&document.exitPointerLock) document.exitPointerLock(); return; }
@@ -7995,8 +8302,22 @@ function tickWalk(dt){
   const step=walkVel.clone().multiplyScalar(dt);
   // clamp against the room on the camera itself, then move the target by the same
   // delta so the orbit framing is preserved exactly
-  const nx=walkClamp(cam.position.x,cam.position.x+step.x,-WALKBOX.x,WALKBOX.x);
-  const nz=walkClamp(cam.position.z,cam.position.z+step.z,WALKBOX.zMin,WALKBOX.zMax);
+  let nx=walkClamp(cam.position.x,cam.position.x+step.x,-WALKBOX.x,WALKBOX.x);
+  let nz=walkClamp(cam.position.z,cam.position.z+step.z,WALKBOX.zMin,WALKBOX.zMax);
+  // block solid objects on the BODY position (the 3rd-person avatar leads the camera),
+  // axis-separated so the player slides along a desk edge instead of sticking.
+  if(typeof FP!=='undefined' && FP.mode!=='orbit'){
+    const C=walkColliders();
+    if(C.length){
+      let offx=0, offz=0;
+      if(FP.mode==='third'){ const f=fpFlat(); offx=f.x*FP.dist; offz=f.z*FP.dist; }
+      // only enforce if the body isn't already inside something (so it can walk back out)
+      if(!walkSolid(cam.position.x+offx, cam.position.z+offz, C)){
+        if(walkSolid(nx+offx, cam.position.z+offz, C)) nx=cam.position.x;
+        if(walkSolid(nx+offx, nz+offz, C))            nz=cam.position.z;
+      }
+    }
+  }
   const dx=nx-cam.position.x, dz=nz-cam.position.z;
   cam.position.x=nx; cam.position.z=nz;
   controls.target.x+=dx; controls.target.z+=dz;
@@ -8029,6 +8350,85 @@ document.addEventListener('mousemove',e=>{
   sph.makeSafe();
   controls.target.copy(cam.position).add(dir.setFromSpherical(sph));
 });
+/* ---------- VIEWS: first person · third person · overview ----------
+   Starting to walk (keys or joystick) puts you in FIRST PERSON (eye height, head bob).
+   V or the 👁 button cycles first person → THIRD PERSON (your own avatar — skin or
+   Milady — walks ahead of the camera) → OVERVIEW orbit. Drag (mouse/touch) or F turns
+   your head. Orientation lives in controls.target, kept 4 units ahead so OrbitControls'
+   own clamps never fight it. Lounge presence reports your body position (bodyPos). */
+const FP={ mode:'orbit', dist:4.6, auto:true, eye:1.62*2.25, bob:0, saved:null, drag:null, av:null, avKey:'' };
+const TP_DIST=4.6, TP_UP=1.35;
+function fpDir(){ const d=new THREE.Vector3().subVectors(controls.target,cam.position); if(d.lengthSq()<1e-6) cam.getWorldDirection(d); return d.normalize(); }
+function fpFlat(){ const d=fpDir(); d.y=0; if(d.lengthSq()<1e-6) d.set(0,0,-1); return d.normalize(); }
+function fpBody(){ return FP.mode==='third' ? cam.position.clone().addScaledVector(fpFlat(),FP.dist).setY(0) : cam.position.clone().setY(0); }
+function fpAvatar(on){
+  if(!on){ if(FP.av){ scene.remove(FP.av); FP.av=null; FP.avKey=''; } return; }
+  let lk={}; try{ lk=(window.MGSKIN&&window.MGSKIN.myLook())||{}; }catch(_){}
+  const look={ ...lk, skin: lk.skin||'Male_Adult_01', emote:null };
+  const key=look.skin+'|'+(look.milady||'');
+  if(FP.av&&FP.avKey===key) return;
+  if(FP.av) scene.remove(FP.av);
+  if(!window.MGSKIN){ FP.av=null; return; }
+  FP.av=window.MGSKIN.avatar(look); FP.avKey=key; scene.add(FP.av);
+}
+function fpSetMode(m,pullBack){
+  if(TRAILER) return;
+  const prev=FP.mode; if(m===prev) return;
+  if(prev==='orbit'){ FP.saved={ maxPolar:controls.maxPolarAngle }; controls.maxPolarAngle=Math.PI*0.97; controls.enabled=false;
+    const d=fpDir(); d.y=Math.max(-0.35,Math.min(0.2,d.y)); d.normalize(); controls.target.copy(cam.position).addScaledVector(d,4); }
+  if(prev==='first'&&m==='third'){ const f=fpFlat(); FP.dist=TP_DIST; cam.position.addScaledVector(f,-TP_DIST); }      // keep your body where it stood
+  if(prev==='third'&&m==='first'){ const f=fpFlat(); cam.position.addScaledVector(f,FP.dist); }
+  if(m==='orbit'){
+    controls.enabled=!LOOK.on; if(FP.saved) controls.maxPolarAngle=FP.saved.maxPolar;
+    if(pullBack){ const f=fpFlat(); if(prev==='first') cam.position.addScaledVector(f,-4); cam.position.y+=1.6; controls.target.y=Math.max(1.1,controls.target.y-0.6); }
+  }
+  FP.mode=m; fpAvatar(m==='third');
+  if(m!=='orbit'){ const d=fpDir(); controls.target.copy(cam.position).addScaledVector(d,4); }
+  fpButton();
+}
+function fpEnter(){ fpSetMode('first'); }
+function fpExit(pullBack){ fpSetMode('orbit',pullBack); }
+function fpToggle(){ const nxt={ orbit:'first', first:'third', third:'orbit' }[FP.mode]; FP.auto=nxt!=='orbit'; fpSetMode(nxt,true); }
+function fpButton(){ const b=$('b-view'); if(b){ b.textContent={ orbit:'👁 VIEW', first:'👁 1ST', third:'👁 3RD' }[FP.mode]; b.classList.toggle('accent',FP.mode!=='orbit'); } }
+function fpTick(dt,moving){
+  const blocked=walkBlocked();
+  if(FP.av) FP.av.visible=!blocked&&FP.mode==='third';
+  if(blocked) return;
+  if(moving&&FP.mode==='orbit'&&FP.auto) fpEnter();
+  if(FP.mode==='orbit') return;
+  controls.enabled=false;                                   // drag = turn your head, not orbit
+  const sp=walkVel.length(), d=fpDir();
+  if(FP.mode==='first'){
+    FP.bob+=dt*sp*1.15;
+    const want=FP.eye+(sp>0.5?Math.sin(FP.bob)*0.035*2.25:0);
+    cam.position.y+=(want-cam.position.y)*Math.min(1,dt*8);
+  } else {
+    cam.position.y+=((FP.eye+TP_UP)-cam.position.y)*Math.min(1,dt*6);
+    fpAvatar(true);
+    { // keep your body inside the room; pull the camera in near walls instead of clipping out
+      const f=fpFlat(), b=fpBody(), WB=WALKBOX;
+      b.x=Math.max(-WB.x,Math.min(WB.x,b.x)); b.z=Math.max(WB.zMin,Math.min(WB.zMax,b.z));
+      let dd=TP_DIST; while(dd>1.4){ const cx=b.x-f.x*dd, cz=b.z-f.z*dd; if(cx>=-WB.x&&cx<=WB.x&&cz>=WB.zMin&&cz<=WB.zMax) break; dd-=0.2; }
+      FP.dist=dd; cam.position.x=b.x-f.x*dd; cam.position.z=b.z-f.z*dd; }
+    if(FP.av){ const f=fpFlat(), b=fpBody(); FP.av.position.set(b.x,0,b.z); FP.av.rotation.y=Math.atan2(f.x,f.z);
+      let lk={}; try{ lk=(window.MGSKIN&&window.MGSKIN.myLook())||{}; }catch(_){}
+      FP.av.userData.update&&FP.av.userData.update({ look:{ ...lk, emote:null }, sit:false }); }
+  }
+  controls.target.copy(cam.position).addScaledVector(d,4);
+}
+function fpLook(dx,dy,sens){
+  const dir=new THREE.Vector3().subVectors(controls.target,cam.position);
+  const sph=new THREE.Spherical().setFromVector3(dir);
+  sph.theta-=dx*sens; sph.phi=Math.min(Math.PI-0.25,Math.max(0.25,sph.phi+dy*sens)); sph.makeSafe();
+  controls.target.copy(cam.position).add(dir.setFromSpherical(sph));
+}
+renderer.domElement.addEventListener('pointerdown',e=>{ if(FP.mode==='orbit'||LOOK.on) return; FP.drag={id:e.pointerId,x:e.clientX,y:e.clientY}; });
+addEventListener('pointermove',e=>{ if(FP.mode==='orbit'||!FP.drag||e.pointerId!==FP.drag.id||walkBlocked()) return; const dx=e.clientX-FP.drag.x, dy=e.clientY-FP.drag.y; FP.drag.x=e.clientX; FP.drag.y=e.clientY; fpLook(dx,dy,e.pointerType==='touch'?0.0055:0.0042); });
+addEventListener('pointerup',e=>{ if(FP.drag&&e.pointerId===FP.drag.id) FP.drag=null; });
+addEventListener('pointercancel',()=>{ FP.drag=null; });
+renderer.domElement.addEventListener('wheel',e=>{ if(FP.mode!=='orbit'&&e.deltaY>0){ FP.auto=false; fpExit(true); } },{passive:true});
+addEventListener('keydown',e=>{ if(e.target.matches&&e.target.matches('input,textarea,select')) return; if((e.key==='v'||e.key==='V')&&!walkBlocked()) fpToggle(); });
+window.MGFP={ enter:fpEnter, exit:fpExit, toggle:fpToggle, mode:(m)=>fpSetMode(m,true), bodyPos:fpBody, get on(){ return FP.mode!=='orbit'; }, get view(){ return FP.mode; }, set auto(v){ FP.auto=!!v; } };
 /* ---------- menu hotkeys (number row — the letters belong to movement now) ---------- */
 addEventListener('keydown',e=>{
   if(e.target.matches('input,textarea,select')) return;
@@ -8107,6 +8507,12 @@ function frame(t){
   }}
   if(typeof PL!=='undefined'&&PL.open){ poseLabLoop(dt); return; }
   if(benchOpen){ benchLoop(dt); return; }
+  // Live trailer: let the running game loop (fans, parts, avatar, sim) animate
+  // naturally, and have the trailer own the camera + 2D composite each frame.
+  if(window.__TLIVE && typeof trailerFrame==='function' && trailerFrame){
+    const tt=(window.__TPAUSE!=null)? window.__TPAUSE : (performance.now()-window.__TLIVE)/1000;
+    trailerFrame(tt);
+  }
   renderer.render(scene,cam);
 }
 requestAnimationFrame(frame);
@@ -8140,14 +8546,15 @@ async function init(){
     running=true;
     if(TRAILER) startTrailerScript();
   };
-  if(TRAILER){ $('splash').style.display='none'; trailerSetup(); }
+  if(TRAILER){ $('splash').style.display='none'; if(DEMO) demoSetup(); else trailerSetup(); }
   window.MG={ get S(){return S;}, tick:s=>{for(let i=0;i<s*10;i++)simTick(SIMDT);renderHud();},
-    give:w=>{S.watt+=w;renderHud();}, save, mintPC, buyItem, installPart, forceBlock, cam, controls, scene, THREE,
+    give:w=>{S.watt+=w;renderHud();}, save, mintPC, buyItem, installPart, forceBlock, cam, controls, scene, THREE, renderer, AU,
     openOS, closeOS, setOC, setRigNet, rebootRig, openBench, closeBench, openTowerBench, syncTowerBuild, spinFans, collectFans, W3, WEB3CFG, w3Connect, w3Refresh,
     joinPool, hostPool, closePool, buyValidator, exitValidators, repairRig, togglePower, openPoolHub, switchNet, POOLS,
     stakeShop, unstakeShop, buildFarm, sitDown, standUp, eligibleSlots, farmStatus,
     ocAskPayoutAddr, ocAddrLooksOk, ocEnsurePayoutAddr,   // payout-address popup (testable)
     WALK, tickWalk, walkStop, walkBlocked, WALKBOX,   // WALKBOX for the lounge-room bounds swap
+    walkColliders, walkSolid,                         // object-collision (testable)
     get SIT(){return SIT;},                       // live seated state for the netcode
     state:()=>JSON.parse(JSON.stringify(S)) };
 }
@@ -8385,9 +8792,707 @@ window.MGPOSE={ open:openPoseLab, close:closePoseLab, table:poseExportText, stat
     return {x:+v.x.toFixed(4), y:+v.y.toFixed(4), z:+v.z.toFixed(4)}; },
   posed:(ctx,key,fit)=>{ const v=poseSize(poseMesh(ctx,key,fit||1)); return {x:+v.x.toFixed(4),y:+v.y.toFixed(4),z:+v.z.toFixed(4)}; } };
 
+/* ================= DEMO MODE (?demo=1) =================
+   A scripted 100-second film of the farm being built from nothing, for the
+   SLOPTOBER movie. The crew are the owner's NFTs: NuCash (in his Rari High
+   Tops) and Red Guy (the ball hero) build the garage lab, the Tengria
+   engineers rack the storage containers while Hemp Wassie and Viking Wassie
+   haul crates, the CyberFiction crew fills the warehouse, Party Bot runs the
+   WATTxchange DEX screen, the normies watch — and the finale pulls up to a
+   world of nodes lighting up: total decentralization.
+
+   Everything runs on a virtual clock (window.__demoStart / __demoStep) so a
+   headless renderer can capture it frame by frame at 1920x1080. */
+const DEMO_LEN=100, DW=1920, DH=1080;
+let demoComp=null, demoX=null, demoT=0, demoEvents=[], demoPops=[], demoActors=[], demoAnimTex=[];
+let demoDex=null, demoNodes=null, demoReadyP=null, demoCast={};
+
+function demoRand(seed){ return ()=>{ seed|=0; seed=seed+0x6D2B79F5|0; let t=Math.imul(seed^seed>>>15,1|seed);
+  t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function dEase(x){ return x<0?0:x>1?1:x*x*(3-2*x); }
+function dBack(x){ if(x<=0) return 0.001; if(x>=1) return 1; const c=1.9; return 1+(c+1)*Math.pow(x-1,3)+c*Math.pow(x-1,2); }
+function dLerp(a,b,t){ return a.map((v,i)=>v+(b[i]-v)*t); }
+
+function demoSetup(){
+  ['hud','wallet','feed'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display='none'; });
+  demoComp=cnv(DW,DH); demoX=demoComp.getContext('2d');
+  demoReadyP=demoLoadAssets().then(()=>{ window.__demoReady=true; })
+    .catch(e=>{ console.error('[demo] asset load failed',e); window.__demoError=String(e&&e.message||e); });
+}
+
+/* ---------- textures ---------- */
+const DTL=new THREE.TextureLoader();
+function dTex(f){ return new Promise((res,rej)=>DTL.load('./demo/'+f,t=>{ t.colorSpace=THREE.SRGBColorSpace; res(t); },undefined,rej)); }
+const DEMO_TEX={};
+async function demoLoadAssets(){
+  const files=['tengria_1188','tengria_1189','partybot','npc_normie','cyberfiction_6344','cyberfiction_6343',
+    'hemp_wassie','viking_wassie','rari_high_tops','red_monster','mcafee_hotdogs','trash_monster_1111',
+    'unicorn_sheet','rave_sheet','mcafee_sheet','trash_sheet'];
+  const ts=await Promise.all(files.map(f=>dTex(f+'.jpg')));
+  files.forEach((f,i)=>DEMO_TEX[f]=ts[i]);
+  const chars=['nucash_front','nucash_side','nucash_back','hemp_wassie','viking_wassie','tengria_1188','tengria_1189',
+    'partybot','npc_normie','cyberfiction_6344','cyberfiction_6343'];
+  const cs=await Promise.all(chars.map(f=>dTex('char_'+f+'.png')));
+  chars.forEach((f,i)=>DEMO_TEX['char_'+f]=cs[i]);
+  try{ const g=await loader.loadAsync('./demo/redguy.glb'); DEMO_TEX.redguy=g.scene; }
+  catch(e){ console.warn('[demo] redguy.glb missing, using a red ball',e); }
+  // Rigged 3D cast built in Blender (sloptober-fest/cast3d): one GLB per character with
+  // AN_ actions idle/walk/carry/work/workUp/cheer/dance. Missing ones fall back to the cut-outs.
+  await Promise.all(CAST3D.map(async n=>{ try{ DEMO_GLB[n]=await loader.loadAsync('./demo/cast/'+n+'.glb'); }
+    catch(e){ console.warn('[demo] no 3D model for',n); } }));
+}
+const CAST3D=['nucash','cyberfiction_6343','cyberfiction_6344','npc_normie','tengria_1188','tengria_1189',
+  'partybot','hemp_wassie','viking_wassie','redguy'];
+const DEMO_GLB={};
+
+
+/* ---------- characters ----------
+   Every NFT character is its own art (cut out of the NFT / its Grok 3D render),
+   standing in the 3D farm and always turned to the camera. NuCash has front,
+   side and back views and shows whichever matches the way he is walking.
+   Red Guy is the NFT's real 3D model (a ball) and bounces. */
+function nameTag(text, color){
+  const c=cnv(640,110), x=c.getContext('2d');
+  x.font='900 54px Segoe UI,Arial'; const w=Math.min(620,x.measureText(text).width+60);
+  x.fillStyle='rgba(8,6,20,.78)'; x.beginPath(); x.roundRect((640-w)/2,8,w,92,46); x.fill();
+  x.strokeStyle=color; x.lineWidth=5; x.stroke();
+  x.fillStyle='#fff'; x.textAlign='center'; x.textBaseline='middle'; x.fillText(text,320,56);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:ctex(c),depthWrite:false,transparent:true}));
+  s.scale.set(2.9,0.5,1); return s;
+}
+function boxMesh(w,h,d,mat){ return new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); }
+const SHADOW_MAT=new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.38,depthWrite:false});
+function standeePlane(tex,h){
+  const img=tex.image, w=h*img.width/img.height;
+  const m=new THREE.MeshStandardMaterial({map:tex,alphaTest:0.45,side:THREE.DoubleSide,roughness:1,metalness:0,
+    emissive:0xffffff,emissiveMap:tex,emissiveIntensity:0.55});
+  const pl=new THREE.Mesh(new THREE.PlaneGeometry(w,h),m); pl.position.y=h/2; return pl;
+}
+/* ---------- jointed cut-out characters ----------
+   Each NFT render is split into torso, arms and legs. Limbs hinge at the
+   shoulder / hip and swing forward and back in 3D, so a character walking
+   across the room takes real strides, reaches up to the racks and holds a
+   crate in both arms. Rects are % of the image: [x0,y0,x1,y1, pivotX,pivotY]. */
+const CHAR_RIG={
+  char_cyberfiction_6343:{rest:[0.08,-0.08],arms:[[0,20,21,62,18,24],[79,20,100,62,82,24]],legs:[[0,52,50,100,32,54],[50,52,100,100,68,54]]},
+  char_cyberfiction_6344:{arms:[[0,20,22,72,19,24],[80,20,100,62,82,24]],legs:[[0,52,50,100,35,54],[50,52,100,100,65,54]]},
+  char_npc_normie:{rest:[0.12,-0.12],arms:[[0,22,18,64,14,25],[82,22,100,64,86,25]],legs:[[0,54,50,100,33,56],[50,54,100,100,67,56]]},
+  char_nucash_front:{rest:[0.6,-0.6],arms:[[0,17,27,56,24,20],[73,17,100,56,76,20]],legs:[[0,50,50,100,37,52],[50,50,100,100,63,52]]},
+  char_nucash_back:{rest:[0.6,-0.6],arms:[[0,17,27,56,24,20],[73,17,100,56,76,20]],legs:[[0,50,50,100,37,52],[50,50,100,100,63,52]]},
+  char_tengria_1188:{arms:[[0,16,28,70,26,20],[79,16,100,60,81,20]],legs:[[0,52,52,100,40,54],[52,52,100,100,63,54]]},
+  char_tengria_1189:{arms:[[0,20,34,42,26,24],[73,22,100,56,75,25]],legs:[[0,62,50,100,40,64],[50,62,100,100,61,64]]},
+  char_partybot:{arms:[[0,10,25,40,22,34],[74,34,100,58,74,40]],legs:[[0,62,50,100,38,64],[50,62,100,100,62,64]]},
+  char_hemp_wassie:{arms:[],legs:[[0,88,45,100,30,89],[45,88,100,100,62,89]],robe:true},
+  char_viking_wassie:{arms:[[0,55,22,80,20,58],[76,52,100,70,78,54]],legs:[[0,86,45,100,30,87],[45,86,100,100,60,87]],robe:true},
+};
+function partMat(tex){ return new THREE.MeshStandardMaterial({map:tex,alphaTest:0.45,side:THREE.DoubleSide,roughness:1,metalness:0,
+  emissive:0xffffff,emissiveMap:tex,emissiveIntensity:0.55}); }
+function canvasTex(c){ const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t; }
+/* builds a jointed figure (feet at y=0, facing +z) from one texture key */
+function makeRigView(key,h){
+  const img=DEMO_TEX[key].image, W=img.width, H=img.height, k=h/H;
+  const spec=CHAR_RIG[key]||{arms:[],legs:[]};
+  const src=cnv(W,H), sx=src.getContext('2d'); sx.drawImage(img,0,0);
+  const px=sx.getImageData(0,0,W,H).data, own=new Int8Array(W*H).fill(-1);
+  const parts=[...spec.arms.map(r=>({r,kind:'arm'})),...spec.legs.map(r=>({r,kind:'leg'}))];
+  parts.forEach((p,pi)=>{ const [x0,y0,x1,y1]=p.r.map(v=>v/100);
+    for(let y=Math.floor(y0*H);y<Math.min(H,Math.ceil(y1*H));y++) for(let x=Math.floor(x0*W);x<Math.min(W,Math.ceil(x1*W));x++){
+      const i=y*W+x; if(own[i]<0&&px[i*4+3]>0) own[i]=pi; } });
+  const g=new THREE.Group(), limbs={armL:null,armR:null,legL:null,legR:null};
+  const jr=0.05*H;
+  // torso keeps everything else, plus a disc of each joint so a swung limb never leaves a hole
+  const tc=cnv(W,H), tx=tc.getContext('2d'), tid=tx.createImageData(W,H);
+  for(let i=0;i<W*H;i++){ let keep=own[i]<0;
+    if(!keep){ const p=parts[own[i]], x=i%W, y=(i/W)|0, d=Math.hypot(x-p.r[4]/100*W,y-p.r[5]/100*H); keep=d<jr; }
+    if(keep){ tid.data[i*4]=px[i*4]; tid.data[i*4+1]=px[i*4+1]; tid.data[i*4+2]=px[i*4+2]; tid.data[i*4+3]=px[i*4+3]; } }
+  tx.putImageData(tid,0,0);
+  const torso=new THREE.Mesh(new THREE.PlaneGeometry(W*k,H*k),partMat(canvasTex(tc))); torso.position.y=H*k/2; g.add(torso);
+  const counters={arm:0,leg:0};
+  parts.forEach((p,pi)=>{
+    const [x0,y0,x1,y1,pvx,pvy]=p.r, X0=Math.floor(x0/100*W), Y0=Math.floor(y0/100*H), X1=Math.ceil(x1/100*W), Y1=Math.ceil(y1/100*H);
+    const cw=X1-X0, ch=Y1-Y0, c=cnv(cw,ch), cx=c.getContext('2d'), id=cx.createImageData(cw,ch);
+    for(let y=0;y<ch;y++) for(let x=0;x<cw;x++){ const i=(y+Y0)*W+(x+X0), o=(y*cw+x)*4;
+      if(own[i]===pi){ id.data[o]=px[i*4]; id.data[o+1]=px[i*4+1]; id.data[o+2]=px[i*4+2]; id.data[o+3]=px[i*4+3]; } }
+    cx.putImageData(id,0,0);
+    const geo=new THREE.PlaneGeometry(cw*k,ch*k);
+    const pvX=pvx/100*W, pvY=pvy/100*H; // pivot in image px
+    geo.translate(((X0+cw/2)-pvX)*k, (pvY-(Y0+ch/2))*k, 0);
+    const m=new THREE.Mesh(geo,partMat(canvasTex(c)));
+    const pivot=new THREE.Group(); pivot.add(m);
+    pivot.position.set((pvX-W/2)*k,(H-pvY)*k,p.kind==='arm'?0.03:-0.03);
+    g.add(pivot);
+    const n=counters[p.kind]++, name=(p.kind==='arm'?'arm':'leg')+(n===0?'L':'R'); limbs[name]=pivot;
+  });
+  g.userData={limbs,robe:!!spec.robe,h,rest:spec.rest||[0,0]};
+  return g;
+}
+/* 3D actor: the character's rigged Blender model, scaled to the standee height, with its actions. */
+function makeModelActor(name,o){
+  const g=DEMO_GLB[name], root=new THREE.Group(), body=new THREE.Group(); root.add(body);
+  const m=SkeletonUtils.clone(g.scene);
+  const b=new THREE.Box3().setFromObject(m), sz=b.getSize(new THREE.Vector3());
+  const k=o.h/sz.y; m.scale.setScalar(k); m.position.y=-b.min.y*k;
+  m.traverse(c=>{ if(c.isMesh){ c.castShadow=true; c.frustumCulled=false;
+    if(c.material&&c.material.map){ c.material.map.colorSpace=THREE.SRGBColorSpace; c.material.emissive=new THREE.Color(0xffffff);
+      c.material.emissiveMap=c.material.map; c.material.emissiveIntensity=0.35; } } });
+  body.add(m);
+  const mixer=new THREE.AnimationMixer(m), acts={};
+  for(const clip of g.animations){ const n=clip.name.replace(/^AN_/,''); const a=mixer.clipAction(clip); a.play(); a.setEffectiveWeight(0); acts[n]=a; }
+  const sh=new THREE.Mesh(new THREE.CircleGeometry(0.75,28),SHADOW_MAT); sh.rotation.x=-Math.PI/2; sh.position.y=0.02; root.add(sh);
+  const tag=nameTag(o.tag,'#'+(o.tagColor||0x2ee6d6).toString(16).padStart(6,'0')); tag.position.y=o.h+0.45; root.add(tag);
+  const crate=boxMesh(0.8,0.6,0.6,new THREE.MeshStandardMaterial({color:0x7a5a35,roughness:.9}));
+  crate.position.set(0,o.h*0.5,0.55); crate.visible=false; body.add(crate);
+  root.userData={kind:'model',body,mixer,acts,crate,h:o.h,mode:null,prev:null,since:0};
+  scene.add(root); return root;
+}
+/* o: {views:{front,back?} (texture keys), h, bust, tag, tagColor} */
+function makeStandee(o){
+  { const n=o.views.front.replace(/^char_/,'').replace(/_front$/,''); if(DEMO_GLB[n]) return makeModelActor(n,o); }
+  const root=new THREE.Group(), body=new THREE.Group(); root.add(body);
+  const views={};
+  for(const k of ['front','back']){ if(!o.views[k]) continue; const v=makeRigView(o.views[k],o.h); v.visible=k==='front'; body.add(v); views[k]=v; }
+  const sh=new THREE.Mesh(new THREE.CircleGeometry(0.75,28),SHADOW_MAT); sh.rotation.x=-Math.PI/2; sh.position.y=0.02; root.add(sh);
+  const tag=nameTag(o.tag,'#'+(o.tagColor||0x2ee6d6).toString(16).padStart(6,'0'));
+  tag.position.y=o.h+0.45; root.add(tag);
+  const crate=boxMesh(0.95,0.75,0.75,new THREE.MeshStandardMaterial({color:0x7a5a35,roughness:.9}));
+  crate.visible=false; body.add(crate);
+  root.userData={kind:'standee',body,views,crate,h:o.h,bustY:0};
+  scene.add(root); return root;
+}
+/* Red Guy: a ball-shaped hero who bounces and rolls (the NFT's own 3D model). */
+function makeRedGuy(){
+  if(DEMO_GLB.redguy) return makeModelActor('redguy',{h:1.7,tag:'RED GUY',tagColor:0xff3b3b});
+  const root=new THREE.Group(), body=new THREE.Group(); root.add(body);
+  let m;
+  if(DEMO_TEX.redguy){ m=DEMO_TEX.redguy.clone(true);
+    const b=new THREE.Box3().setFromObject(m), s=b.getSize(new THREE.Vector3()), c=b.getCenter(new THREE.Vector3());
+    const k=1.7/Math.max(s.x,s.y,s.z); m.scale.setScalar(k); m.position.set(-c.x*k,-c.y*k,-c.z*k);
+  } else m=new THREE.Mesh(new THREE.SphereGeometry(0.85,24,18),new THREE.MeshStandardMaterial({color:0xd8202a}));
+  const pivot=new THREE.Group(); pivot.add(m); pivot.position.y=0.85; body.add(pivot);
+  const sh=new THREE.Mesh(new THREE.CircleGeometry(0.8,28),SHADOW_MAT); sh.rotation.x=-Math.PI/2; sh.position.y=0.02; root.add(sh);
+  const tag=nameTag('RED GUY','#ff3b3b'); tag.position.y=2.35; root.add(tag);
+  root.userData={kind:'ball',body,pivot};
+  scene.add(root); return root;
+}
+
+/* ---------- schedules: who walks where, and when ---------- */
+const WALK_SPD=4.2;
+function standFor(slot){
+  const [x,z,sy]=SLOTS[slot];
+  if(slot<9) return {p:[x-0.9,z+2.1], look:[x-1.0,z], up:false};
+  const side=x<0?1:-1;
+  if(slot<21) return {p:[x+side*1.7,z+0.2], look:[x,z], up:sy>1.5};
+  return {p:[x+side*1.75,z+0.25], look:[x,z], up:sy>1.5};
+}
+function newActor(obj, spawn, appear){
+  const a={obj, segs:[], spawn, appear:appear||0, pos:[...spawn], seed:demoActors.length*1.7};
+  demoActors.push(a); return a;
+}
+function seg(a,t0,t1,mode,from,to,look){ a.segs.push({t0,t1,mode,from:[...from],to:[...to],look:look||null}); return t1; }
+/* ---------- walkable floor ----------
+   The real scene (desks, rack frames, container and warehouse walls, lab walls)
+   is scanned into a 0.2-unit floor grid; walks follow an A* path around it. */
+const NAV={x0:-17,z0:-12,cs:0.2,w:170,h:235,block:null,free:null};
+function navBuild(){
+  const {x0,z0,cs,w,h}=NAV, blk=new Uint8Array(w*h);
+  const owner=NAV.owner=new Array(w*h); let cur='';
+  const mark=(x,z)=>{ const i=Math.floor((x-x0)/cs), j=Math.floor((z-z0)/cs); if(i>=0&&j>=0&&i<w&&j<h){ blk[j*w+i]=1; owner[j*w+i]=cur; } };
+  const skip=new Set(); demoActors.forEach(a=>a.obj.traverse(o=>skip.add(o)));
+  if(demoNodes) Object.values(demoNodes).forEach(n=>n&&n.traverse&&n.traverse(o=>skip.add(o)));
+  const A=new THREE.Vector3(),B=new THREE.Vector3(),C=new THREE.Vector3(),M=new THREE.Matrix4(),IM=new THREE.Matrix4();
+  scene.updateMatrixWorld(true);
+  scene.traverse(o=>{
+    if(!o.isMesh||skip.has(o)||!o.geometry||!o.geometry.attributes.position) return;
+    let vis=true; for(let q=o;q;q=q.parent) if(q.visible===false){ vis=false; break; } if(!vis) return;
+    let ch=false; for(let q=o;q;q=q.parent) if((q.userData&&q.userData.chairSlot!==undefined)||q.name==='chairG'){ ch=true; break; } if(ch) return;
+    const pos=o.geometry.attributes.position, idx=o.geometry.index;
+    const nTri=idx?idx.count/3:pos.count/3; if(nTri>60000) return;
+    { const chain=[]; for(let q=o;q&&chain.length<6;q=q.parent) chain.push((q.name||q.type)+(q.userData&&Object.keys(q.userData).length?'{'+Object.keys(q.userData).join(',')+'}':'')); const bb=new THREE.Box3().setFromObject(o); cur=chain.join('<')+' ['+bb.min.toArray().map(v=>v.toFixed(1))+' / '+bb.max.toArray().map(v=>v.toFixed(1))+']'; }
+    const insts=o.isInstancedMesh?o.count:1;
+    for(let n=0;n<insts;n++){
+      M.copy(o.matrixWorld); if(o.isInstancedMesh){ o.getMatrixAt(n,IM); M.multiply(IM); }
+      for(let t=0;t<nTri;t++){
+        const ia=idx?idx.getX(t*3):t*3, ib=idx?idx.getX(t*3+1):t*3+1, ic=idx?idx.getX(t*3+2):t*3+2;
+        A.fromBufferAttribute(pos,ia).applyMatrix4(M); B.fromBufferAttribute(pos,ib).applyMatrix4(M); C.fromBufferAttribute(pos,ic).applyMatrix4(M);
+        const lo=Math.min(A.y,B.y,C.y), hi=Math.max(A.y,B.y,C.y);
+        if(hi<0.45||lo>2.3) continue;                       // floors, sills, cables, ceilings, lights
+        if(Math.max(Math.abs(A.x),Math.abs(B.x),Math.abs(C.x))>60) continue;
+        for(const [P,Q] of [[A,B],[B,C],[C,A]]){ const L=Math.hypot(Q.x-P.x,Q.z-P.z), n2=Math.ceil(L/(cs*0.5))+1;
+          for(let k=0;k<=n2;k++){ const f=k/n2; mark(P.x+(Q.x-P.x)*f,P.z+(Q.z-P.z)*f); } }
+        // flat-ish tops (desk tops, shelves): fill the footprint
+        const area=Math.abs((B.x-A.x)*(C.z-A.z)-(C.x-A.x)*(B.z-A.z))/2;
+        if(area>cs*cs){ const mnx=Math.min(A.x,B.x,C.x),mxx=Math.max(A.x,B.x,C.x),mnz=Math.min(A.z,B.z,C.z),mxz=Math.max(A.z,B.z,C.z);
+          for(let x=mnx;x<=mxx;x+=cs*0.7) for(let z=mnz;z<=mxz;z+=cs*0.7){
+            const d1=(x-B.x)*(A.z-B.z)-(A.x-B.x)*(z-B.z), d2=(x-C.x)*(B.z-C.z)-(B.x-C.x)*(z-C.z), d3=(x-A.x)*(C.z-A.z)-(C.x-A.x)*(z-A.z);
+            if(!((d1<0||d2<0||d3<0)&&(d1>0||d2>0||d3>0))) mark(x,z); } }
+      }
+    }
+  });
+  // keep the grid's own rim closed
+  for(let i=0;i<w;i++){ blk[i]=1; blk[(h-1)*w+i]=1; } for(let j=0;j<h;j++){ blk[j*w]=1; blk[j*w+w-1]=1; }
+  // grow obstacles by a body radius
+  const R=2, free=new Uint8Array(w*h);
+  for(let j=0;j<h;j++) for(let i=0;i<w;i++){ let ok=1;
+    for(let dj=-R;dj<=R&&ok;dj++) for(let di=-R;di<=R;di++){ if(di*di+dj*dj>R*R) continue; const ii=i+di,jj=j+dj;
+      if(ii<0||jj<0||ii>=w||jj>=h||blk[jj*w+ii]){ ok=0; break; } }
+    free[j*w+i]=ok; }
+  NAV.block=blk; NAV.free=free;
+}
+function navCell(p){ return [Math.max(0,Math.min(NAV.w-1,Math.floor((p[0]-NAV.x0)/NAV.cs))),Math.max(0,Math.min(NAV.h-1,Math.floor((p[1]-NAV.z0)/NAV.cs)))]; }
+function navPt(i,j){ return [NAV.x0+(i+0.5)*NAV.cs,NAV.z0+(j+0.5)*NAV.cs]; }
+function navNearestFree(c){ const {w,h,free}=NAV; if(free[c[1]*w+c[0]]) return c;
+  for(let r=1;r<40;r++) for(let dj=-r;dj<=r;dj++) for(let di=-r;di<=r;di++){ if(Math.max(Math.abs(di),Math.abs(dj))!==r) continue;
+    const i=c[0]+di,j=c[1]+dj; if(i>=0&&j>=0&&i<w&&j<h&&free[j*w+i]) return [i,j]; } return c; }
+function navLOS(a,b){ const n=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/(NAV.cs*0.5));
+  for(let k=0;k<=n;k++){ const c=navCell([a[0]+(b[0]-a[0])*k/n,a[1]+(b[1]-a[1])*k/n]); if(!NAV.free[c[1]*NAV.w+c[0]]) return false; } return true; }
+function navPath(from,to){
+  if(!NAV.free) return [to];
+  const {w,h,free}=NAV, s=navNearestFree(navCell(from)), g=navNearestFree(navCell(to));
+  const N=w*h, gs=new Float32Array(N).fill(1e9), par=new Int32Array(N).fill(-1), closed=new Uint8Array(N);
+  const open=[], push=(i,f)=>{ open.push([f,i]); let k=open.length-1; while(k>0){ const p=(k-1)>>1; if(open[p][0]<=open[k][0]) break; [open[p],open[k]]=[open[k],open[p]]; k=p; } };
+  const pop=()=>{ const top=open[0], last=open.pop(); if(open.length){ open[0]=last; let k=0; for(;;){ const l=2*k+1,r=l+1; let m=k;
+      if(l<open.length&&open[l][0]<open[m][0]) m=l; if(r<open.length&&open[r][0]<open[m][0]) m=r; if(m===k) break; [open[m],open[k]]=[open[k],open[m]]; k=m; } } return top; };
+  const si=s[1]*w+s[0], gi=g[1]*w+g[0], H=(i)=>Math.hypot(i%w-g[0],((i/w)|0)-g[1]);
+  gs[si]=0; push(si,H(si)); let found=false;
+  while(open.length){ const [,i]=pop(); if(closed[i]) continue; closed[i]=1; if(i===gi){ found=true; break; }
+    const x=i%w, y=(i/w)|0;
+    for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy) continue; const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=w||ny>=h) continue;
+      const ni=ny*w+nx; if(!free[ni]||closed[ni]) continue; if(dx&&dy&&(!free[y*w+nx]||!free[ny*w+x])) continue;
+      const ng=gs[i]+(dx&&dy?1.4142:1); if(ng<gs[ni]){ gs[ni]=ng; par[ni]=i; push(ni,ng+H(ni)); } } }
+  if(!found){ console.warn('[demo] no path',from,to); return [to]; }
+  const cells=[]; for(let i=gi;i!==-1;i=par[i]) cells.push(navPt(i%w,(i/w)|0)); cells.reverse();
+  // string-pull
+  const pts=[from]; let k=0;
+  while(k<cells.length-1){ let far=k+1; for(let m=cells.length-1;m>k+1;m--) if(navLOS(pts[pts.length-1],cells[m])){ far=m; break; } pts.push(cells[far]); k=far; }
+  pts.push(to); return pts.slice(1).filter((p,i,arr)=>i===arr.length-1||Math.hypot(p[0]-to[0],p[1]-to[1])>0.15);
+}
+function walkTo(a,t,to,mode){
+  const path=navPath(a.pos,to);
+  for(const p of path){ const d=Math.hypot(p[0]-a.pos[0],p[1]-a.pos[1]); if(d<1e-3) continue;
+    const t1=t+Math.max(0.12,d/WALK_SPD); seg(a,t,t1,mode||'walk',a.pos,p); a.pos=[...p]; t=t1; }
+  return t;
+}
+function buildJobs(a,t,jobs,work,rigFor){
+  for(const slot of jobs){
+    const st=standFor(slot);
+    t=walkTo(a,t,st.p);
+    const t1=t+work;
+    seg(a,t,t1,st.up?'workUp':'work',st.p,st.p,st.look);
+    const sy=SLOTS[slot][2]; a.segs[a.segs.length-1].reach=slot<9?-1.05:sy>3?-2.35:sy>1.5?-1.45:-0.75;
+    demoEvents.push([t+work*0.8,()=>demoAddRig(rigFor(slot))]);
+    t=t1;
+  }
+  return t;
+}
+function haul(a,t,tEnd,from,to){ // crate runs between two points until tEnd
+  while(t<tEnd-2){ t=walkTo(a,t,from,'walk'); t=walkTo(a,t,to,'carry'); t=seg(a,t,t+0.5,'idle',to,to); }
+  return t;
+}
+function actorAt(a,t){
+  let s=null;
+  for(const g of a.segs){ if(t>=g.t0&&t<g.t1){ s=g; break; } }
+  if(s){ const f=(t-s.t0)/Math.max(1e-6,s.t1-s.t0); return {mode:s.mode, reach:s.reach, p:dLerp(s.from,s.to,s.mode==='walk'||s.mode==='carry'?f:0),
+      dir:s.look?[s.look[0]-s.from[0],s.look[1]-s.from[1]]:[s.to[0]-s.from[0],s.to[1]-s.from[1]], local:t-s.t0}; }
+  let lastS=null; for(const g of a.segs){ if(g.t1<=t) lastS=g; }
+  if(lastS) return {mode:'idle',p:lastS.to,dir:lastS.look?[lastS.look[0]-lastS.to[0],lastS.look[1]-lastS.to[1]]:[lastS.to[0]-lastS.from[0],lastS.to[1]-lastS.from[1]],local:t-lastS.t1};
+  return {mode:'idle',p:a.spawn,dir:[0,-1],local:t};
+}
+function poseActor(a,t,dt){
+  const o=a.obj, u=o.userData, st=actorAt(a,t);
+  o.visible=t>=a.appear;
+  if(a.fixedMode) st.mode=a.fixedMode;
+  o.position.set(st.p[0],0,st.p[1]);
+  if(Math.hypot(st.dir[0],st.dir[1])>1e-3) o.rotation.y=Math.atan2(st.dir[0],st.dir[1]);
+  if(a.faceY!=null&&st.mode!=='walk'&&st.mode!=='carry') o.rotation.y=a.faceY;
+  const ph=t*(a.speedMul||1);
+  if(u.kind==='model'){
+    // turn toward where they're going (real 3D, no camera tricks); idle/cheer/dance face the camera a bit
+    const toCam=Math.atan2(cam.position.x-st.p[0],cam.position.z-st.p[1]);
+    let face=Math.hypot(st.dir[0],st.dir[1])>1e-3?Math.atan2(st.dir[0],st.dir[1]):toCam;
+    if(a.fixedMode==='dance'||st.mode==='cheer'||st.mode==='idle') face=toCam+Math.sin(ph*0.7+(a.seed||0))*0.3;
+    o.rotation.y=0; u.body.rotation.y=face;
+    let mode=st.mode; if(!u.acts[mode]) mode=mode==='carry'?'walk':mode==='workUp'?'work':'idle';
+    if(st.mode==='work'&&st.reach!=null&&st.reach<-1.6&&u.acts.workUp) mode='workUp';
+    if(mode!==u.mode){ u.prev=u.mode; u.mode=mode; u.since=t; }
+    const blend=Math.min(1,(t-u.since)/0.25);
+    // seek-safe: action time comes from the clock, not from accumulated dt
+    const rate=(mode==='walk'||mode==='carry')?WALK_SPD/3.2:1;
+    for(const [n,act] of Object.entries(u.acts)){
+      const w=n===u.mode?blend:(n===u.prev?1-blend:0);
+      act.setEffectiveWeight(w);
+      if(w>0) act.time=((ph*(n===u.mode?rate:1)+(a.seed||0))%act.getClip().duration+act.getClip().duration)%act.getClip().duration;
+    }
+    u.mixer.update(0);
+    u.crate.visible=st.mode==='carry';
+    if(st.mode.startsWith('work')&&Math.floor(ph*12/Math.PI)!==Math.floor((ph-dt)*12/Math.PI)&&Math.random()<0.5)
+      burst(new THREE.Vector3(st.p[0]+Math.sin(face)*0.5,mode==='workUp'?3.2:2.0,st.p[1]+Math.cos(face)*0.5),6,partMatGold,1.8);
+    return;
+  }
+  if(u.kind==='ball'){
+    const moving=st.mode==='walk'||st.mode==='carry';
+    const hop=moving?Math.abs(Math.sin(ph*7))*0.9:st.mode==='work'||st.mode==='workUp'?Math.abs(Math.sin(ph*11))*0.55:Math.abs(Math.sin(ph*3))*0.15;
+    u.body.position.y=hop;
+    u.pivot.rotation.x=moving?ph*6:Math.sin(ph*11)*0.25*(st.mode.startsWith('work')?1:0.2);
+    const sq=1-0.12*Math.max(0,0.25-hop)*4; u.pivot.scale.set(1/sq,sq,1/sq);
+    if(st.mode.startsWith('work')&&Math.floor(ph*11/Math.PI)!==Math.floor((ph-dt)*11/Math.PI)&&Math.random()<0.7)
+      burst(new THREE.Vector3(st.p[0]+st.dir[0]*0.4,1.2,st.p[1]+st.dir[1]*0.4),5,partMatCyan,1.6);
+    return;
+  }
+  // jointed cut-out: turn toward where it is going (never edge-on to the camera), swing the limbs
+  const toCam=Math.atan2(cam.position.x-st.p[0],cam.position.z-st.p[1]);
+  o.rotation.y=0;
+  let face=Math.hypot(st.dir[0],st.dir[1])>1e-3?Math.atan2(st.dir[0],st.dir[1]):toCam;
+  if(a.fixedMode==='dance'||st.mode==='cheer'||st.mode==='idle') face=toCam+Math.sin(ph*0.7+(a.seed||0))*0.25;
+  let rel=Math.atan2(Math.sin(face-toCam),Math.cos(face-toCam));
+  const v=u.views, useBack=!!v.back&&Math.abs(rel)>2.1;
+  for(const k in v) v[k].visible=(k==='back')===useBack;
+  const view=useBack?v.back:v.front, L=view.userData.limbs, robe=view.userData.robe;
+  const CL=1.0, clampR=x=>Math.max(-CL,Math.min(CL,x));
+  if(useBack){ const r2=Math.atan2(Math.sin(rel-Math.PI),Math.cos(rel-Math.PI)); u.body.rotation.y=toCam+Math.PI+clampR(r2); view.scale.x=-1; }
+  else { u.body.rotation.y=toCam+clampR(rel); view.scale.x=1; }
+  const moving=st.mode==='walk'||st.mode==='carry';
+  const sw=Math.sin(ph*11+(a.seed||0)); // stride phase, ~1.75 steps a second at walking pace
+  let aL=0,aR=0,lL=0,lR=0,zL=0,zR=0,bob=0,lean=0;
+  if(moving){ lL=0.55*sw; lR=-0.55*sw; aL=-0.5*sw; aR=0.5*sw; bob=Math.abs(Math.cos(ph*11+(a.seed||0)))*0.09; lean=0.06; }
+  if(st.mode==='carry'){ aL=aR=-1.35+0.05*sw; }
+  else if(st.mode==='work'||st.mode==='workUp'){ const hm=Math.sin(ph*8), base=st.reach!=null?st.reach:(st.mode==='workUp'?-2.35:-1.05);
+    aL=base+0.26*hm; aR=base-0.26*hm; lean=base>-0.9?0.22:0.1; bob=0.03*Math.abs(hm); }
+  else if(st.mode==='cheer'){ const w=Math.sin(ph*6); aL=-2.9+0.25*w; aR=-2.9-0.25*w; zL=0.35; zR=-0.35; bob=Math.abs(Math.sin(ph*6))*0.4; }
+  else if(st.mode==='dance'){ const w=Math.sin(ph*6); aL=-1.6+1.2*w; aR=-1.6-1.2*w; zL=0.5*w; zR=0.5*w; lL=0.35*w; lR=-0.35*w; bob=Math.abs(w)*0.3; }
+  else if(!moving){ const br=Math.sin(ph*1.6+(a.seed||0)); aL=0.04*br; aR=-0.04*br; bob=0.015*br; }
+  const rest=view.userData.rest;
+  if(L.armL){ L.armL.rotation.x=aL; L.armL.rotation.z=rest[0]-zL; }
+  if(L.armR){ L.armR.rotation.x=aR; L.armR.rotation.z=rest[1]-zR; }
+  if(L.legL) L.legL.rotation.x=robe?lL*0.6:lL;
+  if(L.legR) L.legR.rotation.x=robe?lR*0.6:lR;
+  if(robe&&moving) view.rotation.z=0.04*sw; else view.rotation.z=0;
+  view.rotation.x=lean*(useBack?-1:1);
+  u.body.position.y=bob;
+  u.crate.visible=st.mode==='carry';
+  if(u.crate.visible) u.crate.position.set(0,u.h*0.45,0.75);
+  if(st.mode.startsWith('work')&&Math.floor(ph*12/Math.PI)!==Math.floor((ph-dt)*12/Math.PI)&&Math.random()<0.5)
+    burst(new THREE.Vector3(st.p[0]+st.dir[0]*0.25,st.mode==='workUp'?3.2:2.0,st.p[1]+st.dir[1]*0.25),6,partMatGold,1.8);
+}
+
+/* ---------- rigs pop into existence ---------- */
+function demoRig(slot,k){ // varied but believable builds
+  const cpus=[9,12,3], gp=[[8,8],[10,10],[4,5],[5,5],[11,11],[8,10],[10,11]];
+  return {slot,cpu:cpus[k%3],gpus:gp[k%gp.length],asic:k%4===0?13:0,frame:0,oc:{c:0,m:0},crashT:0,on:1,wear:0};
+}
+function demoAddRig(r){
+  if(S.rigs.some(x=>x.slot===r.slot)) return;
+  S.rigs.push(r); S.pcCount=S.rigs.length;
+  const i=S.rigs.length-1; buildRigVis(i);
+  const rv=rigVis[i]; if(rv){ rv.group.scale.setScalar(0.001); demoPops.push({o:rv.group,t0:demoT}); }
+  if(r.slot<9&&deskAt[r.slot]&&!deskAt[r.slot].userData.popped){ deskAt[r.slot].userData.popped=1;
+    deskAt[r.slot].scale.setScalar(0.001); demoPops.push({o:deskAt[r.slot],t0:demoT}); }
+  const [x,z,sy]=SLOTS[r.slot];
+  burst(new THREE.Vector3(x,(sy||0)+1.6,z),22,partMatPur,3.2);
+  if(typeof SFX!=='undefined'&&SFX.click) try{ SFX.click(); }catch(e){}
+}
+
+/* ---------- set pieces ---------- */
+function animSheet(tex,cols,rows,frames,fps){
+  tex.wrapS=tex.wrapT=THREE.ClampToEdgeWrapping; tex.repeat.set(1/cols,1/rows);
+  demoAnimTex.push({tex,cols,rows,frames,fps}); return tex;
+}
+function tickAnimTex(t){
+  for(const a of demoAnimTex){ const f=Math.floor(t*a.fps)%a.frames;
+    a.tex.offset.set((f%a.cols)/a.cols, 1-(Math.floor(f/a.cols)+1)/a.rows); }
+}
+function nftFrame(tex,w,h,x,y,z,ry,label){
+  const g=new THREE.Group();
+  const fr=boxMesh(w+0.18,h+0.18,0.08,new THREE.MeshBasicMaterial({color:0xffd23f})); g.add(fr);
+  const pic=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:tex})); pic.position.z=0.05; g.add(pic);
+  if(label){ const s=nameTag(label,'#ffd23f'); s.scale.set(2.4,0.42,1); s.position.y=-h/2-0.42; g.add(s); }
+  g.position.set(x,y,z); g.rotation.y=ry; scene.add(g); return g;
+}
+function buildGallery(){ // the owner's NFT gallery, hung around the lab TV (left wall z -5.2..2.4) and the back-wall logo
+  const LX=-ROOM.W/2-0.9, BZ=-ROOM.D/2-0.9, T=DEMO_TEX;
+  nftFrame(animSheet(T.unicorn_sheet,5,3,15,15),1.35,2.4,LX,3.4,-6.9,Math.PI/2,'UNICORNS');
+  nftFrame(animSheet(T.trash_sheet,6,4,20,5),2.0,2.0,LX,3.4,3.9,Math.PI/2,'11:11 TRASH MONSTER');
+  nftFrame(T.red_monster,2.0,2.0,LX,3.4,6.5,Math.PI/2,'SLOP MONSTER');
+  nftFrame(animSheet(T.rave_sheet,6,5,29,7.5),1.5,2.0,-9.6,3.5,BZ,0,'RAVE');
+  nftFrame(T.rari_high_tops,2.0,2.0,-7.3,3.5,BZ,0,'RARI HIGH TOPS');
+  nftFrame(animSheet(T.mcafee_sheet,6,4,23,30),2.6,1.46,-4.6,3.5,BZ,0,'BTC $1,000,000');
+}
+function dexScreen(){
+  const c=cnv(640,360), x=c.getContext('2d'), tex=ctex(c);
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(4.2,2.36),new THREE.MeshBasicMaterial({map:tex}));
+  m.position.set(6.6,3.3,-ROOM.D/2-0.93); scene.add(m);
+  const fr=boxMesh(4.4,2.56,0.06,new THREE.MeshBasicMaterial({color:0x2ee6d6})); fr.position.set(6.6,3.3,-ROOM.D/2-0.97); scene.add(fr);
+  const r=demoRand(42); const bars=[]; let p=0.042;
+  for(let i=0;i<200;i++){ const o=p; p=Math.max(0.01,p*(1+(r()-0.42)*0.08)); bars.push([o,p]); }
+  demoDex={c,x,tex,bars,last:-1};
+}
+function drawDex(t){
+  const d=demoDex; const k=Math.floor(t*4); if(k===d.last) return; d.last=k;
+  const x=d.x; x.fillStyle='#07101c'; x.fillRect(0,0,640,360);
+  x.fillStyle='#2ee6d6'; x.font='900 34px Segoe UI,Arial'; x.fillText('WATTxchange DEX',22,46);
+  const win=d.bars.slice(k%140,k%140+44); const lo=Math.min(...win.flat()), hi=Math.max(...win.flat());
+  win.forEach(([o,c],i)=>{ const y=v=>320-(v-lo)/(hi-lo+1e-9)*220; x.fillStyle=c>=o?'#3dff8a':'#ff4d5e';
+    x.fillRect(24+i*13.5,Math.min(y(o),y(c)),9,Math.max(3,Math.abs(y(o)-y(c)))); });
+  const last=win[win.length-1][1];
+  x.fillStyle='#ffd23f'; x.font='700 26px monospace'; x.fillText('WATT/USDT '+last.toFixed(4)+(win[win.length-1][1]>=win[win.length-1][0]?' ▲':' ▼'),330,46);
+  x.fillStyle='#b7a6ff'; x.font='700 20px monospace'; x.fillText('PARTY BOT: liquidity is flowing, baby!',22,350);
+  d.tex.needsUpdate=true;
+}
+function buildNodeWorld(){ // the finale: a planet's worth of home nodes
+  const r=demoRand(1111), N=900, pos=[];
+  for(let i=0;i<N;i++){ const a=r()*Math.PI*2, d=40+Math.pow(r(),0.7)*420; pos.push([Math.cos(a)*d, 15+Math.sin(a)*d]); }
+  const pill=new THREE.InstancedMesh(new THREE.BoxGeometry(1.4,3,1.4),new THREE.MeshBasicMaterial({color:0xffffff}),N);
+  const beam=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.18,0.18,1,6,1,true),
+    new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.32,blending:THREE.AdditiveBlending,depthWrite:false}),N);
+  const cols=[0x2ee6d6,0xa06bff,0xffd23f,0xff4fd8,0x3dff8a].map(c=>new THREE.Color(c));
+  const nodeCol=pos.map((p,i)=>cols[i%cols.length]);
+  pill.frustumCulled=beam.frustumCulled=false;
+  scene.add(pill); scene.add(beam);
+  // links to the 2 nearest neighbours
+  const lp=[], lc=[], links=[];
+  for(let i=0;i<N;i++){ const ds=pos.map((q,j)=>[j,(q[0]-pos[i][0])**2+(q[1]-pos[i][1])**2]).sort((a,b)=>a[1]-b[1]);
+    for(const [j] of ds.slice(1,3)){ links.push([i,j]); lp.push(pos[i][0],1.6,pos[i][1],pos[j][0],1.6,pos[j][1]); lc.push(0,0,0,0,0,0); } }
+  const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.Float32BufferAttribute(lp,3));
+  lg.setAttribute('color',new THREE.Float32BufferAttribute(lc,3));
+  const lines=new THREE.LineSegments(lg,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:0.9,blending:THREE.AdditiveBlending,depthWrite:false}));
+  lines.frustumCulled=false; scene.add(lines);
+  // world ground
+  const gc=cnv(512,512), gx=gc.getContext('2d'); gx.fillStyle='#080614'; gx.fillRect(0,0,512,512);
+  gx.strokeStyle='rgba(130,71,229,.35)'; gx.lineWidth=2; for(let i=0;i<=8;i++){ gx.beginPath(); gx.moveTo(i*64,0); gx.lineTo(i*64,512); gx.stroke(); gx.beginPath(); gx.moveTo(0,i*64); gx.lineTo(512,i*64); gx.stroke(); }
+  const gt=ctex(gc); gt.wrapS=gt.wrapT=THREE.RepeatWrapping; gt.repeat.set(60,60);
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(1400,1400),new THREE.MeshBasicMaterial({map:gt}));
+  ground.rotation.x=-Math.PI/2; ground.position.y=-0.03; scene.add(ground);
+  const lit=pos.map(p=>78+Math.hypot(p[0],p[1]-15)/460*14);
+  demoNodes={N,pos,pill,beam,lines,links,lit,nodeCol,ground};
+  updateNodes(0);
+}
+const _m4=new THREE.Matrix4(), _q=new THREE.Quaternion(), _s=new THREE.Vector3(), _p=new THREE.Vector3(), _c=new THREE.Color();
+function updateNodes(t){
+  const n=demoNodes; if(!n) return;
+  for(let i=0;i<n.N;i++){
+    const f=Math.max(0,Math.min(1,(t-n.lit[i])/0.8)), on=f>0;
+    _p.set(n.pos[i][0],1.5*f,n.pos[i][1]); _s.set(1,Math.max(0.001,f),1);
+    n.pill.setMatrixAt(i,_m4.compose(_p,_q,_s));
+    _c.copy(n.nodeCol[i]).multiplyScalar(on?0.4+0.6*f:0); n.pill.setColorAt(i,_c);
+    const bh=on?40+30*Math.sin(i*1.7+t*2)*0.3:0.001;
+    _p.set(n.pos[i][0],bh/2+2,n.pos[i][1]); _s.set(1,bh,1);
+    n.beam.setMatrixAt(i,_m4.compose(_p,_q,_s)); n.beam.setColorAt(i,_c);
+  }
+  n.pill.instanceMatrix.needsUpdate=n.beam.instanceMatrix.needsUpdate=true;
+  if(n.pill.instanceColor) n.pill.instanceColor.needsUpdate=true; if(n.beam.instanceColor) n.beam.instanceColor.needsUpdate=true;
+  const col=n.lines.geometry.attributes.color;
+  n.links.forEach(([i,j],k)=>{ const f=Math.min(1,Math.max(0,(t-Math.max(n.lit[i],n.lit[j]))/1.2));
+    const c=n.nodeCol[i]; for(let v=0;v<2;v++) col.setXYZ(k*2+v,c.r*f,c.g*f,c.b*f); });
+  col.needsUpdate=true;
+}
+
+/* ---------- camera & captions ---------- */
+const DKEYS=[ // [t0,t1, camFrom,camTo, tgtFrom,tgtTo]  or  [t0,t1,'follow',actorKey,offset,lookY]
+  [0,   6,  [11,8,12],[8.5,6.2,9.5],  [0,1.5,-2],[0,1.6,-2.2]],
+  [6,   14, 'follow','nucash',[4.2,3.4,3.4],2.2],
+  [14,  20, [9,8.5,9.5],[5.5,7.8,10.5],[0,1,-1.5],[-1,1,-2]],
+  [20,  31, [-2,9.5,12],[-7,7.5,8.5],  [0,1.5,-1],[-1.5,1.6,-2]],
+  [31,  38, [-7,7.5,8.5],[-8,4.4,0.5], [-1.5,1.6,-2],[-8.3,1.9,13]],
+  [38,  45, [-8,4.4,0.5],[-7.6,3.3,6.8],[-8.3,1.9,13],[-8.8,1.7,15]],
+  [45,  52, [8,4.4,0.5],[7.6,3.3,6.8], [8.3,1.9,13],[8.8,1.7,15]],
+  [52,  60, [0,5.2,12.5],[0,4.4,18.5], [0,2.5,28],[0,2.3,28]],
+  [60,  67, [-1.6,4.4,31.2],[1.6,4.0,31.2],[0,2.3,22.5],[0,2.2,22.5]],
+  [67,  74, [-3.8,4.8,16.2],[3.8,4.8,16.2],[-3,2.2,28],[3,2.2,28]],
+  [74,  96, [3.8,4.8,16.2],[0,175,330],[3,2.2,28],[0,0,40]],
+  [96,  101,[0,175,330],[0,180,340],   [0,0,40],[0,0,40]],
+];
+const _cp=new THREE.Vector3(), _ct=new THREE.Vector3();
+function demoCamera(t,dt){
+  for(const k of DKEYS){ if(t<k[0]||t>k[1]) continue;
+    if(k[2]==='follow'){ const a=demoCast[k[3]]; if(!a) continue; const p=a.obj.position;
+      _cp.set(p.x+k[4][0],k[4][1],p.z+k[4][2]); _ct.set(p.x,k[5],p.z);
+      const f=t-k[0]<dt*1.5?1:Math.min(1,dt*2.4);
+      cam.position.lerp(_cp,f); controls.target.lerp(_ct,f);
+    } else { const f=dEase((t-k[0])/(k[1]-k[0]));
+      cam.position.set(...dLerp(k[2],k[3],f)); controls.target.set(...dLerp(k[4],k[5],f)); }
+  }
+  cam.lookAt(controls.target);
+}
+const DCARDS=[
+  {a:0.6,b:5.4, big:'THE MINING GAME', small:'DEMO MODE  ·  a farm built from nothing'},
+  {a:6.3,b:12, small:'THE GARAGE LAB  ·  NuCash (in his Rari High Tops) and Red Guy build the first rigs'},
+  {a:19,b:25, small:'Party Bot keeps the WATTxchange DEX pumping'},
+  {a:32.5,b:38, small:'STORAGE CONTAINERS  ·  the Tengria engineers rack twelve more rigs'},
+  {a:42,b:48, small:'Hemp Wassie and Viking Wassie haul the hardware'},
+  {a:52.5,b:58, small:'THE WAREHOUSE  ·  the CyberFiction crew goes ELITE: 33 rigs'},
+  {a:64,b:70, small:'even the normies came to watch'},
+  {a:77,b:94.5, big:'TOTAL DECENTRALIZATION', small:'every home a node  ·  every node a voice'},
+  {a:95.5,b:100,big:'PLAY FREE', small:'mining-game.wattxchange.app'},
+];
+
+/* ---------- the script ---------- */
+function startDemoScript(){
+  S=freshState(); S.tut=99; S.mode='demo';
+  // demo garage: spread the desks so the crew has aisles to walk down
+  if(!SLOTS.__demo){ const rz={'-4.6':-5.6,'-1.2':-1.3,'2.2':3.0}; for(let i=0;i<9;i++){ SLOTS[i][1]=rz[String(SLOTS[i][1])]; SLOTS[i][0]*=1.13; } SLOTS.__demo=1; }
+  S.upg={power:8,cooling:8,rack:2}; S.monSize=32; S.chair=1; S.periph={17:1,18:1,23:1};
+  S.containers=0; S.warehouse=0; S.gen=2; S.rigs=[]; S.pcCount=0;
+  S.watt=250000; S.pol=12; S.alt=4; S.wtx=8; S.blocks=0; S.blocksNet={pol:0,alt:0,wtx:0};
+  S.net='polygon';
+  setBadgeOwned(true); setTowerOwned(false);
+  rebuildAllRigs(); buildFarm(); refreshRings();
+  scene.traverse(o=>{ if(o.isPointLight&&o.intensity<30) o.visible=false; });
+  selRig=-1; selTower=false; try{ renderRigPanel(); }catch(e){} const tut=$('tut'); if(tut) tut.style.display='none';
+  cam.far=2200; cam.updateProjectionMatrix();
+  renderer.toneMappingExposure=1.7;
+  scene.add(new THREE.HemisphereLight(0xc9c2ff,0x2a2340,0.9));
+  const fill=new THREE.DirectionalLight(0xffffff,1.1); fill.position.set(-4,10,14); scene.add(fill);
+  buildGallery(); dexScreen(); buildNodeWorld();
+
+  demoEvents=[]; demoActors=[]; demoPops=[];
+  let k=0; const rigFor=slot=>demoRig(slot,k++);
+  // the crew
+  const T=DEMO_TEX;
+  const SD=(views,h,tag,col,bust)=>makeStandee({views,h,tag,tagColor:col,bust});
+  const nucash=newActor(SD({front:'char_nucash_front',back:'char_nucash_back'},3.9,'NUCASH',0xff4fd8),[-1.5,7.5]);
+  const red=newActor(makeRedGuy(),[1.8,7.5]);
+  const party=newActor(SD({front:'char_partybot'},3.7,'PARTY BOT · DEX',0xffd23f),[6.6,-6.4]);
+  party.fixedMode='dance';
+  const t88=newActor(SD({front:'char_tengria_1188'},3.9,'TENGRIA #1188',0xff8d2e),[-2.5,12.5],30.5);
+  const t89=newActor(SD({front:'char_tengria_1189'},3.8,'TENGRIA #1189',0x2ee6d6),[2.5,12.5],34.5);
+  const hemp=newActor(SD({front:'char_hemp_wassie'},3.5,'HEMP WASSIE',0x3dff8a),[0,4],31);
+  const vik=newActor(SD({front:'char_viking_wassie'},3.3,'VIKING WASSIE',0xb0b8c8),[1.6,4],31);
+  const cf44=newActor(SD({front:'char_cyberfiction_6344'},3.8,'CYBERFICTION #6344',0xff6ed3),[-6,22],51);
+  const cf43=newActor(SD({front:'char_cyberfiction_6343'},3.8,'CYBERFICTION #6343',0x5fb8ff),[6,22],51);
+  demoCast={nucash,red,cf44,cf43,t88,t89};
+  const normies=[];
+  for(let i=0;i<4;i++){ const n=newActor(SD({front:'char_npc_normie'},3.6,'NPC',0xaaaaaa),[-1.9+i*1.3,15+(i%2)*1.2],0);
+    n.speedMul=0.6+i*0.1; normies.push(n); }
+
+  // scan the finished farm for obstacles, then put the world back to an empty garage
+  { const keep=S.rigs; S.rigs=SLOTS.map((_,i)=>demoRig(i,i)); S.containers=2; S.warehouse=1; rebuildAllRigs(); buildFarm();
+    navBuild(); S.rigs=[]; S.containers=0; S.warehouse=0; rebuildAllRigs(); buildFarm(); window.__navFree=NAV.free.reduce((a,b)=>a+b,0); }
+  // ACT 1 — garage lab
+  let tA=buildJobs(nucash,5.5,[1,0,6,3,7],1.7,rigFor);
+  let tB=buildJobs(red,6.2,[2,5,8,4],1.7,rigFor);
+  seg(nucash,tA,tA+3,'cheer',nucash.pos,nucash.pos,[0,10]);
+  // ACT 2 — containers
+  demoEvents.push([31.5,()=>{ S.containers=1; buildFarm(); S.net='alt'; }]);
+  demoEvents.push([35.5,()=>{ S.containers=2; buildFarm(); }]);
+  buildJobs(t88,31,[9,10,11,12,13,14],1.35,rigFor);
+  buildJobs(t89,35,[15,16,17,18,19,20],1.35,rigFor);
+  hemp.pos=[...hemp.spawn]; vik.pos=[...vik.spawn];
+  haul(hemp,31.5,52,[-1,5],[-7.4,10.4]);
+  haul(vik,32.2,52,[1.5,5],[7.4,10.4]);
+  // ACT 3 — warehouse
+  demoEvents.push([51.5,()=>{ S.warehouse=1; buildFarm(); S.net='wattx'; }]);
+  buildJobs(cf44,52,[21,22,23,24,25,26],1.3,rigFor);
+  buildJobs(cf43,52.6,[27,28,29,30,31,32],1.3,rigFor);
+  let t=walkTo(nucash,Math.max(tA+3,40),[-1.2,22.5]); seg(nucash,t,t+60,'cheer',nucash.pos,nucash.pos,[0,27]);
+  t=walkTo(red,Math.max(tB,41),[1.2,22.5]); seg(red,t,t+60,'work',red.pos,red.pos,[0,27]);
+  t=walkTo(hemp,53,[-3.5,21.5]); seg(hemp,t,t+50,'cheer',hemp.pos,hemp.pos,[0,27]);
+  t=walkTo(vik,53.5,[3.5,21.5]); seg(vik,t,t+50,'cheer',vik.pos,vik.pos,[0,27]);
+  t=walkTo(t88,Math.max(48,t88.segs[t88.segs.length-1].t1),[-6,20.5]); seg(t88,t,t+50,'cheer',t88.pos,t88.pos,[0,27]);
+  t=walkTo(t89,Math.max(50,t89.segs[t89.segs.length-1].t1),[6,20.5]); seg(t89,t,t+50,'cheer',t89.pos,t89.pos,[0,27]);
+  normies.forEach((n,i)=>{ seg(n,0,58,'idle',n.spawn,n.spawn,[0,0]); n.pos=[...n.spawn];
+    const tt=walkTo(n,55+i*0.6,[1.5+i*1.8,23.6]); seg(n,tt,tt+60,'idle',n.pos,n.pos,[0,27]); });
+  // blocks found along the way
+  [[14,0],[22,0],[27,1],[36,0],[41,0],[47,1],[55,0],[61,0],[66,1],[70,0],[72,1]].forEach(([tt,l])=>demoEvents.push([tt,()=>{ if(S.rigs.length) forceBlock(!!l); }]));
+  demoEvents.sort((a,b)=>a[0]-b[0]);
+  demoT=0;
+}
+
+function demoFrame(t,dt){
+  for(const ev of demoEvents){ if(ev&&t>=ev[0]){ try{ ev[1](); }catch(e){ console.warn('[demo] event',e); } demoEvents[demoEvents.indexOf(ev)]=null; } }
+  for(const p of demoPops){ p.o.scale.setScalar(dBack((t-p.t0)/0.65)); }
+  demoCamera(t,dt);
+  demoActors.forEach(a=>poseActor(a,t,dt));
+  tickAnimTex(t); if(demoDex) drawDex(t); updateNodes(t);
+  // rigs: lights + fans
+  rigVis.forEach((rv,ri)=>{ if(!rv) return; rv.led.material.color.setHex(0x3dff8a);
+    if(rv.modelFans) spinFans(rv.modelFans,dt,true);
+    if(rv.fans) rv.fans.forEach((fan,fi)=>{ if(fan.userData.blades) fan.userData.blades.rotation.z+=9*dt;
+      const m=fan.userData.rgb; if(m){ m.emissive.setHSL((t*0.18+fi*0.14+ri*0.05)%1,1,0.55); m.emissiveIntensity=1.5; } }); });
+  // the economy ticks up with the farm
+  S.watt+= (400+S.rigs.length*900)*dt;
+  // world opens up for the finale
+  const fz=dEase((t-74)/12);
+  scene.fog.near=18+fz*300; scene.fog.far=(S.warehouse?95:S.containers?75:40)+fz*1600;
+  demoNodes.ground.visible=t>60;
+}
+function demoComposite(t){
+  const X=demoX;
+  X.drawImage(renderer.domElement,0,0,DW,DH);
+  // HUD
+  X.font='700 31px monospace'; X.textAlign='left';
+  X.fillStyle='rgba(13,11,30,.75)'; X.fillRect(30,24,1520,66);
+  X.fillStyle='#ffd23f'; X.fillText('WATT '+fmt(S.watt),54,68);
+  X.fillStyle='#2ee6d6'; X.fillText(fmt(totHash())+' H/s',330,68);
+  X.fillStyle='#b7a6ff'; X.fillText(S.blocks+' BLOCKS',600,68);
+  X.fillStyle=S.net==='alt'?'#ffb020':S.net==='wattx'?'#ffd23f':'#a06bff';
+  X.fillText(CFG.nets[S.net].name.toUpperCase(),860,68);
+  X.fillStyle='#ff8d2e'; X.fillText(farmStatus()+' FARM · '+S.rigs.length+' RIGS',1160,68);
+  X.textAlign='center';
+  // captions / title cards only with ?captions=1 (the movie's scene cut plays it clean)
+  for(const c of (new URLSearchParams(location.search).has('captions')?DCARDS:[])){ if(t<c.a||t>c.b) continue;
+    X.globalAlpha=Math.max(0,Math.min(1,(t-c.a)/0.5,(c.b-t)/0.5));
+    if(c.big){
+      X.fillStyle='rgba(5,3,15,.55)'; X.fillRect(0,DH/2-180,DW,360);
+      const g=X.createLinearGradient(0,DH/2-90,0,DH/2+40); g.addColorStop(0,'#ffd23f'); g.addColorStop(1,'#ff8d2e');
+      X.fillStyle=g; X.font='900 130px Segoe UI,Arial'; X.fillText(c.big,DW/2,DH/2+20);
+      X.fillStyle='#2ee6d6'; X.font='700 46px Segoe UI,Arial'; X.fillText(c.small,DW/2,DH/2+108);
+    } else {
+      X.fillStyle='rgba(5,3,15,.7)'; X.fillRect(0,DH-150,DW,96);
+      X.fillStyle='#e8e4ff'; X.font='700 42px Segoe UI,Arial'; X.fillText(c.small,DW/2,DH-88);
+    }
+    X.globalAlpha=1; }
+  if(t<1){ X.fillStyle=`rgba(0,0,0,${1-t})`; X.fillRect(0,0,DW,DH); }
+  if(t>DEMO_LEN-1.2){ X.fillStyle=`rgba(0,0,0,${Math.min(1,(t-(DEMO_LEN-1.2))/1.2)})`; X.fillRect(0,0,DW,DH); }
+}
+
+/* offline capture API (virtual clock) */
+window.__demoStart=async function(){
+  await demoReadyP; running=false; startDemoScript(); running=false; demoT=0; return 'ok';
+};
+window.__demoStep=function(dt,quality){
+  demoT+=dt;
+  demoFrame(demoT,dt);
+  tickParts(dt);
+  if(badgeMesh&&badgeMesh.visible) badgeMesh.rotation.y+=dt*0.9;
+  if(Math.floor(demoT*2)!==Math.floor((demoT-dt)*2)){ drawScreen(); drawTerm(); }
+  renderer.render(scene,cam);
+  demoComposite(demoT);
+  return demoComp.toDataURL('image/jpeg',quality||0.88);
+};
+window.__demoLen=DEMO_LEN;
+window.__demoInfo=function(){ const bb=o=>{ if(!o) return null; const b=new THREE.Box3().setFromObject(o); return [b.min.toArray().map(v=>+v.toFixed(2)),b.max.toArray().map(v=>+v.toFixed(2))]; };
+  return {containers:farmG.containers.map(bb), warehouse:bb(farmG.warehouse), rig9:rigVis[9]?bb(rigVis[9].group):null, slot9:SLOTS[9]}; };
+window.__demoCam=function(pos,tgt){ cam.position.set(...pos); controls.target.set(...tgt); cam.lookAt(controls.target);
+  renderer.render(scene,cam); demoComposite(demoT); return demoComp.toDataURL('image/jpeg',0.8); };
+
+window.__navMap=function(){ const {w,h,block,free}=NAV, c=cnv(w*3,h*3), x=c.getContext('2d');
+  for(let j=0;j<h;j++) for(let i=0;i<w;i++){ x.fillStyle=block[j*w+i]?'#f33':free[j*w+i]?'#123':'#633'; x.fillRect(i*3,j*3,3,3); }
+  x.lineWidth=2; demoActors.forEach((a,ai)=>{ x.strokeStyle=`hsl(${ai*47%360},90%,60%)`; x.beginPath();
+    a.segs.forEach((g,k)=>{ const p=[(g.from[0]-NAV.x0)/NAV.cs*3,(g.from[1]-NAV.z0)/NAV.cs*3], q=[(g.to[0]-NAV.x0)/NAV.cs*3,(g.to[1]-NAV.z0)/NAV.cs*3];
+      x.moveTo(p[0],p[1]); x.lineTo(q[0],q[1]); }); x.stroke(); });
+  SLOTS.forEach((sl,i)=>{ x.fillStyle='#ff0'; x.fillRect((sl[0]-NAV.x0)/NAV.cs*3-3,(sl[1]-NAV.z0)/NAV.cs*3-3,6,6); });
+  return c.toDataURL('image/png'); };
+window.__navWho=function(x,z,r){ const out={}; const {x0,z0,cs,w}=NAV; for(let dz=-r;dz<=r;dz+=cs) for(let dx=-r;dx<=r;dx+=cs){
+  const i=Math.floor((x+dx-x0)/cs), j=Math.floor((z+dz-z0)/cs); const o=NAV.owner[j*w+i]; if(o) out[o]=(out[o]||0)+1; } return out; };
+
 /* ================= TRAILER MODE (?trailer=1) ================= */
 let trailerFrame=null, comp=null, compX=null;
 const TRAIL_LEN=54;
+/* 3rd-person miner avatar for the opening "buy & build" act */
+let trailAv=null, trailAvPrev=null;
+const AV_SKIN='Construction_Male_01';
+// path stays in the CLEAR front band (z>=4.4 is in front of every desk row) so
+// the miner never walks through furniture; he faces -z toward his rig the whole time.
+const AV_START=[4.5,0,6.9];   // open front floor, aligned with the rig column
+const AV_BENCH=[4.5,0,4.9];   // front edge of his battlestation (just clear of the desk)
+window.__trailerPrep=async function(){
+  try{
+    if(!trailAv){ trailAv=window.MGSKIN.avatar({skin:AV_SKIN}); trailAv.visible=false; scene.add(trailAv); }
+    if(window.MGSKIN.preload) await window.MGSKIN.preload(AV_SKIN);
+    await new Promise(r=>setTimeout(r,700));   // let the skinned mesh + idle clip load
+    trailAv.position.set(...AV_START);
+  }catch(e){ console.warn('trailerPrep avatar failed',e); }
+  return !!(trailAv && trailAv.children.length);
+};
 function trailerSetup(){
   document.getElementById('hud').style.display='none';
   document.getElementById('wallet').style.display='none';
@@ -8404,9 +9509,9 @@ function trailerSetup(){
 function easeIO(x){ return x<0?0:x>1?1:x*x*(3-2*x); }
 function lerpV(a,b,t){ return a.map((v,i)=>v+(b[i]-v)*t); }
 const TKEYS=[ // [tStart,tEnd, camFrom,camTo, tgtFrom,tgtTo]
-  [0,   6.0, [9.5,7.5,7.0],[7.2,4.6,3.8], [0,1.5,-2],[0,1.5,-2]],          // garage wide
-  [6.0, 11.5,[2.6,3.8,1.6],[0.55,2.47,-0.25],[0.55,2.1,-1.5],[0.55,2.28,-1.65]], // glide into the chair (sit POV)
-  [11.5,17.0,[6.6,3.4,1.2],[5.4,3.35,-0.1],[4.6,3.35,-1.82],[4.6,3.3,-1.82]],   // open-air frame shelf
+  [0,   6.0, [2.5,7.6,16.8],[3.0,6.1,14.4],[3.2,1.8,5.6],[3.6,1.6,3.8]],         // 3rd-person reveal: miner in the clear front band, farm behind
+  [6.0, 11.2,[5.0,3.8,11.2],[5.0,3.5,9.0], [2.6,2.2,6.4],[2.8,2.05,4.3]],        // over-the-shoulder follow across the rig floor
+  [11.2,17.0,[8.4,5.4,10.4],[8.0,5.0,9.0], [5.0,2.1,0.2],[5.0,2.0,-1.1]],        // high angle at the rig: GPUs bolt onto the open-air frame
   [17.0,22.5,[2.6,2.9,-3.6],[-2.6,2.7,-4.1],[0,2.3,-6.6],[0,2.2,-6.6]],    // genesis badge orbit
   [22.5,28.5,[-3.2,2.9,5.2],[-8,2.7,11.6], [-8,2.4,12],[-8.6,1.9,17.5]],   // into container A
   [28.5,35.0,[-3,3.2,16],[4.5,5.6,15.6],   [0,3.2,26],[0,2.6,27]],         // warehouse reveal
@@ -8416,8 +9521,8 @@ const TKEYS=[ // [tStart,tEnd, camFrom,camTo, tgtFrom,tgtTo]
 ];
 const TCARDS=[
   {a:0.6,b:5.4, big:'THE MINING GAME', small:'WATT TYCOON — a 3D crypto-mining tycoon in your browser'},
-  {a:6.4,b:11.2,big:'', small:'🪑 Sit at your battlestation — gaming chairs, dual monitors, real NFT peripherals', low:true},
-  {a:12,b:16.8, big:'', small:'Gen2 hardware — open-air frames, the GPX880, Bit Hammer ASICs', low:true},
+  {a:6.4,b:11.0,big:'', small:'🛒 Walk your rig floor in 3rd person — shop the real Mining Game NFT hardware', low:true},
+  {a:11.6,b:16.8,big:'', small:'⛏ Buy CPUs & GPUs and bolt them into your rig — every part a real on-chain NFT', low:true},
   {a:17.5,b:22.3,big:'', small:'Mine Polygon · Altcoinchain · WATTxchain — every trait is on-chain', low:true},
   {a:23,b:28.3, big:'', small:'Go PRO — rack your rigs in 20-ft mining containers', low:true},
   {a:29,b:34.8, big:'', small:'Go ELITE — a warehouse farm, 33 rigs strong', low:true},
@@ -8425,6 +9530,49 @@ const TCARDS=[
   {a:41.5,b:46.8,big:'', small:'Connect your wallet — your real Mining Game NFTs come alive in 3D', low:true},
   {a:47.5,b:54, big:'PLAY FREE', small:'mining-game.games.bu.app'},
 ];
+/* shop "purchase" chips, synced to the installPart events in trailEvents */
+const TBUY=[
+  {a:12.1,b:14.3, name:'GPX880 GPU', price:'30,000', tag:'Gen2 · GPX · 180 H', buyAt:12.6},
+  {a:14.4,b:15.5, name:'GP720 GPU',  price:'14,000', tag:'Gen2 · MAD · 110 H', buyAt:14.8},
+  {a:15.5,b:17.0, name:'TX190 GPU',  price:'6,000',  tag:'Gen2 · Oblivia · 60 H', buyAt:15.9},
+];
+function drawBuyChip(t){
+  for(const q of TBUY){
+    if(t<q.a||t>q.b) continue;
+    const fin=Math.min(1,(t-q.a)/0.35), fout=Math.min(1,(q.b-t)/0.35), al=Math.min(fin,fout);
+    const bought=t>=q.buyAt;
+    const W=360,H=96,X=1280-W-28,Y=92;
+    compX.save(); compX.globalAlpha=al;
+    compX.fillStyle='rgba(10,8,26,.9)'; compX.strokeStyle=bought?'#2ee6d6':'#8247e5'; compX.lineWidth=2;
+    roundRect(X,Y,W,H,12); compX.fill(); compX.stroke();
+    // cart glyph + name
+    compX.textAlign='left';
+    compX.fillStyle='#ffd23f'; compX.font='900 26px Segoe UI,Arial'; compX.fillText('🛒 '+q.name, X+18, Y+36);
+    compX.fillStyle='#b7a6ff'; compX.font='600 16px monospace'; compX.fillText(q.tag, X+18, Y+60);
+    compX.fillStyle='#e8e4ff'; compX.font='700 20px monospace'; compX.fillText(q.price+'  ⚡WATT', X+18, Y+84);
+    // BUY / PURCHASED pill
+    const pillW=132,pillX=X+W-pillW-16,pillY=Y+H/2-18;
+    compX.fillStyle=bought?'#2ee6d6':'#8247e5';
+    roundRect(pillX,pillY,pillW,36,18); compX.fill();
+    compX.fillStyle=bought?'#05210d':'#fff'; compX.font='900 18px Segoe UI,Arial'; compX.textAlign='center';
+    compX.fillText(bought?'PURCHASED ✓':'BUY', pillX+pillW/2, pillY+24);
+    compX.restore();
+  }
+}
+function roundRect(x,y,w,h,r){ compX.beginPath(); compX.moveTo(x+r,y); compX.arcTo(x+w,y,x+w,y+h,r); compX.arcTo(x+w,y+h,x,y+h,r); compX.arcTo(x,y+h,x,y,r); compX.arcTo(x,y,x+w,y,r); compX.closePath(); }
+function easeIO2(x){ return x<0?0:x>1?1:x*x*(3-2*x); }
+function placeAvatar(t){
+  if(!trailAv) return;
+  if(t>17.4){ trailAv.visible=false; return; }
+  trailAv.visible=true;
+  let p;
+  if(t<6) p=AV_START;
+  else if(t<11.0){ const f=easeIO2((t-6)/4.6); p=[AV_START[0]+(AV_BENCH[0]-AV_START[0])*f, 0, AV_START[2]+(AV_BENCH[2]-AV_START[2])*f]; }
+  else p=AV_BENCH;
+  trailAv.rotation.y=Math.PI;                 // face -z (toward the rig) the whole time
+  trailAv.position.set(p[0],p[1],p[2]);
+  if(trailAv.userData.update) trailAv.userData.update();   // drives idle↔walk + mixer
+}
 let trailT0=0, trailEvents=[];
 function startTrailerScript(){
   // demo save: maxed ELITE farm
@@ -8452,6 +9600,7 @@ function startTrailerScript(){
   const drop=[]; scene.traverse(o=>{ if(o.isPointLight&&o.intensity<30) drop.push(o); });
   drop.forEach(l=>l.parent.remove(l));
   selRig=-1; selTower=false; renderRigPanel(); $('tut').style.display='none';
+  if(trailAv){ trailAv.visible=true; trailAv.position.set(...AV_START); }
   running=true;
   trailT0=performance.now();
   trailEvents=[
@@ -8473,6 +9622,8 @@ function startTrailerScript(){
       const cp=lerpV(k[2],k[3],f), tg=lerpV(k[4],k[5],f);
       cam.position.set(...cp); controls.target.set(...tg);
     }}
+    // 3rd-person miner avatar (opening "buy & build" act)
+    placeAvatar(t);
     // composite
     compX.fillStyle='#000'; compX.fillRect(0,0,1280,720);
     compX.drawImage(renderer.domElement,0,0,1280,720);
@@ -8506,28 +9657,56 @@ function startTrailerScript(){
       }
       compX.globalAlpha=1;
     }
+    // shop purchase chips (buying the parts that bolt onto the rig)
+    drawBuyChip(t);
     // fade in/out
     if(t<1){ compX.fillStyle=`rgba(0,0,0,${1-t})`; compX.fillRect(0,0,1280,720); }
     if(t>TRAIL_LEN-1){ compX.fillStyle=`rgba(0,0,0,${Math.min(1,t-(TRAIL_LEN-1))})`; compX.fillRect(0,0,1280,720); }
   };
 }
-window.recordTrailer=async function(){
+window.recordTrailer=async function(opts){
+  opts=opts||{};
+  // optional silent capture (window.__trailerMuteSpk): keep the recording tap
+  // (AU.dest) wired but drop the speaker branch so the render makes no sound.
+  if(window.__trailerMuteSpk){ try{ if(typeof AU!=='undefined'&&AU.ctx&&AU.master){ AU.master.disconnect(AU.ctx.destination); } }catch(e){} }
+  await window.__trailerPrep();                    // load the miner avatar first
   const stream=comp.captureStream(30);
   if(AU.dest) AU.dest.stream.getAudioTracks().forEach(tr=>stream.addTrack(tr));
   const mime=MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')?'video/mp4;codecs=avc1':'video/mp4';
-  const rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:6_000_000});
+  const rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:8_000_000});
   const chunks=[];
-  rec.ondataavailable=e=>chunks.push(e.data);
+  rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
   const done=new Promise(res=>rec.onstop=res);
   rec.start();
   startTrailerScript();
-  await new Promise(r=>setTimeout(r,(TRAIL_LEN+1)*1000));
+  window.__TPAUSE=null;
+  window.__TLIVE=performance.now();                // tells the main loop to drive trailerFrame
+  await new Promise(r=>setTimeout(r,(TRAIL_LEN+1.2)*1000));
+  window.__TLIVE=0;
   rec.stop(); await done;
-  const blob=new Blob(chunks,{type:'video/mp4'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download='mining-game_trailer.mp4'; document.body.appendChild(a); a.click();
+  const blob=new Blob(chunks,{type:mime.indexOf('mp4')>=0?'video/mp4':'video/webm'});
+  window.__trailerBlob=blob;
+  const sink=window.__trailerSink;
+  if(sink){
+    try{ const r=await fetch(sink,{method:'POST',body:blob,headers:{'content-type':blob.type}}); window.__trailerPosted=r.status; }
+    catch(e){ window.__trailerPosted='err:'+e.message; }
+  } else if(!opts.noDownload){
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='mining-game_trailer.mp4'; document.body.appendChild(a); a.click();
+  }
   return blob.size;
 };
+
+/* preview helpers (scrub the live trailer without recording) */
+window.__trailerLiveStart=async function(){
+  await window.__trailerPrep();
+  startTrailerScript();
+  window.__TLIVE=performance.now();
+  return true;
+};
+window.__TKEYS=TKEYS; window.__TCARDS=TCARDS; window.__TBUY=TBUY;  // live-tunable (array contents mutable)
+window.__trailerSeek=function(t){ window.__TPAUSE=t; window.__TLIVE=performance.now()-t*1000; return t; };
+window.__trailerPlay=function(){ window.__TPAUSE=null; window.__TLIVE=performance.now(); return true; };
 
 /* offline trailer rendering (virtual clock) */
 let __vt=0;
@@ -8574,6 +9753,23 @@ window.__recAudioStart=async function(){
 };
 window.__recAudioStop=async function(){ clearInterval(window.__audEvT); window.__audRec.stop(); return await window.__audDone; };
 </script>
+<script>
+/* Keep the coin bar directly below the top HUD, whatever height it ends up. */
+(function(){function fit(){var h=document.getElementById('hud');if(h)document.documentElement.style.setProperty('--hud-h',Math.ceil(h.getBoundingClientRect().bottom+2)+'px');}
+addEventListener('resize',fit);addEventListener('load',fit);document.addEventListener('DOMContentLoaded',function(){fit();
+if(window.ResizeObserver){var h=document.getElementById('hud');if(h)new ResizeObserver(fit).observe(h);}});})();
+</script>
+<script type="module" src="arcade.js?v=2"></script>
+<script type="module" src="casino.js?v=2"></script>
+<script type="module" src="chibi.js?v=4"></script>
+<script type="module" src="skins.js?v=8"></script>
+<script type="module" src="miladys.js?v=2"></script>
+<script type="module" src="loungefx.js?v=3"></script>
+<script type="module" src="dj.js?v=8"></script>
+<script type="module" src="stage.js?v=3"></script>
+<script type="module" src="partybot.js?v=1"></script>
+<script type="module" src="jam.js?v=1"></script>
+<script type="module" src="xauth.js?v=2"></script>
 </body>
 </html>
 <script type="module">
@@ -8630,6 +9826,8 @@ const NET = (() => {
     return new THREE.Color().setHSL(Math.random(), 0.55, 0.55);
   }
   function makeAvatar(look) {
+    // realistic skins (skins.js) take over when a look names one
+    if (look && look.skin && window.MGSKIN) return window.MGSKIN.avatar(look);
     const g = new THREE.Group();
     const skin = new THREE.Color(0xd8a97a);
     const body = colorFromLook(look);
@@ -8680,7 +9878,7 @@ const NET = (() => {
     if (state.mode === 'full') createMesh(peer);
   }
   function createMesh(peer) {
-    if (peer.group) return;
+    if (peer.group || isAway(peer)) return;
     const group = makeAvatar(peer.look);
     const tag = makeTag(peer.name || 'guest');
     group.add(tag);
@@ -8715,13 +9913,13 @@ const NET = (() => {
         break;
       case 'join':
         addPeer(m.peer);
-        chatLog('→ ' + (m.peer.name || ('guest' + m.peer.id)) + ' joined', '#3ddc84');
-        if (voice.on && state.mode === 'full') voiceConnect(m.peer.id, state.id < m.peer.id);
+        if (!(m.peer.look && m.peer.look.away)) chatLog('→ ' + (m.peer.name || ('guest' + m.peer.id)) + ' joined', '#3ddc84');
+        if (voice.on && state.mode === 'full' && !(m.peer.look && m.peer.look.away)) voiceConnect(m.peer.id, state.id < m.peer.id);
         updateCount();
         break;
       case 'leave': {
         const peer = state.peers.get(m.id);
-        if (peer) chatLog('← ' + (peer.name || ('guest' + m.id)) + ' left', '#8b94ab');
+        if (peer && !isAway(peer)) chatLog('← ' + (peer.name || ('guest' + m.id)) + ' left', '#8b94ab');
         voiceDrop(m.id);
         removePeer(m.id);
         updateCount();
@@ -8737,8 +9935,12 @@ const NET = (() => {
       case 'look': {
         const peer = state.peers.get(m.id);
         if (!peer) return;
+        const lk0 = peer.look || {}; const prevSkin = (lk0.skin || '') + '|' + (lk0.milady || '');
         peer.look = m.look;
-        if (peer.group) {                 // rebuild the avatar only if it's rendered
+        if (isAway(peer) && peer.group) { destroyMesh(peer); updateCount(); break; }
+        if (!isAway(peer) && !peer.group && state.mode === 'full') { createMesh(peer); updateCount(); break; }
+        // looks also carry emotes/DJ state several times a second: rebuild only when the skin changes
+        if (peer.group && (((m.look && m.look.skin) || '') + '|' + ((m.look && m.look.milady) || '')) !== prevSkin) {
           const old = peer.group, tag = peer.tag;
           const g = makeAvatar(m.look);
           g.position.copy(old.position); g.rotation.y = old.rotation.y;
@@ -8773,7 +9975,8 @@ const NET = (() => {
     ws.onopen = () => {
       state.connected = true; state.retry = 0;
       setDot('#3ddc84');
-      ws.send(JSON.stringify({ t: 'hello', name: state.name, wallet: state.wallet, room: NET._room }));
+      let look = null; try { look = JSON.parse(localStorage.getItem('mgLook') || 'null'); } catch {}
+      ws.send(JSON.stringify({ t: 'hello', name: state.name, wallet: state.wallet, room: NET._room, look: lookOut(look), x: (() => { try { return localStorage.getItem('mgX') || undefined; } catch { return undefined; } })() }));
     };
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } if (m && m.t) onMsg(m); };
     ws.onclose = () => {
@@ -8783,6 +9986,10 @@ const NET = (() => {
     };
     ws.onerror = () => { try { ws.close(); } catch {} };
   }
+  // peers who are only listening from their lab are flagged away: no avatar, not counted
+  const lookOut = (l) => (state.mode === 'full' ? (l || null) : { ...(l || {}), away: 1 });
+  const isAway = (p) => !!(p && p.look && p.look.away);
+  function sendLook() { let l = null; try { l = JSON.parse(localStorage.getItem('mgLook') || 'null'); } catch {} if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ t: 'look', look: lookOut(l) })); }
   function scheduleRetry() {
     if (!state.want) return;
     state.retry = Math.min(state.retry + 1, 6);
@@ -8804,8 +10011,9 @@ const NET = (() => {
     const seat = sitOverride && sitOverride.sit ? sitOverride.seat : (S.on ? 'slot' + S.slot : null);
     const msg = {
       t: 'move',
-      x: +cam.position.x.toFixed(3), z: +cam.position.z.toFixed(3),
+      x: +((window.MGFP && window.MGFP.on ? window.MGFP.bodyPos() : cam.position).x).toFixed(3), z: +((window.MGFP && window.MGFP.on ? window.MGFP.bodyPos() : cam.position).z).toFixed(3),
       ry: +yawFromCamera().toFixed(3),
+      ...(() => { try { const b = window.MGDJ?.standAt?.(); return b ? { x: +b.x.toFixed(3), z: +b.z.toFixed(3), ry: b.ry } : {}; } catch { return {}; } })(),
       sit: seated, seat,
     };
     const s = JSON.stringify(msg);
@@ -8836,8 +10044,9 @@ const NET = (() => {
       while (dy > Math.PI) dy -= Math.PI * 2;
       while (dy < -Math.PI) dy += Math.PI * 2;
       g.rotation.y += dy * 0.18;
-      // sit = drop the whole avatar a bit so it reads as seated
-      const wantY = peer.sit ? UPS * -0.35 : 0;
+      if (g.userData.update) g.userData.update(peer);   // skinned avatars animate (walk/sit/emotes)
+      // sit = drop the whole avatar a bit so it reads as seated (skins sit via animation)
+      const wantY = peer.sit && !g.userData.skinned ? UPS * -0.35 : 0;
       g.position.y += (wantY - g.position.y) * 0.15;
     }
     voiceTick();
@@ -8916,6 +10125,10 @@ const NET = (() => {
     if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ t: 'voice', to, kind, data }));
   }
   async function onVoiceMsg(from, kind, data) {
+    // live-stage audio (stage.js) shares this relay; it needs no mic of its own
+    if (typeof kind === 'string' && kind.startsWith('stage')) { try { window.MGSTAGE?.onSignal?.(from, kind, data); } catch {} return; }
+    if (typeof kind === 'string' && kind.startsWith('dj-')) { try { window.MGDJ?.onSignal?.(from, kind, data); } catch {} return; }
+    if (kind === 'jam') { try { window.MGJAM?.onSignal?.(from, kind, data); } catch {} return; }
     if (!voice.on) return;                       // our mic is off; nothing to negotiate
     let pc = voice.pcs.get(from);
     try {
@@ -9010,7 +10223,7 @@ const NET = (() => {
     // it joins chat-only (you stay in your lab); when connected, it expands/
     // collapses the chat; the ✕ leaves entirely.
     const pill = document.createElement('div');
-    pill.style.cssText = 'pointer-events:auto;display:flex;gap:8px;align-items:center;background:rgba(12,16,26,0.9);border:1px solid #232c44;border-radius:20px;color:#e8ecf6;padding:6px 12px;font:inherit';
+    pill.style.cssText = 'pointer-events:auto;display:flex;gap:8px;align-items:center;white-space:nowrap;background:rgba(12,16,26,0.9);border:1px solid #232c44;border-radius:20px;color:#e8ecf6;padding:6px 12px;font:inherit';
     dotEl = document.createElement('span');
     dotEl.style.cssText = 'width:9px;height:9px;border-radius:50%;background:#5b6478;flex:0 0 auto';
     const label = document.createElement('span'); label.textContent = 'Lounge'; label.style.cssText = 'font-weight:600;cursor:pointer';
@@ -9043,7 +10256,7 @@ const NET = (() => {
   function updateCount() {
     if (!countEl) return;
     if (state.mode === 'off') { countEl.textContent = '· tap to chat'; if (chevEl) chevEl.textContent = ''; return; }
-    const n = state.peers.size + (state.connected ? 1 : 0);
+    const n = [...state.peers.values()].filter((p) => !isAway(p)).length + (state.connected ? 1 : 0);
     let txt = state.connected ? (n === 1 ? 'just you' : n + ' here') : 'connecting…';
     if (!open && unread) txt += ' · ' + unread + ' new';
     countEl.textContent = '· ' + txt;
@@ -9076,21 +10289,21 @@ const NET = (() => {
 
   // ── mode control: off ↔ chat ↔ full ─────────────────────────────────────────
   let leaveEl;
+  const BG = !new URLSearchParams(location.search).has('nolive');
   function setMode(m) {
     if (m === state.mode) { if (m !== 'off') setOpen(true); return; }
     state.mode = m;
     if (m === 'off') {
-      state.want = false;
       voiceStop();
-      if (state.ws) { try { state.ws.close(); } catch {} }   // onclose cleans peers + updateAll
+      if (BG) { for (const p of state.peers.values()) destroyMesh(p); sendLook(); }   // keep hearing live sets from the lab
+      else { state.want = false; if (state.ws) { try { state.ws.close(); } catch {} } }   // onclose cleans peers + updateAll
       setOpen(false);
       notify('🛋 left the lounge');
     } else {
       state.want = true;
       if (m === 'chat') voiceStop();                          // no voice from the lab
-      if (!state.connected) connect();                        // welcome→addPeer respects mode
-      else if (m === 'full') for (const p of state.peers.values()) createMesh(p);
-      else for (const p of state.peers.values()) destroyMesh(p);
+      if (!state.connected) { if (!state.ws || state.ws.readyState > 1) connect(); }   // welcome→addPeer respects mode
+      else { sendLook(); if (m === 'full') for (const p of state.peers.values()) createMesh(p); else for (const p of state.peers.values()) destroyMesh(p); }
       if (m === 'chat') setOpen(true);
       notify(m === 'full'
         ? '🛋 entered the lounge — others can see you now'
@@ -9104,7 +10317,7 @@ const NET = (() => {
   return {
     start() {
       const q = new URLSearchParams(location.search);
-      if (q.has('trailer') || q.has('solo')) return true;    // netcode off, but "ready"
+      if (q.has('trailer') || q.has('demo') || q.has('solo')) return true;    // netcode off, but "ready"
       const MG = window.MG;
       if (!MG || !MG.scene || !MG.cam) return false;         // game not ready yet
       scene = MG.scene; cam = MG.cam;
@@ -9119,6 +10332,7 @@ const NET = (() => {
       // Chat-only can auto-start here; entering the full lounge ROOM (teleport +
       // presence) is owned by p15, which handles ?lounge / the lounge host.
       if (q.has('chat')) setMode('chat');
+      else if (BG && state.mode === 'off') { state.want = true; connect(); }   // quiet listen link from the lab
       return true;
     },
     toggle() { setMode(state.mode === 'full' ? 'off' : 'full'); },   // HUD button / key 6 = immersive
@@ -9126,13 +10340,14 @@ const NET = (() => {
     chat() { setMode('chat'); },
     leave() { setMode('off'); },
     // furniture module (p14) API
-    sendObj(msg) { if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify(msg)); },
+    sendObj(msg) { if (msg && msg.t === 'look') msg = { ...msg, look: lookOut(msg.look) }; if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify(msg)); },
     onObj(cb) { objCbs.push(cb); },
     setSit(sit, seat) { sitOverride = sit ? { sit: true, seat: seat || null } : null; },
     get scene() { return scene; },
     get cam() { return cam; },
     isFull() { return state.mode === 'full' && state.connected; },
     _room: 'lounge',
+    peerLooks() { return [...state.peers.entries()].map(([id, p]) => ({ id, name: p.name, look: p.look })); },
     debug() {
       const peers = [...state.peers.entries()].map(([id, p]) => ({ id, name: p.name, tgt: p.tgt, sit: p.sit, mesh: !!p.group }));
       return { id: state.id, connected: state.connected, mode: state.mode, room: NET._room, peers, sitOverride, voiceOn: voice.on };
@@ -9454,15 +10669,14 @@ import * as THREE from 'three';
     const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; screen.material.map = tex; screen.material.emissiveMap = tex; screen.material.needsUpdate = true;
 
     // BAR counter along the left wall
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.2, 8), mat(0x1a1330, 0.6, NEON2, 0.5)); bar.position.set(-LW / 2 + 1.2, 0.6, -2); room.add(bar);
-    const barTop = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.12, 8.2), mat(0x2a2050, 0.4, GOLD, 0.5)); barTop.position.set(-LW / 2 + 1.2, 1.26, -2); room.add(barTop);
+    // (the real bar — wood, marble, bottles, stools — is built by loungefx.js)
 
     // DOORWAYS for future rooms (labeled placeholders) on the right wall
     ['POKER', 'ARCADE', 'STAGE'].forEach((label, i) => {
       const z = -6 + i * 6;
       const frame = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.4, 2.4), mat(0x14182a, 0.6, GOLD, 0.35)); frame.position.set(LW / 2 - 0.2, 1.7, z); room.add(frame);
       const dc = document.createElement('canvas'); dc.width = 256; dc.height = 64; const dx = dc.getContext('2d');
-      dx.fillStyle = 'rgba(6,8,14,0.9)'; dx.fillRect(0, 0, 256, 64); dx.fillStyle = '#ffd23f'; dx.font = 'bold 34px system-ui'; dx.textAlign = 'center'; dx.textBaseline = 'middle'; dx.fillText(label + ' · soon', 128, 34);
+      dx.fillStyle = 'rgba(6,8,14,0.9)'; dx.fillRect(0, 0, 256, 64); dx.fillStyle = '#ffd23f'; dx.font = 'bold 34px system-ui'; dx.textAlign = 'center'; dx.textBaseline = 'middle'; dx.fillText(label === 'ARCADE' ? '🕹 ARCADE' : label === 'POKER' ? '🃏 CASINO' : label + ' · soon', 128, 34);
       const dt = new THREE.CanvasTexture(dc); dt.colorSpace = THREE.SRGBColorSpace;
       const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: dt, transparent: true })); sign.scale.set(2.4, 0.6, 1); sign.position.set(LW / 2 - 0.6, 3.3, z); room.add(sign);
     });

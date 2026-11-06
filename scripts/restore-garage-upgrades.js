@@ -14,6 +14,21 @@ import fs from "fs";
  * Usage:
  *   npx hardhat run scripts/restore-garage-upgrades.js --network polygon
  */
+/* Gas overrides with a floor, so chains with a minimum fee (e.g. Polygon's
+   25 gwei priority-fee minimum) don't reject an under-priced auto-estimate.
+   EIP-1559 where supported, legacy gasPrice otherwise. */
+async function gasOverrides() {
+  const fd = await hre.ethers.provider.getFeeData();
+  const floor = hre.ethers.parseUnits("30", "gwei");
+  if (fd.maxFeePerGas && fd.maxPriorityFeePerGas) {
+    const tip = fd.maxPriorityFeePerGas > floor ? fd.maxPriorityFeePerGas : floor;
+    const maxFee = fd.maxFeePerGas > tip ? fd.maxFeePerGas : tip * 2n;
+    return { maxPriorityFeePerGas: tip, maxFeePerGas: maxFee };
+  }
+  if (fd.gasPrice) return { gasPrice: fd.gasPrice > floor ? fd.gasPrice : floor };
+  return {};
+}
+
 async function main() {
   const net = hre.network.name;
 
@@ -41,7 +56,7 @@ async function main() {
   const rack    = entries.map((e) => e.rack    || 0);
   const rackgpu = entries.map((e) => e.rackgpu || 0);
 
-  const tx = await garage.restoreLevelsMany(users, power, cooling, rack, rackgpu);
+  const tx = await garage.restoreLevelsMany(users, power, cooling, rack, rackgpu, await gasOverrides());
   console.log("\n⛓ tx:", tx.hash, "— waiting…");
   await tx.wait();
   console.log("✅ Restore confirmed. Affected players see their add-ons on the next LIVE sync.");

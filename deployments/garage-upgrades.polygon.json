@@ -1,0 +1,9 @@
+{
+  "network": "polygon",
+  "chainId": 137,
+  "deployer": "0xB8199F9c38fF3dA42026Cc67fC98e6B4464601B8",
+  "garageUpgrades": "0x638237e726Fccb48B3573Fa7741bE07e020fb8EB",
+  "wattV2": "0x387693eCEC037C61943404F03c097d2ADA15ae3f",
+  "stakingPool": "0x7E8FC9d7D7588F410E1399aC690F901268B08a8d",
+  "timestamp": "2026-11-06T06:20:08.515Z"
+}

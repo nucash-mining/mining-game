@@ -20,7 +20,7 @@ const WEB3CFG={
         /* GarageUpgrades — on-chain power/cooling/rack levels + prepaid credit.
            null until deployed (scripts/deploy-garage-upgrades.js); while null,
            live upgrades fall back to the old pay-to-stakers flow (local-only). */
-        garageUpgrades:null },
+        garageUpgrades:'0x638237e726Fccb48B3573Fa7741bE07e020fb8EB' },
       /* QuickSwap V2 — WATTv2/WPOL pool 0x823a6484… (v2 has its own pool now).
          Sell POL→WATT v2 native-in via the same router. */
       dex:{ kind:'univ2', router:'0xa5E0829CaCED8fFDD4De3c43696c57F7D7A678ff', weth:'0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',
@@ -40,7 +40,7 @@ const WEB3CFG={
       pools:{ registry:'0x88beBed99cb45D81F5DEd708682C55a2b26a221C', hub:'0x7Cee30E196Cb298e4634D7192C527dA37f2C7d57',
               engine:'0x755dCf18b521BC7e42f88fdfEBa2C910809AF09F', rigNft:'0x131A875e1bfEB2B3735E5d9Ad5e8871fF6CE9381', stakingPool:'0x62fC935400104371777aD36B78CF73f2c48dcD24', migrator:'0xdB13ecc87960632b8aAe93640F246CdAE1675B78' },
       economy:{ items:'0x851fd0205348783444Fc9EDe99Ca2321681EC99b', shop:'0x92809C4a46b4D0F11a48BE21fF13202EA56DcEB1', stakingPool:'0xa3f8B04310380cD13Ec85B11420d1fc848af36C4', wattV2:'0xB7635E386283CAE6FB1A710f19CaA8220beF630D',
-        garageUpgrades:null },
+        garageUpgrades:'0x2314fb7BA3D580cc040629028D041241d25B6fd2' },
       /* SwapinDEX (original live venue) — WATT/wALT pool 0xb2F8e147…. Sell ALT→WATT native-in. */
       dex:{ kind:'univ2', router:'0xae168Ce47cebca9abbC5107a58df0532f1afa4d6', weth:'0x48721ADeFE5b97101722c0866c2AffCE797C32b6',
             wattOut:'0x6645143e49B3a15d8F205658903a55E520444698' } },
